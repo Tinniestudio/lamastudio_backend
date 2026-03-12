@@ -1,0 +1,8 @@
+com/lamastudio/backend/repository/UserRepositoryTest.class
+com/lamastudio/backend/integration/AuthIntegrationTest.class
+com/lamastudio/backend/auth/controller/AuthControllerTest.class
+com/lamastudio/backend/user/service/UserServiceTest.class
+com/lamastudio/backend/auth/service/EmailServiceTest.class
+com/lamastudio/backend/repository/RoleRepositoryTest.class
+com/lamastudio/backend/auth/service/AuthServiceTest.class
+com/lamastudio/backend/auth/jwt/JwtTokenProviderTest.class

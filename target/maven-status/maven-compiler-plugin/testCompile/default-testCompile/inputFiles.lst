@@ -1,0 +1,8 @@
+/home/ultimate/Desktop/Accessivo.io/lamastudio/src/test/java/com/lamastudio/backend/auth/controller/AuthControllerTest.java
+/home/ultimate/Desktop/Accessivo.io/lamastudio/src/test/java/com/lamastudio/backend/auth/jwt/JwtTokenProviderTest.java
+/home/ultimate/Desktop/Accessivo.io/lamastudio/src/test/java/com/lamastudio/backend/auth/service/AuthServiceTest.java
+/home/ultimate/Desktop/Accessivo.io/lamastudio/src/test/java/com/lamastudio/backend/auth/service/EmailServiceTest.java
+/home/ultimate/Desktop/Accessivo.io/lamastudio/src/test/java/com/lamastudio/backend/integration/AuthIntegrationTest.java
+/home/ultimate/Desktop/Accessivo.io/lamastudio/src/test/java/com/lamastudio/backend/repository/RoleRepositoryTest.java
+/home/ultimate/Desktop/Accessivo.io/lamastudio/src/test/java/com/lamastudio/backend/repository/UserRepositoryTest.java
+/home/ultimate/Desktop/Accessivo.io/lamastudio/src/test/java/com/lamastudio/backend/user/service/UserServiceTest.java

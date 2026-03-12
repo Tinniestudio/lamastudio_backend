@@ -1,0 +1,122 @@
+spring:
+  devtools:
+    livereload:
+      enabled: true
+
+  config:
+    import: optional:file:.env[.properties]
+
+  application:
+    name: lamastudio-backend
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 30000
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - openid
+              - profile
+              - email
+            redirect-uri: "${APP_BASE_URL:http://localhost:8080}/login/oauth2/code/google"
+        provider:
+          google:
+            authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
+            token-uri: https://oauth2.googleapis.com/token
+            user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+            user-name-attribute: sub
+
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+app:
+  base-url: ${APP_BASE_URL}
+  frontend-url: ${FRONTEND_URL}
+
+  jwt:
+    access-token:
+      secret: ${JWT_ACCESS_SECRET:your-256-bit-secret-change-this-in-production-must-be-long-enough}
+      expiration-ms: ${JWT_ACCESS_EXPIRATION_MS}        # 15 minutes
+    refresh-token:
+      secret: ${JWT_REFRESH_SECRET}
+      expiration-ms: ${JWT_REFRESH_EXPIRATION_MS}    # 7 days
+    issuer: lamastudio
+
+  cookie:
+    secure: ${COOKIE_SECURE}    # true in production (HTTPS)
+    same-site: ${COOKIE_SAME_SITE}
+    domain: ${COOKIE_DOMAIN}
+
+  email-verification:
+    token-expiry-hours: 24
+
+  password-reset:
+    token-expiry-hours: 1
+
+server:
+  port: ${PORT}
+  servlet:
+    context-path: /api/v1
+  error:
+    include-message: never
+    include-binding-errors: never
+
+logging:
+  level:
+    com.lamastudio: DEBUG
+    org.springframework.security: INFO
+
+springdoc:
+  api-docs:
+    path: /api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    tags-sorter: alpha
+    operations-sorter: method
+    display-request-duration: true
+    try-it-out-enabled: true
+    filter: true
+    persist-authorization: true
+  show-actuator: false
+  default-produces-media-type: application/json

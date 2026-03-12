@@ -1,0 +1,20 @@
+services:
+  LamaStudio_db:
+    image: postgis/postgis:16-3.4
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: lamastudio_db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - LamaStudioNetwork
+
+networks:
+  LamaStudioNetwork:
+    driver: bridge
+
+volumes:
+  db_data:
