@@ -5,6 +5,9 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Configuration
 @ConfigurationProperties(prefix = "app")
 @Getter
@@ -18,6 +21,17 @@ public class AppProperties {
     private Cookie cookie = new Cookie();
     private EmailVerification emailVerification = new EmailVerification();
     private PasswordReset passwordReset = new PasswordReset();
+    private Cors cors = new Cors();
+
+    @Getter
+    @Setter
+    public static class Cors {
+        private List<String> allowedOrigins = new ArrayList<>();
+        private List<String> allowedMethods = List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
+        private List<String> allowedHeaders = List.of("*");
+        private boolean allowCredentials = true;
+        private long maxAge = 3600;
+    }
 
     @Getter
     @Setter

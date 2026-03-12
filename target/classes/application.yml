@@ -72,6 +72,22 @@ app:
   base-url: ${APP_BASE_URL}
   frontend-url: ${FRONTEND_URL}
 
+  cors:
+    allowed-origins:
+      - ${FRONTEND_URL}
+      - ${APP_BASE_URL:http://localhost:8080}
+    allowed-methods:
+      - GET
+      - POST
+      - PUT
+      - PATCH
+      - DELETE
+      - OPTIONS
+    allowed-headers:
+      - "*"
+    allow-credentials: true
+    max-age: 3600
+
   jwt:
     access-token:
       secret: ${JWT_ACCESS_SECRET:your-256-bit-secret-change-this-in-production-must-be-long-enough}
