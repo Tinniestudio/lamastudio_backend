@@ -75,7 +75,7 @@ app:
   cors:
     allowed-origins:
       - ${FRONTEND_URL}
-      - ${APP_BASE_URL:http://localhost:8080}
+      - ${APP_BASE_URL}
     allowed-methods:
       - GET
       - POST
