@@ -90,6 +90,15 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
     }
 
+    @Operation(summary = "Redirect to Google OAuth2 authorization endpoint", description = "Initiates the Google OAuth2 flow. This endpoint redirects to the Spring Security OAuth2 authorization URI.")
+    @ApiResponse(responseCode = "302", description = "Redirect to Google's consent screen")
+    @GetMapping("/oauth2/authorize/google")
+    @SecurityRequirements({})
+    public void redirectToGoogle(HttpServletResponse response) throws java.io.IOException {
+        // Base URI for authorization endpoints configured in SecurityConfig: /api/v1/oauth2/authorization
+        response.sendRedirect("/api/v1/oauth2/authorization/google");
+    }
+
     @Operation(summary = "Verify email address", description = "Confirms the user's email using the time-limited token from the registration email. Token expires after 24 hours.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Email verified",
@@ -133,7 +142,7 @@ public class AuthController {
                 examples = @ExampleObject(value = "{\"status\":400,\"error\":\"Bad Request\",\"message\":\"Password reset token has expired\",\"path\":\"/api/v1/auth/reset-password\",\"timestamp\":\"2024-11-01T12:00:00Z\"}")))
     })
     @SecurityRequirements({})
-    @PostMapping("/reset-password")
+    @PatchMapping("/reset-password")
     public ResponseEntity<Map<String, String>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
         return ResponseEntity.ok(Map.of("message", "Password reset successfully. Please log in."));

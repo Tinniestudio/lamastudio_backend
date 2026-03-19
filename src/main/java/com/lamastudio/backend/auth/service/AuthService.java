@@ -66,8 +66,8 @@ public class AuthService {
         user.setAccountStatus(AccountStatus.ACTIVE);
         user.setEmailVerified(false);
 
-        roleRepository.findByName(RoleName.ROLE_USER)
-                .ifPresent(user::addRole);
+    java.util.Optional<com.lamastudio.backend.role.entity.Role> roleOpt = roleRepository.findByName(RoleName.ROLE_USER);
+    if (roleOpt.isPresent()) user.addRole(roleOpt.get());
 
         // Generate email verification token
         String verificationToken = UUID.randomUUID().toString();
@@ -244,4 +244,5 @@ public class AuthService {
                 .message(message)
                 .build();
     }
+
 }

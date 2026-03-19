@@ -121,6 +121,10 @@ logging:
     com.lamastudio: DEBUG
     org.springframework.security: INFO
 
+resend:
+  api-key: ${RESEND_API_KEY:}
+  from-email: no-reply@yourdomain.com
+
 springdoc:
   api-docs:
     path: /api-docs

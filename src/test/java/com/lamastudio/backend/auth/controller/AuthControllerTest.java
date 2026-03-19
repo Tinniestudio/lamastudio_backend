@@ -24,6 +24,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -142,14 +143,14 @@ class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("POST /auth/reset-password returns 200")
+    @DisplayName("PATCH /auth/reset-password returns 200")
     void resetPassword() throws Exception {
         ResetPasswordRequest req = new ResetPasswordRequest();
         req.setToken("token");
         req.setNewPassword("Password1!");
         doNothing().when(authService).resetPassword(any(ResetPasswordRequest.class));
 
-    mockMvc.perform(postWithContext("/auth/reset-password")
+    mockMvc.perform(patch("/auth/reset-password")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isOk());

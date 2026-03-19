@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: com.lamastudio.backend.repository.RoleRepositoryTest
--------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 7.809 s -- in com.lamastudio.backend.repository.RoleRepositoryTest

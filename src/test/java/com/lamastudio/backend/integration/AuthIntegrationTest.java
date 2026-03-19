@@ -12,7 +12,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -60,9 +59,9 @@ class AuthIntegrationTest {
     @Autowired
     private UserRepository userRepository;
 
-    // Avoid real SMTP calls during tests
+    // Avoid real email API calls during tests
     @MockBean
-    private JavaMailSender mailSender;
+    private com.lamastudio.backend.auth.service.EmailService emailService;
 
     private static final String CONTEXT_PATH = "/api/v1";
 

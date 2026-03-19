@@ -3,12 +3,7 @@ package com.lamastudio.backend.auth.oauth;
 import com.lamastudio.backend.auth.jwt.CookieFactory;
 import com.lamastudio.backend.auth.jwt.JwtTokenProvider;
 import com.lamastudio.backend.config.AppProperties;
-import com.lamastudio.backend.role.entity.RoleName;
-import com.lamastudio.backend.role.repository.RoleRepository;
-import com.lamastudio.backend.user.entity.AccountStatus;
-import com.lamastudio.backend.user.entity.AuthProvider;
-import com.lamastudio.backend.user.entity.User;
-import com.lamastudio.backend.user.repository.UserRepository;
+import com.lamastudio.backend.auth.service.OAuth2Service;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -28,11 +23,8 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
-    private final UserRepository userRepository;
-    private final RoleRepository roleRepository;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final CookieFactory cookieFactory;
     private final AppProperties appProperties;
+    private final OAuth2Service oAuth2Service;
 
     @Override
     @Transactional
@@ -42,104 +34,24 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
             Authentication authentication
     ) throws IOException {
 
-        OAuth2User oAuth2User = (OAuth2User) authentication.getPrincipal();
+    OAuth2User oAuth2User = (OAuth2User) authentication.getPrincipal();
 
-        String email = extractEmail(oAuth2User);
-        String sub = extractSub(oAuth2User);
-        String firstName = oAuth2User.getAttribute("given_name");
-        String lastName = oAuth2User.getAttribute("family_name");
-        String picture = oAuth2User.getAttribute("picture");
-
-        if (email == null || sub == null) {
-            log.error("OAuth2 user missing email or sub. Cannot proceed.");
-            getRedirectStrategy().sendRedirect(request, response,
-                    appProperties.getFrontendUrl() + "/auth/error?reason=oauth_missing_info");
-            return;
-        }
-
-        User user = resolveUser(email, sub, firstName, lastName, picture);
-
-        if (!user.isActive()) {
-            log.warn("OAuth2 login denied for suspended/deleted user: {}", email);
-            getRedirectStrategy().sendRedirect(request, response,
-                    appProperties.getFrontendUrl() + "/auth/error?reason=account_inactive");
-            return;
-        }
-
-        // Issue internal JWTs — never expose Google token to frontend
-        String accessToken  = jwtTokenProvider.generateAccessToken(user);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user);
-
-        cookieFactory.addAuthCookies(response, accessToken, refreshToken);
+    try {
+    // Delegate user resolution, token issuance and response cookie handling to OAuth2Service
+    oAuth2Service.handleOAuthLogin(oAuth2User, response);
 
         String redirectUrl = UriComponentsBuilder
-                .fromUriString(appProperties.getFrontendUrl() + "/auth/callback")
-                .build().toUriString();
+            .fromUriString(appProperties.getFrontendUrl() + "/auth/callback")
+            .build().toUriString();
 
-        log.info("OAuth2 login successful for user: {}", email);
+    log.info("OAuth2 login successful for principal: {}", String.valueOf(oAuth2User.getAttribute("email")));
         getRedirectStrategy().sendRedirect(request, response, redirectUrl);
+    } catch (Exception ex) {
+        log.error("Error handling OAuth2 login: {}", ex.getMessage());
+        getRedirectStrategy().sendRedirect(request, response,
+            appProperties.getFrontendUrl() + "/auth/error?reason=oauth_processing_failed");
+    }
     }
 
-    private User resolveUser(String email, String sub, String firstName, String lastName, String picture) {
-        // Check by providerId first (handles email change edge case)
-        return userRepository.findByProviderAndProviderId(AuthProvider.GOOGLE, sub)
-                .map(existing -> updateGoogleUser(existing, firstName, lastName, picture))
-                .orElseGet(() -> userRepository.findByEmail(email)
-                        .map(existing -> linkGoogleProvider(existing, sub, firstName, lastName, picture))
-                        .orElseGet(() -> createGoogleUser(email, sub, firstName, lastName, picture)));
-    }
-
-    private User updateGoogleUser(User user, String firstName, String lastName, String picture) {
-        // Sync profile info on each login
-        if (firstName != null) user.setFirstName(firstName);
-        if (lastName  != null) user.setLastName(lastName);
-        if (picture   != null) user.setAvatarUrl(picture);
-        return userRepository.save(user);
-    }
-
-    private User linkGoogleProvider(User user, String sub, String firstName, String lastName, String picture) {
-        log.info("Linking Google provider to existing account: {}", user.getEmail());
-        user.setProvider(AuthProvider.GOOGLE);
-        user.setProviderId(sub);
-        if (firstName != null) user.setFirstName(firstName);
-        if (lastName  != null) user.setLastName(lastName);
-        if (picture   != null) user.setAvatarUrl(picture);
-        user.setEmailVerified(true);
-        return userRepository.save(user);
-    }
-
-    private User createGoogleUser(String email, String sub, String firstName, String lastName, String picture) {
-        log.info("Creating new user from Google OAuth: {}", email);
-        User user = new User();
-        user.setEmail(email);
-        user.setProvider(AuthProvider.GOOGLE);
-        user.setProviderId(sub);
-        user.setFirstName(firstName);
-        user.setLastName(lastName);
-        user.setDisplayName(buildDisplayName(firstName, lastName, email));
-        user.setAvatarUrl(picture);
-        user.setEmailVerified(true);
-        user.setAccountStatus(AccountStatus.ACTIVE);
-
-        roleRepository.findByName(RoleName.ROLE_USER)
-                .ifPresent(user::addRole);
-
-        return userRepository.save(user);
-    }
-
-    private String buildDisplayName(String firstName, String lastName, String email) {
-        if (firstName != null && lastName != null) return firstName + " " + lastName;
-        if (firstName != null) return firstName;
-        return email.split("@")[0];
-    }
-
-    private String extractEmail(OAuth2User user) {
-        if (user instanceof OidcUser oidc) return oidc.getEmail();
-        return user.getAttribute("email");
-    }
-
-    private String extractSub(OAuth2User user) {
-        if (user instanceof OidcUser oidc) return oidc.getSubject();
-        return user.getAttribute("sub");
-    }
+    // All provider/user handling moved to OAuth2Service to avoid cycles.
 }

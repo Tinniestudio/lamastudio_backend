@@ -1,60 +1,101 @@
-# compiled output
-/dist
-/node_modules
-/build
+# =========================
+# 🚫 Compiled / Build Files
+# =========================
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+*.zip
+*.tar.gz
+*.rar
 
-# Logs
-logs
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+
+# Gradle
+.gradle/
+build/
+out/
+
+# =========================
+# 🚫 Logs
+# =========================
 *.log
-npm-debug.log*
-pnpm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
+logs/
+*.out
 
-# OS
+# =========================
+# 🚫 OS Files
+# =========================
 .DS_Store
+Thumbs.db
 
-# Tests
-/coverage
-/.nyc_output
+# =========================
+# 🚫 IDE / Editor Files
+# =========================
 
-# IDEs and editors
-/.idea
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Eclipse
 .project
 .classpath
-.c9/
-*.launch
 .settings/
-*.sublime-workspace
+.metadata/
 
-# IDE - VSCode
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+# VS Code
+.vscode/
 
-# dotenv environment variable files
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# =========================
+# 🚫 Environment Variables
+# =========================
 .env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env.*
+application-local.yml
+application-dev.yml
 
-# temp directory
-.temp
-.tmp
-
-# Runtime data
-pids
+# =========================
+# 🚫 Spring Boot
+# =========================
 *.pid
 *.seed
 *.pid.lock
 
-# Diagnostic reports (https://nodejs.org/api/report.html)
-report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+# =========================
+# 🚫 Test / Coverage
+# =========================
+coverage/
+*.lcov
 
-/generated/prisma
+# =========================
+# 🚫 Temporary Files
+# =========================
+*.tmp
+*.temp
+*.swp
+*~
 
-/generated/prisma
+# =========================
+# 🚫 Node (if frontend exists)
+# =========================
+node_modules/
+dist/
+.next/
