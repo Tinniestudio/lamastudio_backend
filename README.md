@@ -163,6 +163,25 @@ services:
 
 volumes:
   postgres_data:
+
+## Email (Resend) configuration
+
+This project uses Resend (https://resend.com) for sending transactional emails (verification, password reset).
+
+Configuration is available via environment variables or the `application.yml` under `app.resend`:
+
+- RESEND_API_KEY — your Resend API key (recommended to set in environment)
+- RESEND_FROM_EMAIL — optional default "from" email address (falls back to `no-reply@lamastudio.com`)
+
+In `application.yml` the properties are:
+
+app:
+  resend:
+    api-key: ${RESEND_API_KEY:}
+    from-email: ${RESEND_FROM_EMAIL:no-reply@yourdomain.com}
+
+If you previously used SMTP (JavaMailSender), that dependency and configuration have been removed: the app now sends mail via the Resend HTTP API. During development you can still stub/mock the email service in tests.
+
 🧪 Testing
 Run tests with:
 

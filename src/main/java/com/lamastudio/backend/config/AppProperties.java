@@ -22,6 +22,7 @@ public class AppProperties {
     private EmailVerification emailVerification = new EmailVerification();
     private PasswordReset passwordReset = new PasswordReset();
     private Cors cors = new Cors();
+    private Resend resend = new Resend();
 
     @Getter
     @Setter
@@ -66,5 +67,12 @@ public class AppProperties {
     @Setter
     public static class PasswordReset {
         private int tokenExpiryHours = 1;
+    }
+
+    @Getter
+    @Setter
+    public static class Resend {
+        private String apiKey;
+        private String fromEmail;
     }
 }

@@ -22,6 +22,18 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import com.lamastudio.backend.auth.dto.UserResponseDto;
+import com.lamastudio.backend.auth.jwt.CookieFactory;
+import com.lamastudio.backend.auth.jwt.JwtTokenProvider;
+import com.lamastudio.backend.user.entity.User;
+import com.lamastudio.backend.user.repository.UserRepository;
+import io.jsonwebtoken.Claims;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
 @RestController
 @RequestMapping("/auth")
@@ -30,6 +42,8 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final UserRepository userRepository;
 
     @Operation(summary = "Register a new user", description = "Creates a new LOCAL user account. Auto-assigns ROLE_USER, sends verification email, and sets auth cookies.")
     @ApiResponses({
@@ -146,5 +160,41 @@ public class AuthController {
     public ResponseEntity<Map<String, String>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
         return ResponseEntity.ok(Map.of("message", "Password reset successfully. Please log in."));
+    }
+
+    @Operation(summary = "Get current authenticated user", description = "Returns the current user based on the access_token cookie. Returns 401 when token is missing/invalid/expired.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Authenticated user",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = UserResponseDto.class))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized / token missing or invalid")
+    })
+    @GetMapping("/me")
+    public ResponseEntity<UserResponseDto> me(HttpServletRequest request) {
+        if (request.getCookies() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+    String token = Arrays.stream(request.getCookies())
+        .filter(c -> CookieFactory.ACCESS_TOKEN_COOKIE.equals(c.getName()))
+        .map(c -> c.getValue())
+        .findFirst()
+        .orElse(null);
+
+        if (token == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        if (!jwtTokenProvider.validateAccessToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Claims claims = jwtTokenProvider.parseAccessToken(token);
+        UUID userId = UUID.fromString(claims.getSubject());
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        UserResponseDto dto = UserResponseDto.from(user);
+        return ResponseEntity.ok(dto);
     }
 }
