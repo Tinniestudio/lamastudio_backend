@@ -367,3 +367,11 @@ text
    - sitemap.xml: For search engines
 
 These README files provide comprehensive documentation for both projects and include the OpenGraph metadata you specified. They'll help developers understand, set up, and contribute to your LamaStudio platform!
+
+
+## DB MIgrateion and Backup
+** Dump
+docker exec -t lamastudio-db pg_dump -U postgres lamastudio_db > backup.sql
+
+**Restore
+psql -U postgres -d lamastudio_db < backup.sql

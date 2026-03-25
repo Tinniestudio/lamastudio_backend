@@ -1,31 +1,51 @@
-version: '3.8'
-
-# Production docker compose: only application is deployed here. The database
-# is expected to be provided externally (managed DB, k8s service, or another host).
-# The application will read DB connection parameters from environment or an env_file.
+version: "3.8"
 
 services:
   app:
     image: lamastudio/backend:latest
     container_name: lamastudio-app-prod
     restart: unless-stopped
-    ports:
-      - "8080:8080"
-    # In production provide a secure env file (not checked into VCS) or environment
+
     env_file:
       - .env.prod
+
     environment:
-      # These should be set in the deployment environment (or .env.prod)
-      # DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
-      # Optionally, other secrets like JWT secrets and resend API key
-      - DB_HOST
-      - DB_PORT
-      - DB_NAME
-      - DB_USER
-      - DB_PASSWORD
+      SPRING_PROFILES_ACTIVE: prod
+
+    depends_on:
+      - proxy
+
+    networks:
+      - prod-network
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  proxy:
+    image: nginx:stable
+    container_name: lamastudio-nginx
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/ssl
+
     networks:
       - prod-network
 
 networks:
   prod-network:
-    external: true
+    driver: bridge

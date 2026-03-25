@@ -6,6 +6,7 @@ import com.lamastudio.backend.auth.service.AuthService;
 import com.lamastudio.backend.exception.BadCredentialsException;
 import com.lamastudio.backend.auth.jwt.JwtTokenProvider;
 import com.lamastudio.backend.auth.jwt.JwtAuthenticationFilter;
+import com.lamastudio.backend.user.repository.UserRepository;
 import com.lamastudio.backend.user.service.UserDetailsServiceImpl;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,9 @@ class AuthControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockBean
+    private UserRepository userRepository;
 
     @Autowired
     private ObjectMapper objectMapper;

@@ -18,7 +18,7 @@ public class EmailService {
 
     @Async
     public void sendVerificationEmail(String to, String token) {
-        String verifyUrl = appProperties.getBaseUrl() + "/api/v1/auth/verify-email?token=" + token;
+        String verifyUrl = appProperties.getFrontendUrl() + "/verify-email?token=" + token;
 
         String html = "<p>Welcome to LamaStudio!</p>" +
                 "<p>Please verify your email address by clicking the link below:</p>" +
@@ -35,7 +35,7 @@ public class EmailService {
 
     @Async
     public void sendPasswordResetEmail(String to, String token) {
-        String resetUrl = appProperties.getFrontendUrl() + "/auth/reset-password?token=" + token;
+        String resetUrl = appProperties.getFrontendUrl() + "/reset-password?token=" + token;
 
         String html = "<p>You requested a password reset for your LamaStudio account.</p>" +
                 "<p>Click the link below to set a new password:</p>" +

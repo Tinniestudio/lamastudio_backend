@@ -41,7 +41,7 @@ class EmailServiceTest {
     assertThat(req.to()).isEqualTo("user@example.com");
     assertThat(req.subject()).contains("Verify");
     assertThat(req.html()).contains("token123");
-    assertThat(req.html()).contains("http://localhost:8080/api/v1/auth/verify-email?token=token123");
+    assertThat(req.html()).contains("http://localhost:3000/verify-email?token=token123");
     }
 
     @Test
@@ -56,6 +56,6 @@ class EmailServiceTest {
     assertThat(req.to()).isEqualTo("user@example.com");
     assertThat(req.subject()).contains("Reset");
     assertThat(req.html()).contains("reset-token");
-    assertThat(req.html()).contains("http://localhost:3000/auth/reset-password?token=reset-token");
+    assertThat(req.html()).contains("http://localhost:3000/reset-password?token=reset-token");
     }
 }

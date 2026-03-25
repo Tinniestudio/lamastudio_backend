@@ -114,6 +114,7 @@ app:
     token-expiry-hours: 1
 
 server:
+  forward-headers-strategy: framework
   port: ${PORT:8080}
   servlet:
     context-path: /api/v1
@@ -125,8 +126,6 @@ logging:
   level:
     com.lamastudio: DEBUG
     org.springframework.security: INFO
-
-
 
 springdoc:
   api-docs:
@@ -143,3 +142,9 @@ springdoc:
     persist-authorization: true
   show-actuator: false
   default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
