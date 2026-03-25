@@ -15,6 +15,7 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
+      initialization-fail-timeout: 60000
       connection-timeout: 30000
       maximum-pool-size: 20
       minimum-idle: 5
@@ -56,21 +57,25 @@ spring:
             user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
             user-name-attribute: sub
 
-  mail:
-    host: ${MAIL_HOST}
-    port: ${MAIL_PORT}
-    username: ${MAIL_USERNAME}
-    password: ${MAIL_PASSWORD}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
+  # mail:
+  #   host: ${MAIL_HOST}
+  #   port: ${MAIL_PORT}
+  #   username: ${MAIL_USERNAME}
+  #   password: ${MAIL_PASSWORD}
+  #   properties:
+  #     mail:
+  #       smtp:
+  #         auth: true
+  #         starttls:
+  #           enable: true
 
 app:
   base-url: ${APP_BASE_URL}
   frontend-url: ${FRONTEND_URL}
+
+  resend:
+    api-key: ${RESEND_API_KEY:}
+    from-email: ${RESEND_FROM_EMAIL:no-reply@yourdomain.com}
 
   cors:
     allowed-origins:
@@ -90,7 +95,7 @@ app:
 
   jwt:
     access-token:
-      secret: ${JWT_ACCESS_SECRET:your-256-bit-secret-change-this-in-production-must-be-long-enough}
+      secret: ${JWT_ACCESS_SECRET}
       expiration-ms: ${JWT_ACCESS_EXPIRATION_MS}        # 15 minutes
     refresh-token:
       secret: ${JWT_REFRESH_SECRET}
@@ -109,7 +114,8 @@ app:
     token-expiry-hours: 1
 
 server:
-  port: ${PORT}
+  forward-headers-strategy: framework
+  port: ${PORT:8080}
   servlet:
     context-path: /api/v1
   error:
@@ -120,10 +126,6 @@ logging:
   level:
     com.lamastudio: DEBUG
     org.springframework.security: INFO
-
-resend:
-  api-key: ${RESEND_API_KEY:}
-  from-email: no-reply@yourdomain.com
 
 springdoc:
   api-docs:
@@ -140,3 +142,9 @@ springdoc:
     persist-authorization: true
   show-actuator: false
   default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
