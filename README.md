@@ -375,3 +375,7 @@ docker exec -t lamastudio-db pg_dump -U postgres lamastudio_db > backup.sql
 
 **Restore
 psql -U postgres -d lamastudio_db < backup.sql
+
+psql -U tinniestudio_db_admin -h lamastudio-tinniestudiodb-wtctsc -d tinniestudio_db
+
+postgresql://tinniestudio_db_admin:8TmmZ1EMafq0Wl3LvqKN@lamastudio-tinniestudiodb-wtctsc:5432/tinniestudio_db
