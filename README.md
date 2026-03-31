@@ -367,7 +367,7 @@ text
    - sitemap.xml: For search engines
 
 These README files provide comprehensive documentation for both projects and include the OpenGraph metadata you specified. They'll help developers understand, set up, and contribute to your LamaStudio platform!
-
+psq
 
 ## DB MIgrateion and Backup
 ** Dump
@@ -376,6 +376,6 @@ docker exec -t lamastudio-db pg_dump -U postgres lamastudio_db > backup.sql
 **Restore
 psql -U postgres -d lamastudio_db < backup.sql
 
-psql -U tinniestudio_db_admin -h lamastudio-tinniestudiodb-wtctsc -d tinniestudio_db
+psql -U db_user -h host -d db_name
 
-postgresql://tinniestudio_db_admin:8TmmZ1EMafq0Wl3LvqKN@lamastudio-tinniestudiodb-wtctsc:5432/tinniestudio_db
+\
