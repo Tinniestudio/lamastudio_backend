@@ -43,6 +43,7 @@ public class SecurityConfig {
     private final AppProperties appProperties;
 
     private static final String[] PUBLIC_ENDPOINTS = {
+        "/",
         "/auth/register",
         "/auth/login",
         "/auth/refresh",
