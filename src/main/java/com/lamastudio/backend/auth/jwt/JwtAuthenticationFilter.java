@@ -72,37 +72,42 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * (useful for server-to-server or Swagger testing).
      */
     private String resolveToken(HttpServletRequest request) {
-        // 1. Check HTTP-only cookie
+        String token = null;
+
+        // 1. Check HTTP-only cookie (preferred)
         if (request.getCookies() != null) {
-            return Arrays.stream(request.getCookies())
+            token = Arrays.stream(request.getCookies())
                     .filter(c -> ACCESS_TOKEN_COOKIE.equals(c.getName()))
                     .map(Cookie::getValue)
                     .findFirst()
                     .orElse(null);
         }
 
-        // 2. Fallback: Authorization header
-        String bearerToken = request.getHeader("Authorization");
-        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith(BEARER_PREFIX)) {
-            return bearerToken.substring(BEARER_PREFIX.length());
+        // 2. Fallback: Authorization header (only if cookie not present)
+        if (token == null) {
+            String bearerToken = request.getHeader("Authorization");
+            if (StringUtils.hasText(bearerToken) && bearerToken.startsWith(BEARER_PREFIX)) {
+                token = bearerToken.substring(BEARER_PREFIX.length());
+            }
         }
 
-        return null;
+        return token;
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getServletPath();
+    String path = request.getServletPath();
+
     // Support both servletPath and potential inclusion of context-path to avoid accidental filtering in tests
     return path.startsWith("/auth/register")
         || path.startsWith("/auth/login")
         || path.startsWith("/auth/refresh")
-        || path.startsWith("/oauth2")
+        || path.startsWith("/auth/oauth2")
         || path.startsWith("/login/oauth2")
         || path.startsWith("/api/v1/auth/register")
         || path.startsWith("/api/v1/auth/login")
         || path.startsWith("/api/v1/auth/refresh")
-        || path.startsWith("/api/v1/oauth2")
+        || path.startsWith("/api/v1/auth/oauth2")
         || path.startsWith("/api/v1/login/oauth2");
     }
 }

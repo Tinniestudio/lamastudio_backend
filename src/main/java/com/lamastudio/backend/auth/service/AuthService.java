@@ -92,23 +92,27 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request, HttpServletResponse response) {
+        // 1) Existence check: explicit not-found vs invalid credentials
         User user = userRepository.findByEmail(request.getEmail().toLowerCase())
-                .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         logger.info("Checking user: user={}", user);
         if (!user.isActive()) {
             throw new AccountNotActiveException("Account is " + user.getAccountStatus().name().toLowerCase());
         }
 
-        try {
-            authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            request.getEmail().toLowerCase().strip(), // principal = email for DaoAuthenticationProvider
-                            request.getPassword()
-                    )
-            );
-        } catch (AuthenticationException ex) {
-            throw new BadCredentialsException("Invalid email or password");
-        }
+    try {
+        authenticationManager.authenticate(
+            new UsernamePasswordAuthenticationToken(
+                request.getEmail().toLowerCase().strip(), // principal = email for DaoAuthenticationProvider
+                request.getPassword()
+            )
+        );
+    } catch (AuthenticationException ex) {
+        // AuthenticationManager throws a variety of Spring exceptions (including UsernameNotFoundException when
+        // user is missing). We already mapped missing user above, so any AuthenticationException here is treated
+        // as invalid credentials.
+        throw new BadCredentialsException("Invalid email or password");
+    }
 
         issueTokenCookies(user, response);
 
@@ -122,7 +126,11 @@ public class AuthService {
     public AuthResponse refresh(HttpServletRequest request, HttpServletResponse response) {
         String refreshToken = extractRefreshToken(request);
 
-        if (refreshToken == null || !jwtTokenProvider.validateRefreshToken(refreshToken)) {
+        if (refreshToken == null) {
+            throw new com.lamastudio.backend.exception.MissingRefreshTokenException("Refresh token is missing");
+        }
+
+        if (!jwtTokenProvider.validateRefreshToken(refreshToken)) {
             throw new InvalidTokenException("Refresh token is missing or invalid");
         }
 

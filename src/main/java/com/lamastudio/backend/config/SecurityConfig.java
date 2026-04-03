@@ -3,8 +3,11 @@ package com.lamastudio.backend.config;
 import com.lamastudio.backend.auth.jwt.JwtAccessDeniedHandler;
 import com.lamastudio.backend.auth.jwt.JwtAuthenticationEntryPoint;
 import com.lamastudio.backend.auth.jwt.JwtAuthenticationFilter;
+import com.lamastudio.backend.auth.oauth.CustomOAuth2AuthorizationRequestResolver;
+import com.lamastudio.backend.auth.oauth.OAuth2AuthenticationFailureHandler;
 import com.lamastudio.backend.auth.oauth.OAuth2AuthenticationSuccessHandler;
 import com.lamastudio.backend.user.service.UserDetailsServiceImpl;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -40,8 +43,11 @@ public class SecurityConfig {
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
     private final UserDetailsServiceImpl userDetailsService;
     private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
+    private final OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler;
     private final AppProperties appProperties;
+    private final ClientRegistrationRepository clientRegistrationRepository;
 
+    // Public auth endpoints only. Keep logout protected.
     private static final String[] PUBLIC_ENDPOINTS = {
         "/",
         "/auth/register",
@@ -50,18 +56,24 @@ public class SecurityConfig {
         "/auth/verify-email",
         "/auth/forgot-password",
         "/auth/reset-password",
-        // Also include context-path qualified variants for safety in tests or alternate servlet setups
+        // API v1 variants
         "/api/v1/auth/register",
         "/api/v1/auth/login",
         "/api/v1/auth/refresh",
         "/api/v1/auth/verify-email",
         "/api/v1/auth/forgot-password",
         "/api/v1/auth/reset-password",
-        "/login/oauth2/code/**",
-        "/oauth2/**",
+    "/login/oauth2/code/**",
+    "/oauth2/**",
+    // Support both controller and Spring's OAuth2 base URIs
+    "/auth/oauth2/**",
+    "/api/v1/auth/oauth2/**",
         "/api/v1/oauth2/**",
-            "/actuator/health",
-            // Swagger UI — restrict in production via profile or network firewall
+    // Allow controller redirect endpoints that start OAuth2 flows (e.g. /auth/oauth2/authorize/google)
+    "/auth/oauth2/authorize/**",
+    "/api/v1/auth/oauth2/authorize/**",
+        "/actuator/health",
+        // Swagger UI — restrict in production via profile or network firewall
         "/swagger-ui.html",
         "/swagger-ui/**",
         "/api-docs",
@@ -92,13 +104,17 @@ public class SecurityConfig {
             )
 
             .oauth2Login(oauth2 -> oauth2
+                // Align OAuth2 endpoints with application routes used by controllers/frontend
                 .authorizationEndpoint(endpoint ->
-                    endpoint.baseUri("/api/v1/oauth2/authorization")
+                    endpoint
+                        .baseUri("/auth/oauth2/authorize")
+                        .authorizationRequestResolver(customOAuth2AuthorizationRequestResolver())
                 )
                 .redirectionEndpoint(endpoint ->
-                    endpoint.baseUri("/login/oauth2/code/*")
+                    endpoint.baseUri("/auth/oauth2/callback/*")
                 )
                 .successHandler(oAuth2AuthenticationSuccessHandler)
+                .failureHandler(oAuth2AuthenticationFailureHandler)
             )
 
             .authenticationProvider(authenticationProvider())
@@ -124,6 +140,11 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(12);
+    }
+
+    @Bean
+    public CustomOAuth2AuthorizationRequestResolver customOAuth2AuthorizationRequestResolver() {
+        return new CustomOAuth2AuthorizationRequestResolver(clientRegistrationRepository);
     }
 
     @Bean

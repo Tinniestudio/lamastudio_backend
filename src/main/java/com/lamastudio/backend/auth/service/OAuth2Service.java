@@ -31,69 +31,108 @@ public class OAuth2Service {
 
     @Transactional
     public AuthResponse handleOAuthLogin(org.springframework.security.oauth2.core.user.OAuth2User oauthUser, jakarta.servlet.http.HttpServletResponse response) {
-        // Extract attributes (support OIDC and standard OAuth2)
-        String email = null;
-        String sub = null;
-        if (oauthUser instanceof org.springframework.security.oauth2.core.oidc.user.OidcUser oidc) {
-            email = oidc.getEmail();
-            sub = oidc.getSubject();
-        } else {
-            email = oauthUser.getAttribute("email");
-            sub = oauthUser.getAttribute("sub");
-        }
-
+        log.info("OAuth2 login initiated for provider: google");
+        
+        // Extract & validate attributes
+        String email = extractEmail(oauthUser);
+        String sub = extractSub(oauthUser);
         String firstName = oauthUser.getAttribute("given_name");
         String lastName = oauthUser.getAttribute("family_name");
         String picture = oauthUser.getAttribute("picture");
-
+        
         if (email == null || sub == null) {
+            log.warn("Missing required OAuth2 attributes: email={}, sub={}", email, sub);
             throw new BadRequestException("OAuth user missing required attributes (email or sub)");
         }
-
-        // Resolve user by providerId first, then by email
-        User user;
-        Optional<User> byProvider = userRepository.findByProviderAndProviderId(AuthProvider.GOOGLE, sub);
-        if (byProvider.isPresent()) {
-            user = updateOauthUser(byProvider.get(), firstName, lastName, picture);
-        } else {
-            Optional<User> byEmail = userRepository.findByEmail(email);
-            if (byEmail.isPresent()) {
-                user = linkOauthProvider(byEmail.get(), sub, firstName, lastName, picture);
-            } else {
-                user = createOauthUser(email, sub, firstName, lastName, picture);
-            }
-        }
-
-        user.setProvider(AuthProvider.GOOGLE);
-        user.setEmailVerified(true);
-        user = userRepository.save(user);
+        
+        log.debug("Extracted OAuth2 user attributes: email={}, provider_id={}, firstName={}, lastName={}", 
+                  email, sub, firstName, lastName);
+        
+        // Provision user (create or update)
+        User user = provisionUser(email, sub, firstName, lastName, picture);
+        log.info("User provisioned successfully: userId={}, email={}, provider={}", 
+                 user.getId(), user.getEmail(), user.getProvider());
 
         // Issue tokens and set cookies
         String accessToken  = jwtTokenProvider.generateAccessToken(user);
         String refreshToken = jwtTokenProvider.generateRefreshToken(user);
         cookieFactory.addAuthCookies(response, accessToken, refreshToken);
+        log.debug("JWT tokens issued and auth cookies set for user: {}", user.getEmail());
 
         return toAuthResponse(user, null);
     }
 
+    /**
+     * Provision user by creating new or updating existing.
+     * Priority: 1) Lookup by provider+providerId, 2) Lookup by email, 3) Create new
+     */
+    private User provisionUser(String email, String sub, String firstName, String lastName, String picture) {
+        // Priority 1: Lookup by provider + providerId (existing OAuth user)
+        Optional<User> byProvider = userRepository.findByProviderAndProviderId(AuthProvider.GOOGLE, sub);
+        if (byProvider.isPresent()) {
+            log.debug("User found by provider+providerId, updating profile: email={}", email);
+            return updateOauthUser(byProvider.get(), firstName, lastName, picture);
+        }
+        
+        // Priority 2: Lookup by email (existing LOCAL account, link OAuth provider)
+        Optional<User> byEmail = userRepository.findByEmail(email);
+        if (byEmail.isPresent()) {
+            log.debug("User found by email, linking Google OAuth provider: email={}", email);
+            return linkOauthProvider(byEmail.get(), sub, firstName, lastName, picture);
+        }
+        
+        // Priority 3: Create new OAuth user
+        log.debug("Creating new OAuth2 user: email={}", email);
+        return createOauthUser(email, sub, firstName, lastName, picture);
+    }
+
+    private String extractEmail(org.springframework.security.oauth2.core.user.OAuth2User oauthUser) {
+        if (oauthUser instanceof org.springframework.security.oauth2.core.oidc.user.OidcUser) {
+            return ((org.springframework.security.oauth2.core.oidc.user.OidcUser) oauthUser).getEmail();
+        }
+        return oauthUser.getAttribute("email");
+    }
+
+    private String extractSub(org.springframework.security.oauth2.core.user.OAuth2User oauthUser) {
+        if (oauthUser instanceof org.springframework.security.oauth2.core.oidc.user.OidcUser) {
+            return ((org.springframework.security.oauth2.core.oidc.user.OidcUser) oauthUser).getSubject();
+        }
+        return oauthUser.getAttribute("sub");
+    }
+
     private User updateOauthUser(User user, String firstName, String lastName, String picture) {
-        if (firstName != null) user.setFirstName(firstName);
-        if (lastName != null) user.setLastName(lastName);
-        if (picture != null) user.setAvatarUrl(picture);
+        log.debug("Updating OAuth2 user profile: email={}", user.getEmail());
+        if (firstName != null) {
+            user.setFirstName(firstName);
+        }
+        if (lastName != null) {
+            user.setLastName(lastName);
+        }
+        if (picture != null) {
+            user.setAvatarUrl(picture);
+        }
         return userRepository.save(user);
     }
 
     private User linkOauthProvider(User user, String providerId, String firstName, String lastName, String picture) {
+        log.debug("Linking Google OAuth provider to existing user: email={}", user.getEmail());
         user.setProvider(AuthProvider.GOOGLE);
         user.setProviderId(providerId);
-        if (firstName != null) user.setFirstName(firstName);
-        if (lastName != null) user.setLastName(lastName);
-        if (picture != null) user.setAvatarUrl(picture);
+        if (firstName != null) {
+            user.setFirstName(firstName);
+        }
+        if (lastName != null) {
+            user.setLastName(lastName);
+        }
+        if (picture != null) {
+            user.setAvatarUrl(picture);
+        }
         user.setEmailVerified(true);
         return userRepository.save(user);
     }
 
     private User createOauthUser(String email, String providerId, String firstName, String lastName, String picture) {
+        log.debug("Creating new OAuth2 user: email={}", email);
         final User user = new User();
         user.setEmail(email);
         user.setProvider(AuthProvider.GOOGLE);
@@ -106,9 +145,14 @@ public class OAuth2Service {
         user.setAccountStatus(AccountStatus.ACTIVE);
 
         Optional<com.lamastudio.backend.role.entity.Role> roleOpt = roleRepository.findByName(RoleName.ROLE_USER);
-        roleOpt.ifPresent(user::addRole);
+        if (roleOpt.isPresent()) {
+            user.addRole(roleOpt.get());
+            log.debug("Assigned ROLE_USER to new OAuth2 user: {}", email);
+        }
 
-        return userRepository.save(user);
+        User savedUser = userRepository.save(user);
+        log.info("New OAuth2 user created: id={}, email={}", savedUser.getId(), savedUser.getEmail());
+        return savedUser;
     }
 
     private String buildDisplayName(String firstName, String lastName, String email) {
