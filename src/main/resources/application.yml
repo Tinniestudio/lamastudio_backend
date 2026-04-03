@@ -64,6 +64,7 @@ app:
 
   resend:
     api-key: ${RESEND_API_KEY:}
+    base-url: ${RESEND_BASE_URL:https://api.resend.com}
     from-email: ${RESEND_FROM_EMAIL:no-reply@yourdomain.com}
 
   cors:

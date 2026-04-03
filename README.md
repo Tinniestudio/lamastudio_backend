@@ -171,7 +171,7 @@ This project uses Resend (https://resend.com) for sending transactional emails (
 Configuration is available via environment variables or the `application.yml` under `app.resend`:
 
 - RESEND_API_KEY — your Resend API key (recommended to set in environment)
-- RESEND_FROM_EMAIL — optional default "from" email address (falls back to `no-reply@lamastudio.com`)
+- RESEND_FROM_EMAIL — optional default "from" email address (falls back to `no-reply@tinniestudio.com.com`)
 
 In `application.yml` the properties are:
 
@@ -309,7 +309,7 @@ This project is licensed under the MIT License.
 TinnieStudio - Development Team
 
 📞 Contact
-Email: backend@lamastudio.com
+Email: backend@tinniestudio.com.com
 
 Issues: GitHub Issues
 

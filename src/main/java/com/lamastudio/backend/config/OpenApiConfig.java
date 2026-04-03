@@ -91,7 +91,7 @@ public class OpenApiConfig {
                         """)
                 .contact(new Contact()
                         .name("LamaStudio Team")
-                        .email("dev@lamastudio.com")
+                        .email("dev@tinniestudio.com.com")
                         .url(frontendUrl))
                 .license(new License()
                         .name("Proprietary")

@@ -73,6 +73,7 @@ public class AppProperties {
     @Setter
     public static class Resend {
         private String apiKey;
+        private String baseUrl;
         private String fromEmail;
     }
 }
