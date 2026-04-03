@@ -35,10 +35,6 @@ public class EmailTemplates {
         "        <div style='display:inline-flex; align-items:center; gap:12px;'>" +
         (logoUrl != null && !logoUrl.isEmpty() ? 
           "<img src='" + logoUrl + "' alt='Tinnie Lamadine Studios' style='height:48px; width:auto;'/>" : "") +
-        "          <div style='text-align:left;'>" +
-        "            <div style='color:#f5c518; font-size:16px; font-weight:900; letter-spacing:2px; text-transform:uppercase;'>TINNIE LAMADINE</div>" +
-        "            <div style='color:#5a6f8a; font-size:9px; letter-spacing:5px; text-transform:uppercase; margin-top:3px;'>S T U D I O S</div>" +
-        "          </div>" +
         "        </div>" +
         "      </div>" +
 
@@ -140,10 +136,6 @@ public class EmailTemplates {
         (logoUrl != null && !logoUrl.isEmpty() ? 
           "<img src='" + logoUrl + "' alt='Tinnie Lamadine Studios' style='height:48px; width:auto;'/>" :
           "") +
-        "          <div style='text-align:left;'>" +
-        "            <div style='color:#f5c518; font-size:16px; font-weight:900; letter-spacing:2px; text-transform:uppercase;'>TINNIE LAMADINE</div>" +
-        "            <div style='color:#5a6f8a; font-size:9px; letter-spacing:5px; text-transform:uppercase; margin-top:3px;'>S T U D I O S</div>" +
-        "          </div>" +
         "        </div>" +
         "      </div>" +
 

@@ -87,6 +87,24 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
     }
 
+        @ExceptionHandler(BadRequestException.class)
+        public ResponseEntity<Object> handleBadRequest(
+                        BadRequestException ex,
+                        HttpServletRequest request
+        ) {
+                Map<String, Object> body = buildStandardError("BAD_REQUEST", ex.getMessage(), HttpStatus.BAD_REQUEST.value(), request.getServletPath());
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+        }
+
+        @ExceptionHandler(MissingRefreshTokenException.class)
+        public ResponseEntity<Object> handleMissingRefreshToken(
+                        MissingRefreshTokenException ex,
+                        HttpServletRequest request
+        ) {
+                Map<String, Object> body = buildStandardError("MISSING_REFRESH_TOKEN", ex.getMessage(), HttpStatus.UNAUTHORIZED.value(), request.getServletPath());
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+        }
+
         @ExceptionHandler(org.springframework.security.authentication.BadCredentialsException.class)
         public ResponseEntity<Object> handleSpringBadCredentials(
                         org.springframework.security.authentication.BadCredentialsException ex,
