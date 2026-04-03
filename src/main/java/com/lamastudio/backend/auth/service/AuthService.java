@@ -51,17 +51,27 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request, HttpServletResponse response) {
-        if (userRepository.existsByEmail(request.getEmail().toLowerCase())) {
+        if (request == null) {
+            throw new BadRequestException("Request body is required");
+        }
+
+        String email = normalizeEmail(request.getEmail());
+
+        if (userRepository.existsByEmail(email)) {
             throw new EmailAlreadyExistsException("Email address is already registered");
         }
 
+        String password = requireText(request.getPassword(), "Password is required");
+        String firstName = requireText(request.getFirstName(), "First name is required");
+        String lastName = requireText(request.getLastName(), "Last name is required");
+
         User user = new User();
-        user.setEmail(request.getEmail().toLowerCase().strip());
-        user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+    user.setEmail(email);
+    user.setPasswordHash(passwordEncoder.encode(password));
         user.setProvider(AuthProvider.LOCAL);
-        user.setFirstName(request.getFirstName().strip());
-        user.setLastName(request.getLastName().strip());
-        user.setDisplayName(request.getFirstName().strip() + " " + request.getLastName().strip());
+    user.setFirstName(firstName.strip());
+    user.setLastName(lastName.strip());
+    user.setDisplayName(firstName.strip() + " " + lastName.strip());
         user.setAccountStatus(AccountStatus.ACTIVE);
         user.setEmailVerified(false);
 
@@ -79,7 +89,11 @@ public class AuthService {
         user = userRepository.save(user);
 
         // Send verification email async (fire-and-forget)
-    emailService.sendVerificationEmail(user.getEmail(), resolveDisplayName(user), verificationToken);
+        try {
+            emailService.sendVerificationEmail(user.getEmail(), resolveDisplayName(user), verificationToken);
+        } catch (Exception ex) {
+            log.warn("Failed to send verification email to {}: {}", user.getEmail(), ex.getMessage(), ex);
+        }
 
         // Issue tokens immediately so user can proceed (email verification enforced at
         // sensitive ops)
@@ -94,17 +108,19 @@ public class AuthService {
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request, HttpServletResponse response) {
 
-        String email = request != null ? request.getEmail() : null;
+    String email = request != null ? request.getEmail() : null;
         String password = request != null ? request.getPassword() : null;
 
         if (!StringUtils.hasText(email) || !StringUtils.hasText(password)) {
             throw new BadCredentialsException("Invalid email or password");
         }
 
-        try {
+    String normalizedEmail = email.toLowerCase().strip();
+
+    try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
-                            email.toLowerCase().strip(),
+                normalizedEmail,
                             password));
         } catch (org.springframework.security.authentication.BadCredentialsException ex) {
             throw new BadCredentialsException("Invalid email or password");
@@ -117,7 +133,7 @@ public class AuthService {
         }
 
         // Fetch user AFTER successful auth
-        User user = userRepository.findByEmail(request.getEmail().toLowerCase())
+    User user = userRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         issueTokenCookies(user, response);
@@ -185,8 +201,12 @@ public class AuthService {
 
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Request body is required");
+        }
+        String email = normalizeEmail(request.getEmail());
         // Always return 200 regardless of whether email exists (prevent enumeration)
-        userRepository.findByEmail(request.getEmail().toLowerCase()).ifPresent(user -> {
+        userRepository.findByEmail(email).ifPresent(user -> {
             if (user.getProvider() != AuthProvider.LOCAL) {
                 // OAuth users have no password — silently ignore
                 return;
@@ -198,7 +218,11 @@ public class AuthService {
                     Instant.now().plus(appProperties.getPasswordReset().getTokenExpiryHours(), ChronoUnit.HOURS));
             userRepository.save(user);
 
-            emailService.sendPasswordResetEmail(user.getEmail(), resolveDisplayName(user), resetToken);
+            try {
+                emailService.sendPasswordResetEmail(user.getEmail(), resolveDisplayName(user), resetToken);
+            } catch (Exception ex) {
+                log.warn("Failed to send password reset email to {}: {}", user.getEmail(), ex.getMessage(), ex);
+            }
         });
     }
 
@@ -206,6 +230,11 @@ public class AuthService {
 
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Request body is required");
+        }
+        requireText(request.getToken(), "Password reset token is required");
+        requireText(request.getNewPassword(), "New password is required");
         User user = userRepository.findByPasswordResetToken(request.getToken())
                 .orElseThrow(() -> new InvalidTokenException("Password reset token is invalid or expired"));
 
@@ -284,6 +313,17 @@ public class AuthService {
         }
 
         return "User";
+    }
+
+    private String normalizeEmail(String email) {
+        return requireText(email, "Email is required").toLowerCase().strip();
+    }
+
+    private String requireText(String value, String message) {
+        if (!StringUtils.hasText(value)) {
+            throw new BadRequestException(message);
+        }
+        return value;
     }
 
 }
