@@ -20,11 +20,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -154,12 +154,13 @@ class AuthServiceTest {
         request.setEmail(user.getEmail());
         request.setPassword("Password1!");
 
-        when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+    when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+        .thenThrow(new DisabledException("Account is disabled"));
 
         assertThatThrownBy(() -> authService.login(request, new MockHttpServletResponse()))
                 .isInstanceOf(AccountNotActiveException.class);
 
-        verify(authenticationManager, never()).authenticate(any());
+    verify(authenticationManager).authenticate(any());
     }
 
     @Test
@@ -169,8 +170,6 @@ class AuthServiceTest {
         LoginRequest request = new LoginRequest();
         request.setEmail(user.getEmail());
         request.setPassword("bad");
-
-        when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                 .thenThrow(mock(AuthenticationException.class));
 
