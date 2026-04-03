@@ -79,7 +79,7 @@ public class AuthService {
         user = userRepository.save(user);
 
         // Send verification email async (fire-and-forget)
-        emailService.sendVerificationEmail(user.getEmail(), verificationToken);
+    emailService.sendVerificationEmail(user.getEmail(), resolveDisplayName(user), verificationToken);
 
         // Issue tokens immediately so user can proceed (email verification enforced at
         // sensitive ops)
@@ -198,7 +198,7 @@ public class AuthService {
                     Instant.now().plus(appProperties.getPasswordReset().getTokenExpiryHours(), ChronoUnit.HOURS));
             userRepository.save(user);
 
-            emailService.sendPasswordResetEmail(user.getEmail(), resetToken);
+            emailService.sendPasswordResetEmail(user.getEmail(), resolveDisplayName(user), resetToken);
         });
     }
 
@@ -257,6 +257,33 @@ public class AuthService {
                 .emailVerified(user.isEmailVerified())
                 .message(message)
                 .build();
+    }
+
+    private String resolveDisplayName(User user) {
+        if (user == null) {
+            return "User";
+        }
+
+        if (StringUtils.hasText(user.getDisplayName())) {
+            return user.getDisplayName().strip();
+        }
+
+        String firstName = user.getFirstName();
+        String lastName = user.getLastName();
+
+        if (StringUtils.hasText(firstName) && StringUtils.hasText(lastName)) {
+            return (firstName.strip() + " " + lastName.strip()).trim();
+        }
+
+        if (StringUtils.hasText(firstName)) {
+            return firstName.strip();
+        }
+
+        if (StringUtils.hasText(lastName)) {
+            return lastName.strip();
+        }
+
+        return "User";
     }
 
 }
