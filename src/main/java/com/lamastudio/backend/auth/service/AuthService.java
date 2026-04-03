@@ -17,14 +17,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -37,8 +38,6 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
-
-    private static Logger logger = LoggerFactory.getLogger(AuthService.class);
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
@@ -66,22 +65,24 @@ public class AuthService {
         user.setAccountStatus(AccountStatus.ACTIVE);
         user.setEmailVerified(false);
 
-    java.util.Optional<com.lamastudio.backend.role.entity.Role> roleOpt = roleRepository.findByName(RoleName.ROLE_USER);
-    if (roleOpt.isPresent()) user.addRole(roleOpt.get());
+        java.util.Optional<com.lamastudio.backend.role.entity.Role> roleOpt = roleRepository
+                .findByName(RoleName.ROLE_USER);
+        if (roleOpt.isPresent())
+            user.addRole(roleOpt.get());
 
         // Generate email verification token
         String verificationToken = UUID.randomUUID().toString();
         user.setEmailVerificationToken(verificationToken);
         user.setEmailVerificationTokenExpiry(
-                Instant.now().plus(appProperties.getEmailVerification().getTokenExpiryHours(), ChronoUnit.HOURS)
-        );
+                Instant.now().plus(appProperties.getEmailVerification().getTokenExpiryHours(), ChronoUnit.HOURS));
 
         user = userRepository.save(user);
 
         // Send verification email async (fire-and-forget)
         emailService.sendVerificationEmail(user.getEmail(), verificationToken);
 
-        // Issue tokens immediately so user can proceed (email verification enforced at sensitive ops)
+        // Issue tokens immediately so user can proceed (email verification enforced at
+        // sensitive ops)
         issueTokenCookies(user, response);
 
         log.info("New user registered: {}", user.getEmail());
@@ -92,27 +93,32 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request, HttpServletResponse response) {
-        // 1) Existence check: explicit not-found vs invalid credentials
-        User user = userRepository.findByEmail(request.getEmail().toLowerCase())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        logger.info("Checking user: user={}", user);
-        if (!user.isActive()) {
-            throw new AccountNotActiveException("Account is " + user.getAccountStatus().name().toLowerCase());
+
+        String email = request != null ? request.getEmail() : null;
+        String password = request != null ? request.getPassword() : null;
+
+        if (!StringUtils.hasText(email) || !StringUtils.hasText(password)) {
+            throw new BadCredentialsException("Invalid email or password");
         }
 
-    try {
-        authenticationManager.authenticate(
-            new UsernamePasswordAuthenticationToken(
-                request.getEmail().toLowerCase().strip(), // principal = email for DaoAuthenticationProvider
-                request.getPassword()
-            )
-        );
-    } catch (AuthenticationException ex) {
-        // AuthenticationManager throws a variety of Spring exceptions (including UsernameNotFoundException when
-        // user is missing). We already mapped missing user above, so any AuthenticationException here is treated
-        // as invalid credentials.
-        throw new BadCredentialsException("Invalid email or password");
-    }
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            email.toLowerCase().strip(),
+                            password));
+        } catch (org.springframework.security.authentication.BadCredentialsException ex) {
+            throw new BadCredentialsException("Invalid email or password");
+        } catch (DisabledException ex) {
+            throw new AccountNotActiveException("Account is disabled");
+        } catch (LockedException ex) {
+            throw new AccountNotActiveException("Account is locked");
+        } catch (AuthenticationException ex) {
+            throw new BadCredentialsException("Invalid email or password");
+        }
+
+        // Fetch user AFTER successful auth
+        User user = userRepository.findByEmail(request.getEmail().toLowerCase())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         issueTokenCookies(user, response);
 
@@ -189,8 +195,7 @@ public class AuthService {
             String resetToken = UUID.randomUUID().toString();
             user.setPasswordResetToken(resetToken);
             user.setPasswordResetTokenExpiry(
-                    Instant.now().plus(appProperties.getPasswordReset().getTokenExpiryHours(), ChronoUnit.HOURS)
-            );
+                    Instant.now().plus(appProperties.getPasswordReset().getTokenExpiryHours(), ChronoUnit.HOURS));
             userRepository.save(user);
 
             emailService.sendPasswordResetEmail(user.getEmail(), resetToken);
@@ -220,13 +225,14 @@ public class AuthService {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private void issueTokenCookies(User user, HttpServletResponse response) {
-        String accessToken  = jwtTokenProvider.generateAccessToken(user);
+        String accessToken = jwtTokenProvider.generateAccessToken(user);
         String refreshToken = jwtTokenProvider.generateRefreshToken(user);
         cookieFactory.addAuthCookies(response, accessToken, refreshToken);
     }
 
     private String extractRefreshToken(HttpServletRequest request) {
-        if (request.getCookies() == null) return null;
+        if (request.getCookies() == null)
+            return null;
         return Arrays.stream(request.getCookies())
                 .filter(c -> CookieFactory.REFRESH_TOKEN_COOKIE.equals(c.getName()))
                 .map(Cookie::getValue)

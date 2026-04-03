@@ -87,6 +87,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
     }
 
+        @ExceptionHandler(org.springframework.security.authentication.BadCredentialsException.class)
+        public ResponseEntity<Object> handleSpringBadCredentials(
+                        org.springframework.security.authentication.BadCredentialsException ex,
+                        HttpServletRequest request
+        ) {
+                Map<String, Object> body = buildStandardError("INVALID_CREDENTIALS", "Invalid email or password", HttpStatus.UNAUTHORIZED.value(), request.getServletPath());
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+        }
+
     // ── Spring Security exceptions ────────────────────────────────────────────
 
     @ExceptionHandler(AuthenticationException.class)
