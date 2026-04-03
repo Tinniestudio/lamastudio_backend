@@ -49,7 +49,8 @@ spring:
               - openid
               - profile
               - email
-            redirect-uri: "${APP_BASE_URL:http://localhost:8080}/login/oauth2/code/google"
+            # Updated to match application's context-path (/api/v1) and SecurityConfig redirectionEndpoint
+            redirect-uri: "${APP_BASE_URL:http://localhost:8080}/api/v1/auth/oauth2/callback/google"
         provider:
           google:
             authorization-uri: https://accounts.google.com/o/oauth2/v2/auth

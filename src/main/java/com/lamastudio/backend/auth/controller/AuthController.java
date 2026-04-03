@@ -109,8 +109,15 @@ public class AuthController {
     @GetMapping("/oauth2/authorize/google")
     @SecurityRequirements({})
     public void redirectToGoogle(HttpServletResponse response) throws java.io.IOException {
-        // Base URI for authorization endpoints configured in SecurityConfig: /api/v1/oauth2/authorization
-        response.sendRedirect("/api/v1/oauth2/authorization/google");
+        // Base URI for authorization endpoints configured in SecurityConfig is relative to the
+        // application's context path. Use the context-relative path here (no leading API
+        // version prefix) so the redirect works whether a context path is present or not.
+        // At runtime the container will resolve this to e.g. /api/v1/oauth2/authorization/google
+        // Controller redirect removed in favor of Spring Security's configured authorization
+        // base URI. Clients should initiate OAuth flow by calling the configured endpoint
+        // (e.g. GET /auth/oauth2/authorize/google). Keep this method for backward
+        // compatibility by delegating to the authorization endpoint path.
+        response.sendRedirect("/auth/oauth2/authorize/google");
     }
 
     @Operation(summary = "Verify email address", description = "Confirms the user's email using the time-limited token from the registration email. Token expires after 24 hours.")
