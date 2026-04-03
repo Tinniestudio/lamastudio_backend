@@ -1,12 +1,13 @@
 package com.lamastudio.backend.email;
 
 import com.lamastudio.backend.config.AppProperties;
+import com.resend.Resend;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.reactive.function.client.ExchangeStrategies;
-import org.springframework.web.reactive.function.client.WebClient;
 
 @Configuration
+@Slf4j
 public class ResendConfig {
 
     private final AppProperties appProperties;
@@ -16,22 +17,13 @@ public class ResendConfig {
     }
 
     @Bean
-    public WebClient resendWebClient() {
+    public Resend resendClient() {
         String apiKey = appProperties.getResend().getApiKey();
-
-        ExchangeStrategies strategies = ExchangeStrategies.builder()
-                .codecs(conf -> conf.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
-                .build();
-
-        WebClient.Builder builder = WebClient.builder()
-                .baseUrl("https://api.resend.com")
-                .defaultHeader("Accept", "application/json")
-                .exchangeStrategies(strategies);
-
-        if (apiKey != null && !apiKey.isBlank()) {
-            builder.defaultHeader("Authorization", "Bearer " + apiKey);
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("Resend API key is not configured; email sending will be disabled.");
+            return new Resend("");
         }
 
-        return builder.build();
+        return new Resend(apiKey);
     }
 }
