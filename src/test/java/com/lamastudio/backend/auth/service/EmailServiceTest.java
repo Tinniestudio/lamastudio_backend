@@ -5,9 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import com.lamastudio.backend.email.EmailRequest;
 import com.lamastudio.backend.email.ResendEmailService;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,7 +30,7 @@ class EmailServiceTest {
     @Test
     @DisplayName("sendVerificationEmail builds correct link and sends message")
     void sendVerificationEmail() {
-    emailService.sendVerificationEmail("user@example.com", "token123");
+    emailService.sendVerificationEmail("user@example.com", "Jane Doe", "token123");
 
     ArgumentCaptor<com.lamastudio.backend.email.EmailRequest> captor = ArgumentCaptor.forClass(com.lamastudio.backend.email.EmailRequest.class);
     verify(resendEmailService).sendEmail(captor.capture());
@@ -47,7 +45,7 @@ class EmailServiceTest {
     @Test
     @DisplayName("sendPasswordResetEmail builds correct link and sends message")
     void sendPasswordResetEmail() {
-    emailService.sendPasswordResetEmail("user@example.com", "reset-token");
+    emailService.sendPasswordResetEmail("user@example.com", "Jane Doe", "reset-token");
 
     ArgumentCaptor<com.lamastudio.backend.email.EmailRequest> captor = ArgumentCaptor.forClass(com.lamastudio.backend.email.EmailRequest.class);
     verify(resendEmailService).sendEmail(captor.capture());

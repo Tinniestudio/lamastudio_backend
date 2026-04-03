@@ -103,7 +103,7 @@ class AuthServiceTest {
         verify(roleRepository).findByName(RoleName.ROLE_USER);
         verify(passwordEncoder).encode("Password1!");
         verify(userRepository).save(any(User.class));
-        verify(emailService).sendVerificationEmail(eq("test@example.com"), any());
+    verify(emailService).sendVerificationEmail(eq("test@example.com"), eq("Jane Doe"), any());
         verify(cookieFactory).addAuthCookies(eq(response), eq("access"), eq("refresh"));
     }
 
