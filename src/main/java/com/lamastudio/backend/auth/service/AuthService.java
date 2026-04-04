@@ -186,7 +186,7 @@ public class AuthService {
 
         if (user.getEmailVerificationTokenExpiry() == null ||
                 Instant.now().isAfter(user.getEmailVerificationTokenExpiry())) {
-            throw new InvalidTokenException("Email verification token has expired");
+            throw new EmailTokenExpiredException("Email verification token has expired. Please request a new one.");
         }
 
         user.setEmailVerified(true);
@@ -195,6 +195,104 @@ public class AuthService {
         userRepository.save(user);
 
         log.info("Email verified for user: {}", user.getEmail());
+    }
+
+    /**
+     * Enhanced verify email with idempotency support.
+     * Returns response with alreadyVerified flag.
+     *
+     * @param token the verification token
+     * @return VerifyEmailResponse with status information
+     */
+    @Transactional
+    public VerifyEmailResponse verifyEmailEnhanced(String token) {
+        User user = userRepository.findByEmailVerificationToken(token)
+                .orElse(null);
+
+        // Check if token not found but email might already be verified
+        if (user == null) {
+            throw new InvalidTokenException("Email verification token is invalid or does not exist");
+        }
+
+        // If token is null, it was already used. Check if already verified (idempotent)
+        if (user.getEmailVerificationToken() == null) {
+            if (user.isEmailVerified()) {
+                log.debug("Idempotent: Email already verified for user: {}", user.getEmail());
+                return VerifyEmailResponse.builder()
+                        .message("Email already verified")
+                        .alreadyVerified(true)
+                        .timestamp(Instant.now())
+                        .build();
+            } else {
+                // Malformed state - token cleared but email not verified
+                throw new InvalidTokenException("Email verification token is invalid or does not exist");
+            }
+        }
+
+        // Check if token has expired
+        if (user.getEmailVerificationTokenExpiry() == null ||
+                Instant.now().isAfter(user.getEmailVerificationTokenExpiry())) {
+            throw new EmailTokenExpiredException("Email verification token has expired. Please request a new one.");
+        }
+
+        // Verify the email
+        user.setEmailVerified(true);
+        user.setEmailVerificationToken(null);
+        user.setEmailVerificationTokenExpiry(null);
+        userRepository.save(user);
+
+        log.info("Email verified for user: {}", user.getEmail());
+        return VerifyEmailResponse.builder()
+                .message("Email verified successfully")
+                .alreadyVerified(false)
+                .timestamp(Instant.now())
+                .build();
+    }
+
+    /**
+     * Resend email verification.
+     * Allows user to request a new verification email if original expired.
+     *
+     * @param email the user's email address
+     */
+    @Transactional
+    public void resendVerificationEmail(String email) {
+        String normalizedEmail = normalizeEmail(email);
+
+        User user = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("No user found with this email address"));
+
+        // Check if email already verified
+        if (user.isEmailVerified()) {
+            throw new InvalidEmailStateException("Email is already verified");
+        }
+
+        // Check if user is OAuth2-only (no password)
+        if (user.getProvider() != AuthProvider.LOCAL) {
+            throw new InvalidEmailStateException("Cannot resend verification for OAuth-only accounts. Email cannot be verified.");
+        }
+
+        // Check if account is not active
+        if (!user.isActive()) {
+            throw new AccountNotActiveException("Account is " + user.getAccountStatus().name().toLowerCase());
+        }
+
+        // Invalidate old token and generate new one
+        String newVerificationToken = UUID.randomUUID().toString();
+        user.setEmailVerificationToken(newVerificationToken);
+        user.setEmailVerificationTokenExpiry(
+                Instant.now().plus(appProperties.getEmailVerification().getTokenExpiryHours(), ChronoUnit.HOURS));
+
+        userRepository.save(user);
+
+        // Send verification email
+        try {
+            emailService.sendVerificationEmail(user.getEmail(), resolveDisplayName(user), newVerificationToken);
+            log.info("Resent verification email to: {}", user.getEmail());
+        } catch (Exception ex) {
+            log.warn("Failed to send verification email to {}: {}", user.getEmail(), ex.getMessage(), ex);
+            throw new RuntimeException("Failed to send verification email. Please try again later.");
+        }
     }
 
     // ── Forgot Password ───────────────────────────────────────────────────────

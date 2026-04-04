@@ -87,16 +87,52 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
     }
 
-        @ExceptionHandler(BadRequestException.class)
-        public ResponseEntity<Object> handleBadRequest(
-                        BadRequestException ex,
-                        HttpServletRequest request
-        ) {
-                Map<String, Object> body = buildStandardError("BAD_REQUEST", ex.getMessage(), HttpStatus.BAD_REQUEST.value(), request.getServletPath());
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
-        }
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<Object> handleBadRequest(
+            BadRequestException ex,
+            HttpServletRequest request
+    ) {
+        Map<String, Object> body = buildStandardError("BAD_REQUEST", ex.getMessage(), HttpStatus.BAD_REQUEST.value(), request.getServletPath());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
 
-        @ExceptionHandler(MissingRefreshTokenException.class)
+    @ExceptionHandler(InvalidEmailStateException.class)
+    public ResponseEntity<Object> handleInvalidEmailState(
+            InvalidEmailStateException ex,
+            HttpServletRequest request
+    ) {
+        Map<String, Object> body = buildStandardError("INVALID_EMAIL_STATE", ex.getMessage(), HttpStatus.BAD_REQUEST.value(), request.getServletPath());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(EmailTokenExpiredException.class)
+    public ResponseEntity<Object> handleEmailTokenExpired(
+            EmailTokenExpiredException ex,
+            HttpServletRequest request
+    ) {
+        Map<String, Object> body = buildStandardError("EMAIL_TOKEN_EXPIRED", ex.getMessage(), HttpStatus.BAD_REQUEST.value(), request.getServletPath());
+        body.put("actionRequired", "resend_verification");
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<Object> handleRateLimitExceeded(
+            RateLimitExceededException ex,
+            HttpServletRequest request
+    ) {
+        Map<String, Object> body = buildStandardError("RATE_LIMIT_EXCEEDED", ex.getMessage(),
+                HttpStatus.TOO_MANY_REQUESTS.value(), request.getServletPath());
+        body.put("retryAfterSeconds", ex.getRetryAfterSeconds());
+        body.put("maxRequests", ex.getMaxRequests());
+        body.put("windowMinutes", ex.getWindowMinutes());
+
+        return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .header("X-RateLimit-Limit", String.valueOf(ex.getMaxRequests()))
+                .header("X-RateLimit-Reset", String.valueOf(System.currentTimeMillis() + (ex.getRetryAfterSeconds() * 1000L)))
+                .body(body);
+    }        @ExceptionHandler(MissingRefreshTokenException.class)
         public ResponseEntity<Object> handleMissingRefreshToken(
                         MissingRefreshTokenException ex,
                         HttpServletRequest request

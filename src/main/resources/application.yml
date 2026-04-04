@@ -38,6 +38,18 @@ spring:
         jdbc:
           time_zone: UTC
 
+  redis:
+    url: ${REDIS_URL}
+    timeout: 2000ms
+    ssl:
+      enabled: true
+    jedis:
+      pool:
+        max-active: 20
+        max-idle: 10
+        min-idle: 2
+        max-wait: -1ms
+
   security:
     oauth2:
       client:
