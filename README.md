@@ -3,7 +3,7 @@
 ```markdown
 # LamaStudio Backend 🎬
 
-![LamaStudio](src/main/resources/static/og-image.jpg)
+[LamaStudio](src/main/resources/static/og-image.jpg)
 
 RESTful API backend for LamaStudio streaming platform built with Spring Boot. Handles user authentication, content management, and streaming services.
 

@@ -23,9 +23,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 import java.util.Arrays;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import com.lamastudio.backend.auth.dto.UserResponseDto;
 import com.lamastudio.backend.auth.jwt.CookieFactory;
@@ -34,6 +32,8 @@ import com.lamastudio.backend.user.entity.User;
 import com.lamastudio.backend.user.repository.UserRepository;
 import io.jsonwebtoken.Claims;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+
+import com.lamastudio.backend.config.ratelimit.RateLimit;
 
 @RestController
 @RequestMapping("/auth")
@@ -72,8 +72,11 @@ public class AuthController {
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class),
                 examples = @ExampleObject(value = "{\"status\":401,\"error\":\"Unauthorized\",\"message\":\"Invalid email or password\",\"path\":\"/api/v1/auth/login\",\"timestamp\":\"2024-11-01T12:00:00Z\"}"))),
         @ApiResponse(responseCode = "403", description = "Account suspended or deleted",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(responseCode = "429", description = "Rate limit exceeded",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class)))
     })
+    @RateLimit(maxRequests = 10, windowMinutes = 15, keyStrategy = "IP_ONLY")
     @PostMapping("/login")
     @SecurityRequirements({})
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
@@ -131,11 +134,35 @@ public class AuthController {
     })
     @SecurityRequirements({})
     @GetMapping("/verify-email")
-    public ResponseEntity<Map<String, String>> verifyEmail(
+    public ResponseEntity<VerifyEmailResponse> verifyEmail(
             @Parameter(description = "Verification token from registration email", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
             @RequestParam String token) {
-        authService.verifyEmail(token);
-        return ResponseEntity.ok(Map.of("message", "Email verified successfully"));
+        VerifyEmailResponse response = authService.verifyEmailEnhanced(token);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "Resend email verification", description = "Sends a new verification email if the original token expired or was not received. " +
+        "Cannot resend to already verified emails. Rate limited to 5 requests per 10 minutes.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Verification email sent",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                examples = @ExampleObject(value = "{\"message\":\"Verification email sent successfully. Please check your inbox.\"}"))),
+        @ApiResponse(responseCode = "400", description = "Email already verified or invalid request",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class),
+                examples = @ExampleObject(value = "{\"status\":400,\"error\":\"Bad Request\",\"message\":\"Email is already verified\",\"path\":\"/api/v1/auth/resend-verification-email\",\"timestamp\":\"2024-11-01T12:00:00Z\"}"))),
+        @ApiResponse(responseCode = "404", description = "User not found",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(responseCode = "429", description = "Rate limit exceeded",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class),
+                examples = @ExampleObject(value = "{\"status\":429,\"error\":\"Too Many Requests\",\"message\":\"Rate limit exceeded. Maximum 5 requests per 10 minute(s) allowed.\",\"retryAfterSeconds\":300,\"path\":\"/api/v1/auth/resend-verification-email\",\"timestamp\":\"2024-11-01T12:00:00Z\"}")))
+    })
+    @SecurityRequirements({})
+    @RateLimit(maxRequests = 5, windowMinutes = 10, keyStrategy = "USER_OR_IP")
+    @PostMapping("/resend-verification-email")
+    public ResponseEntity<Map<String, String>> resendVerificationEmail(
+            @Valid @RequestBody ResendVerificationEmailRequest request) {
+        authService.resendVerificationEmail(request.getEmail());
+        return ResponseEntity.ok(Map.of("message", "Verification email sent successfully. Please check your inbox."));
     }
 
     @Operation(summary = "Request password reset email", description = "Sends a reset link to the email if an active account exists. Always returns 200 to prevent email enumeration. Reset link expires in 1 hour.")
@@ -147,6 +174,7 @@ public class AuthController {
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class)))
     })
     @SecurityRequirements({})
+    @RateLimit(maxRequests = 3, windowMinutes = 30, keyStrategy = "IP_ONLY")
     @PostMapping("/forgot-password")
     public ResponseEntity<Map<String, String>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         authService.forgotPassword(request);
