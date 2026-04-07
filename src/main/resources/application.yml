@@ -39,19 +39,14 @@ spring:
           time_zone: UTC
 
   redis:
-    host: ${REDIS_HOST}
-    port: ${REDIS_PORT}
-    password: ${REDIS_PASSWORD}
-    username: ${REDIS_USERNAME}
+    url: ${REDIS_URL}                  # no default — fail fast if missing
     timeout: 2000ms
-    ssl:
-      enabled: true
-    jedis:
+    lettuce:
       pool:
-        max-active: 20
-        max-idle: 10
-        min-idle: 2
-        max-wait: -1ms
+        max-active: 10                 # startup: keep pool small
+        max-idle: 5
+        min-idle: 1
+        max-wait: 1000ms               # don't block forever waiting for connection
 
   security:
     oauth2:
