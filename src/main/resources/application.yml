@@ -39,7 +39,10 @@ spring:
           time_zone: UTC
 
   redis:
-    url: ${REDIS_URL}
+    host: ${REDIS_HOST}
+    port: ${REDIS_PORT}
+    password: ${REDIS_PASSWORD}
+    username: ${REDIS_USERNAME}
     timeout: 2000ms
     ssl:
       enabled: true
