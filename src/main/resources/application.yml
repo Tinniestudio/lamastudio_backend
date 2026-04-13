@@ -38,15 +38,18 @@ spring:
         jdbc:
           time_zone: UTC
 
-  redis:
-    url: ${REDIS_URL}                  # no default — fail fast if missing
-    timeout: 2000ms
-    lettuce:
-      pool:
-        max-active: 10                 # startup: keep pool small
-        max-idle: 5
-        min-idle: 1
-        max-wait: 1000ms               # don't block forever waiting for connection
+  data:
+    redis:
+      repositories:
+        enabled: true
+      url: ${REDIS_URL}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 5
+          min-idle: 1
+          max-wait: 1000ms          # don't block forever waiting for connection
 
   security:
     oauth2:
