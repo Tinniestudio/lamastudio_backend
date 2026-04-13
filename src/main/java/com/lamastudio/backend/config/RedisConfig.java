@@ -80,13 +80,10 @@ public class RedisConfig {
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofMinutes(DEFAULT_CACHE_TTL_MINUTES))
                 .serializeKeysWith(
-                        RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer())
-                )
+                        RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(
                         RedisSerializationContext.SerializationPair.fromSerializer(
-                                new GenericJackson2JsonRedisSerializer()
-                        )
-                );
+                                new GenericJackson2JsonRedisSerializer()));
 
         log.info("CacheManager configured with default TTL: {} minutes", DEFAULT_CACHE_TTL_MINUTES);
         return RedisCacheManager.builder(connectionFactory)
@@ -96,10 +93,11 @@ public class RedisConfig {
 
     /**
      * Startup connectivity check and config logging.
-     * Non-fatal: Redis failure does NOT crash the app. Rate limiter and cache degrade gracefully.
+     * Non-fatal: Redis failure does NOT crash the app. Rate limiter and cache
+     * degrade gracefully.
      *
      * @param connectionFactory Redis connection factory
-     * @param environment Spring Environment for reading env vars
+     * @param environment       Spring Environment for reading env vars
      * @return ApplicationRunner
      */
     @Bean
@@ -113,7 +111,8 @@ public class RedisConfig {
     }
 
     /**
-     * Test Redis connection during startup. Logs success or failure without throwing.
+     * Test Redis connection during startup. Logs success or failure without
+     * throwing.
      */
     private void testRedisConnection(RedisConnectionFactory connectionFactory) {
         try (RedisConnection connection = connectionFactory.getConnection()) {
@@ -132,10 +131,10 @@ public class RedisConfig {
      * Extracts host, port, SSL info from the URL without duplicating ssl.enabled.
      */
     private void logResolvedRedisConfig(Environment environment) {
-        String redisUrl = environment.getProperty("spring.redis.url");
+        String redisUrl = environment.getProperty("spring.data.redis.url");
 
         if (!StringUtils.hasText(redisUrl)) {
-            log.error("✗ REDIS_URL is not set. The application requires spring.redis.url to be configured. " +
+            log.error("✗ REDIS_URL is not set. The application requires spring.data.redis.url to be configured. " +
                     "Set the REDIS_URL environment variable.");
             return;
         }
@@ -147,15 +146,15 @@ public class RedisConfig {
             int port = uri.getPort();
             boolean ssl = uri.isSsl();
 
-            log.info("✓ Redis config resolved from spring.redis.url: {}{}:{} (SSL: {})",
+            log.info("✓ Redis config resolved from spring.data.redis.url: {}{}:{} (SSL: {})",
                     scheme, host, port, ssl);
 
             if (!ssl) {
-                log.warn("⚠ REDIS_URL does not use 'rediss://' scheme. SSL is disabled. " +
-                        "If using a managed Redis service (RedisLabs, Upstash, Railway), ensure the URL uses rediss:// prefix.");
+                log.debug("Redis running without SSL - OK for self-hosted or non-TLS providers.");
             }
         } catch (Exception ex) {
-            log.error("✗ Failed to parse spring.redis.url. Invalid format: {}. Error: {}", redisUrl, ex.getMessage());
+            log.error("✗ Failed to parse spring.data.redis.url. Invalid format: {}. Error: {}", redisUrl,
+                    ex.getMessage());
             log.debug("Redis URL parsing failure details", ex);
         }
     }
