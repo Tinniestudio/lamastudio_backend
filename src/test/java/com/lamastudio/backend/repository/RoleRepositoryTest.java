@@ -1,8 +1,5 @@
 package com.lamastudio.backend.repository;
 
-import com.lamastudio.backend.role.entity.Role;
-import com.lamastudio.backend.role.entity.RoleName;
-import com.lamastudio.backend.role.repository.RoleRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +11,10 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+
+import com.lamastudio.backend.modules.role.repository.RoleRepository;
+import com.lamastudio.backend.shared.entity.Role;
+import com.lamastudio.backend.shared.entity.RoleName;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -34,7 +35,7 @@ class RoleRepositoryTest {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
+        registry.add("spring.jpa.hibernate.ddl-auto", () -> "update");
         registry.add("spring.flyway.enabled", () -> true);
     }
 

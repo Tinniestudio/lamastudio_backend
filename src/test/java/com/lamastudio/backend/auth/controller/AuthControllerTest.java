@@ -1,13 +1,15 @@
 package com.lamastudio.backend.auth.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.lamastudio.backend.auth.dto.*;
-import com.lamastudio.backend.auth.service.AuthService;
-import com.lamastudio.backend.exception.BadCredentialsException;
-import com.lamastudio.backend.auth.jwt.JwtTokenProvider;
-import com.lamastudio.backend.auth.jwt.JwtAuthenticationFilter;
-import com.lamastudio.backend.user.repository.UserRepository;
-import com.lamastudio.backend.user.service.UserDetailsServiceImpl;
+import com.lamastudio.backend.modules.auth.controller.AuthController;
+import com.lamastudio.backend.modules.auth.dto.*;
+import com.lamastudio.backend.modules.auth.exception.BadCredentialsException;
+import com.lamastudio.backend.modules.auth.service.AuthService;
+import com.lamastudio.backend.modules.user.repository.UserRepository;
+import com.lamastudio.backend.modules.user.service.UserDetailsServiceImpl;
+import com.lamastudio.backend.shared.security.jwt.JwtAuthenticationFilter;
+import com.lamastudio.backend.shared.security.jwt.JwtTokenProvider;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,10 +17,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 

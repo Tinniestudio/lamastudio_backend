@@ -1,12 +1,14 @@
 package com.lamastudio.backend.auth.service;
 
-import com.lamastudio.backend.config.AppProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
-import com.lamastudio.backend.email.ResendEmailService;
+
+import com.lamastudio.backend.modules.auth.service.EmailService;
+import com.lamastudio.backend.shared.config.AppProperties;
+import com.lamastudio.backend.shared.email.ResendEmailService;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
@@ -32,10 +34,10 @@ class EmailServiceTest {
     void sendVerificationEmail() {
     emailService.sendVerificationEmail("user@example.com", "Jane Doe", "token123");
 
-    ArgumentCaptor<com.lamastudio.backend.email.EmailRequest> captor = ArgumentCaptor.forClass(com.lamastudio.backend.email.EmailRequest.class);
+    ArgumentCaptor<com.lamastudio.backend.shared.email.EmailRequest> captor = ArgumentCaptor.forClass(com.lamastudio.backend.shared.email.EmailRequest.class);
     verify(resendEmailService).sendEmail(captor.capture());
 
-    com.lamastudio.backend.email.EmailRequest req = captor.getValue();
+    com.lamastudio.backend.shared.email.EmailRequest req = captor.getValue();
     assertThat(req.to()).isEqualTo("user@example.com");
     assertThat(req.subject()).contains("Verify");
     assertThat(req.html()).contains("token123");
@@ -47,10 +49,10 @@ class EmailServiceTest {
     void sendPasswordResetEmail() {
     emailService.sendPasswordResetEmail("user@example.com", "Jane Doe", "reset-token");
 
-    ArgumentCaptor<com.lamastudio.backend.email.EmailRequest> captor = ArgumentCaptor.forClass(com.lamastudio.backend.email.EmailRequest.class);
+    ArgumentCaptor<com.lamastudio.backend.shared.email.EmailRequest> captor = ArgumentCaptor.forClass(com.lamastudio.backend.shared.email.EmailRequest.class);
     verify(resendEmailService).sendEmail(captor.capture());
 
-    com.lamastudio.backend.email.EmailRequest req = captor.getValue();
+    com.lamastudio.backend.shared.email.EmailRequest req = captor.getValue();
     assertThat(req.to()).isEqualTo("user@example.com");
     assertThat(req.subject()).contains("Reset");
     assertThat(req.html()).contains("reset-token");

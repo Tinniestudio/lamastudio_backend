@@ -1,10 +1,12 @@
 package com.lamastudio.backend.auth.jwt;
 
-import com.lamastudio.backend.config.AppProperties;
-import com.lamastudio.backend.role.entity.Role;
-import com.lamastudio.backend.role.entity.RoleName;
-import com.lamastudio.backend.user.entity.AuthProvider;
-import com.lamastudio.backend.user.entity.User;
+import com.lamastudio.backend.shared.config.AppProperties;
+import com.lamastudio.backend.shared.entity.Role;
+import com.lamastudio.backend.shared.entity.RoleName;
+import com.lamastudio.backend.shared.entity.User;
+import com.lamastudio.backend.shared.entity.DomainEnums.AuthProvider;
+import com.lamastudio.backend.shared.security.jwt.JwtTokenProvider;
+
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
