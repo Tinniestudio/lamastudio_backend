@@ -1,9 +1,10 @@
 package com.lamastudio.backend.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.lamastudio.backend.auth.dto.LoginRequest;
-import com.lamastudio.backend.auth.dto.RegisterRequest;
-import com.lamastudio.backend.user.repository.UserRepository;
+import com.lamastudio.backend.modules.auth.dto.LoginRequest;
+import com.lamastudio.backend.modules.auth.dto.RegisterRequest;
+import com.lamastudio.backend.modules.user.repository.UserRepository;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,7 +47,7 @@ class AuthIntegrationTest {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
+        registry.add("spring.jpa.hibernate.ddl-auto", () -> "update");
         registry.add("spring.flyway.enabled", () -> true);
     }
 
@@ -61,7 +62,7 @@ class AuthIntegrationTest {
 
     // Avoid real email API calls during tests
     @MockBean
-    private com.lamastudio.backend.auth.service.EmailService emailService;
+    private com.lamastudio.backend.modules.auth.service.EmailService emailService;
 
     private static final String CONTEXT_PATH = "/api/v1";
 
