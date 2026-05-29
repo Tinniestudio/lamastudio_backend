@@ -41,6 +41,22 @@ public class EmailService {
                 new EmailRequest(to, "Reset your LamaStudio password", html));
     }
 
+    @Async
+    public void sendAdminPasswordResetEmail(String to, String token) {
+        String resetUrl = appProperties.getFrontendUrl() + "/admin/reset-password?token=" + token;
+        String html = "<p>Admin password reset requested. Use this link (expires in 15 minutes): "
+                + "<a href=\"" + resetUrl + "\">" + resetUrl + "</a></p>";
+        resendEmailService.sendEmail(new EmailRequest(to, "Admin password reset request", html));
+    }
+
+    @Async
+    public void sendAdminPasswordResetAlert(String superAdminEmail, String requestingAdminEmail) {
+        String html = "<p>A password reset was requested for admin account: <strong>"
+                + requestingAdminEmail + "</strong>. If this was not expected, take action immediately.</p>";
+        resendEmailService.sendEmail(
+                new EmailRequest(superAdminEmail, "Security alert: Admin password reset requested", html));
+    }
+
     private String resolveName(String name) {
         return StringUtils.hasText(name) ? name.strip() : "User";
     }

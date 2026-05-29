@@ -156,6 +156,17 @@ public class GlobalExceptionHandler {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
         }
 
+    @ExceptionHandler(UpgradeRequiredException.class)
+    public ResponseEntity<Object> handleUpgradeRequired(
+            UpgradeRequiredException ex,
+            HttpServletRequest request
+    ) {
+        Map<String, Object> body = buildStandardError("UPGRADE_REQUIRED", ex.getMessage(),
+                HttpStatus.FORBIDDEN.value(), request.getServletPath());
+        body.put("reason", "upgrade_required");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
     // ── Spring Security exceptions ────────────────────────────────────────────
 
     @ExceptionHandler(AuthenticationException.class)

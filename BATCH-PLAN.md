@@ -61,6 +61,456 @@ Spring Boot Media Worker
 
 ---
 
+# EXECUTION GOVERNANCE SYSTEM
+
+> This section defines HOW Speckit executes batches. All rules are mandatory. See `server/.specify/memory/constitution.md` for the full governance rationale.
+
+---
+
+## 1. Feature Execution Lifecycle
+
+Every feature follows this mandatory lifecycle — no stage may be skipped:
+
+```
+IDEA
+→ SPECIFY              (speckit-specify: create spec.md from natural language description)
+→ ARCHITECTURE REVIEW  (validate spec against constitution + domain boundaries)
+→ PLAN                 (speckit-plan: generate plan.md with design artifacts)
+→ TASK BREAKDOWN       (speckit-tasks: generate ordered tasks.md)
+→ IMPLEMENT            (speckit-implement: execute tasks one at a time, TDD-first)
+→ VALIDATE             (run completion gates defined in batch)
+→ INTEGRATION REVIEW   (verify cross-service contracts, no architecture drift)
+→ COMPLETE             (batch marked done, downstream batches unblocked)
+```
+
+### Stage Responsibilities
+
+| Stage | Responsible For |
+|-------|----------------|
+| SPECIFY | Documenting the business requirement, acceptance criteria, and domain boundaries |
+| ARCHITECTURE REVIEW | Checking the spec against domain ownership rules and constitution |
+| PLAN | Defining implementation approach, file structure, and design artifacts |
+| TASK BREAKDOWN | Generating ordered, dependency-aware tasks for Speckit to execute |
+| IMPLEMENT | Executing tasks in order, one at a time, TDD-first |
+| VALIDATE | Running the batch completion gates (functional, security, integration, performance, rollback) |
+| INTEGRATION REVIEW | Verifying shared contracts, queue payloads, and cross-service interfaces |
+| COMPLETE | Committing final state, unblocking dependent batches |
+
+If a stage produces no issues (e.g., ARCHITECTURE REVIEW finds no gaps), it is logged as passed — not omitted.
+
+---
+
+## 2. Speckit Batch Consumption Rules
+
+- Speckit processes **ONE batch at a time** — no batch combining in a single run
+- Speckit **cannot skip declared dependencies** — all `dependsOn` batches must be COMPLETE before the run starts
+- **Infrastructure batches always execute before** any business or domain batch that depends on them
+- **Shared abstractions must be finalized** (COMPLETE) before any batch that consumes them begins
+- Cross-batch work discovered during implementation is deferred, not executed inline
+
+---
+
+## 3. Batch Classification System
+
+Every batch must declare exactly one classification. Classification determines execution priority and dependency ordering rules.
+
+| Classification | Description | Phase |
+|---------------|-------------|-------|
+| `FOUNDATION` | Core infrastructure and shared abstractions | Phase 0 |
+| `SECURITY` | Identity, auth, token management, session governance | Phase 1 |
+| `DOMAIN` | Core business domain models and workflows | Phase 2 |
+| `MEDIA` | Async media processing pipeline | Phase 3 |
+| `PLAYBACK` | Content delivery and stream access | Phase 4 |
+| `DISCOVERY` | Search, recommendations, library management | Phase 4 |
+| `PAYMENT` | Billing, subscriptions, coupons | Phase 5 |
+| `PARTNER` | Creator tools, analytics, revenue | Phase 6 |
+| `ADMIN` | Platform governance and moderation | Phase 7 |
+| `OBSERVABILITY` | Logging, jobs, health, hardening | Phase 8 |
+| `SCALING` | Performance optimization and horizontal scale | Phase 9 |
+
+**Ordering rules by classification:**
+1. `FOUNDATION` must be COMPLETE before all other classifications
+2. `SECURITY` must be COMPLETE before any authenticated domain batch
+3. All `requiredInfrastructure` items must be running before a batch starts
+4. `ADMIN` batches require the domain they govern to be COMPLETE
+5. `OBSERVABILITY` wraps all other phases; it executes last
+
+---
+
+## 4. Batch Dependency Contracts
+
+Each batch explicitly declares these fields in its header:
+
+```yaml
+dependsOn:                 # Batch numbers/names that must be COMPLETE before this starts
+blocks:                    # Batch numbers/names that cannot start until this is COMPLETE
+requiredInfrastructure:    # PostgreSQL | Redis | RabbitMQ | Storage | CDN
+crossServiceContracts:     # Shared DTOs, queue payloads, or API contracts this batch consumes
+```
+
+**Example — Batch 8 (Playback):**
+```yaml
+dependsOn: [Batch-0, Batch-1, Batch-4, Batch-7]
+blocks: [Batch-9, Batch-10]
+requiredInfrastructure: [PostgreSQL, Redis, CDN]
+crossServiceContracts: [VideoAsset.manifestKey, UserSubscription.status, QueueMessage<VideoProcessingJob>]
+```
+
+If a batch has no dependencies, declare `dependsOn: []` explicitly — never leave it undeclared.
+
+---
+
+## 5. Completion Gate System
+
+No batch is COMPLETE until all five gates pass. Gates are validated in order.
+
+| Gate | What to Verify |
+|------|---------------|
+| `functionalValidation` | All API endpoints return expected responses for happy path and all defined error cases |
+| `securityValidation` | Auth guards enforced, no role escalation possible, no public access to protected endpoints |
+| `integrationValidation` | Queue messages consumed and processed correctly; DB state transitions match expected business flow |
+| `performanceValidation` | Redis caching verified (cache hit confirmed); no N+1 queries on list endpoints; DB indexes applied via migration |
+| `rollbackReadiness` | Flyway migration runs cleanly on a clean DB; any destructive operation has a documented rollback path |
+
+If any gate fails, the batch implementation is incomplete — not the gate. Fix the implementation.
+
+---
+
+## 6. Worker/API Coordination Standards
+
+### Queue Ownership
+| Queue | Publisher | Consumer |
+|-------|-----------|----------|
+| `media.video.process` | API Service | Media Worker |
+| `media.video.retry` | Media Worker (DLX) | Media Worker |
+| `media.video.failed` | RabbitMQ DLX | Admin notification only |
+| `notifications.send` | API Service + Media Worker | API Service |
+| `analytics.ingest` | API Service | API Service |
+
+### DB Write Ownership
+| Entity | Owns Writes |
+|--------|------------|
+| `users`, `contents`, `user_subscriptions`, `coupons`, `sessions` | API Service only |
+| `video_assets.processing_status/error/manifest_key` | Media Worker |
+| `video_variants.*`, `processing_jobs.*` | Media Worker |
+
+### Retry Ownership
+- Business operation retries: API Service
+- Media processing retries: Media Worker via `media.video.retry` queue with TTL
+- Max retries: 3 attempts; after attempt 3, route to `media.video.failed`
+
+### State Synchronization
+- `video_assets.processing_status` is the authoritative source for processing state
+- Redis `tinnie:upload:{sessionId}` is the fast-path cache for upload session state
+- DB is always authoritative; Redis is always a cache — never the source of truth
+
+---
+
+## 7. Shared Contract Governance
+
+### Response Envelope (ALL endpoints, no exceptions)
+```json
+{ "success": true, "data": {}, "error": null, "meta": { "page": 1, "limit": 20, "total": 100 } }
+```
+
+### Pagination (ALL list endpoints)
+- Request: `page` (default 1), `limit` (default 20, max 100), `sortBy`, `sortOrder`
+- Response: `PageResult<T>` with `items`, `total`, `page`, `limit`
+
+### Error Standardization
+- All errors: `success: false`, `error: { code, message, details? }`
+- Machine-readable codes: `NOT_FOUND`, `UNAUTHORIZED`, `FORBIDDEN`, `CONFLICT`, `VALIDATION_FAILED`, `UPGRADE_REQUIRED`
+
+### Queue Payload Versioning
+- All `QueueMessage<T>` payloads include a `version` field
+- Consumers must handle the declared version; unknown versions are dead-lettered with a version mismatch error
+- Breaking payload changes require a version bump; consumers must be updated before producers are deployed
+
+### DTO Versioning
+- DTOs internal to a single service: can change freely
+- DTOs that cross service or module boundaries: require a new version field if the change is breaking
+
+---
+
+## 8. Architecture Drift Prevention
+
+These violations are **blocking issues** in code review and Speckit validation — not comments:
+
+| Rule | Violation Example |
+|------|-----------------|
+| No direct infrastructure in domain services | `AuthService` injecting `RedisTemplate` |
+| No storage SDK outside `StorageService` | `S3Client` in `UploadService` |
+| No `RabbitTemplate` outside `QueuePublisher` | `rabbitTemplate.convertAndSend(...)` in `ContentService` |
+| No FFmpeg/FFprobe outside media worker | API service executing `ProcessBuilder("ffprobe")` |
+| No business logic in `@RestController` | Subscription access check inside controller method body |
+| No cross-domain repository injection | `AuthService` injecting `ContentRepository` |
+| No `@Value` in service/use-case classes | `@Value("${jwt.secret}")` in `AuthService` |
+| No `System.getenv()` in application code | `System.getenv("JWT_SECRET")` anywhere outside bootstrap config |
+
+---
+
+# BATCH FORMAT TEMPLATE
+
+> Every new batch added to this roadmap must follow this template. Speckit will not execute a batch that omits required sections.
+
+```markdown
+# BATCH X — NAME
+
+## Classification
+FOUNDATION | SECURITY | DOMAIN | MEDIA | PLAYBACK | DISCOVERY | PAYMENT | PARTNER | ADMIN | OBSERVABILITY | SCALING
+
+## Goal
+One sentence: the business capability this batch delivers.
+
+## Business Value
+Why this batch exists — what the platform cannot do without it.
+
+## Scope
+What is IN scope (exact implementation boundary) and what is explicitly NOT in scope.
+
+## Dependencies
+dependsOn: []
+blocks: []
+requiredInfrastructure: []
+crossServiceContracts: []
+
+## Domains Affected
+Auth | Media | Playback | Discovery | Billing | Partner | Admin | Notification | Analytics
+
+## API Service Responsibilities
+- List what the API service owns in this batch
+
+## Worker Responsibilities
+- List what the media worker does in this batch, or: None
+
+## Shared Contracts
+- List all DTOs, queue payloads, or API response shapes that cross service or module boundaries
+
+## Database Changes
+- List all new tables, columns, indexes, and Flyway migration file names
+
+## Queue Contracts
+- Queue name, message type, payload schema, version
+
+## Cache Contracts
+- Redis key pattern, TTL, invalidation trigger
+
+## Security Requirements
+- Auth guards, rate limits, token requirements, audit log entries
+
+## Observability Requirements
+- Logging expectations, metrics, health check additions
+
+## Feature Flows
+Describe the primary user/system flows implemented in this batch (numbered steps).
+
+## API Endpoints
+| Method | Path | Auth | Notes |
+
+## Validation Requirements
+- Input validation rules and edge cases to handle
+
+## Completion Gates
+- [ ] functionalValidation: ...
+- [ ] securityValidation: ...
+- [ ] integrationValidation: ...
+- [ ] performanceValidation: ...
+- [ ] rollbackReadiness: ...
+
+## Rollback Considerations
+How to safely revert this batch if needed (Flyway baseline, feature flag, etc.).
+
+## Expected System Capability
+What the system can do after this batch completes that it could not do before.
+```
+
+---
+
+# PHASED ROADMAP ORDERING
+
+> Phases define the strategic execution sequence. Every batch belongs to exactly one phase. A phase may not begin until all batches in the preceding phase are COMPLETE.
+
+## PHASE 0 — FOUNDATION
+
+**Purpose:** Lay the entire technical substrate before any business logic.
+**Dependency reasoning:** No business feature can be implemented without a working build system, centralized configuration, database connection, queue infrastructure, storage abstraction, and security layer. Everything else depends on this phase being correct and stable.
+**Business capability unlocked:** Both services start, connect to all infrastructure, serve a health check endpoint, and are ready to receive feature implementation.
+
+| Batch | Name | Classification |
+|-------|------|---------------|
+| 0 | Core Foundation | FOUNDATION |
+
+---
+
+## PHASE 1 — IDENTITY & SECURITY
+
+**Purpose:** Establish who can use the platform, how they are authenticated, and how their sessions are governed.
+**Dependency reasoning:** Every downstream feature either requires an authenticated user, checks subscription state, or depends on role-based access. Auth must be architecturally complete — not just "working" — before any feature that relies on identity, sessions, or access control.
+**Business capability unlocked:** Users can register, verify email, log in, refresh sessions, and log out. Admins are fully isolated with separate JWT secrets. Session/device governance and subscription-aware device limits are active.
+
+| Batch | Name | Classification |
+|-------|------|---------------|
+| 1 | Authentication + User System | SECURITY |
+| Auth Refactor | Multi-Actor Auth, RBAC, Session Governance, /auth/me Aggregation | SECURITY |
+
+---
+
+## PHASE 2 — CONTENT DOMAIN
+
+**Purpose:** Define the core data model for all content the platform serves.
+**Dependency reasoning:** Playback, search, discovery, analytics, and partner tools all depend on the content entity, category taxonomy, and content hierarchy existing. This phase creates the foundation that all content-facing features build on.
+**Business capability unlocked:** Partners can create content entries. Admins can manage categories. Content status workflow (DRAFT → REVIEW → PUBLISHED → ARCHIVED) is operational. User profiles are manageable.
+
+| Batch | Name | Classification |
+|-------|------|---------------|
+| 2 | User Profile + Settings | DOMAIN |
+| 3 | Category + Discovery Foundation | DOMAIN |
+| 4 | Content Core System | DOMAIN |
+| 5 | Episodes + Series System | DOMAIN |
+
+---
+
+## PHASE 3 — MEDIA PIPELINE
+
+**Purpose:** Enable raw video uploads and automated transcoding to adaptive HLS streams.
+**Dependency reasoning:** Content cannot be published without a READY VideoAsset. The pipeline must be operational and end-to-end tested before playback, partner upload management, or content status transitions can be validated for the full flow.
+**Business capability unlocked:** Partners can upload videos via presigned URLs. The worker transcodes to HLS variants (360p through 1080p). Content becomes streamable from the CDN.
+
+| Batch | Name | Classification |
+|-------|------|---------------|
+| 6 | Upload Session System | MEDIA |
+| 7 | Media Processing Worker | MEDIA |
+
+---
+
+## PHASE 4 — DISCOVERY & PLAYBACK
+
+**Purpose:** Let users find content and stream it, and build their personal library.
+**Dependency reasoning:** Playback requires READY VideoAssets (Phase 3). Discovery and search require published content (Phase 2). Progress tracking and favorites require an authenticated user (Phase 1). Recommendations require watch history.
+**Business capability unlocked:** Users can search, browse categories, discover trending content, stream videos with subscription enforcement, track watch progress, manage favorites, and write reviews.
+
+| Batch | Name | Classification |
+|-------|------|---------------|
+| 8 | Playback System | PLAYBACK |
+| 9 | Search + Discovery | DISCOVERY |
+| 10 | Favorites + Watch History | DISCOVERY |
+| 11 | Ratings + Reviews | DISCOVERY |
+
+---
+
+## PHASE 5 — BILLING & ACCESS CONTROL
+
+**Purpose:** Monetize the platform and enforce subscription-based content access.
+**Dependency reasoning:** Subscription state gates playback access at the capability level. Payment webhooks must be wired before subscriptions can activate via real payment flow. Coupon validation requires an active plan catalog. Free-tier quota enforcement (from the Auth Refactor) requires subscription plans to exist.
+**Business capability unlocked:** Users can subscribe to plans, apply discount coupons at checkout, and have their content access automatically enforced based on subscription status. Free tier users are subject to content watch quotas.
+
+| Batch | Name | Classification |
+|-------|------|---------------|
+| 12 | Subscription + Billing | PAYMENT |
+
+---
+
+## PHASE 6 — PARTNER PLATFORM
+
+**Purpose:** Provide creator tooling, content analytics, and revenue visibility to partners.
+**Dependency reasoning:** Partner analytics requires analytics event ingestion (which depends on Phase 4 playback events). Revenue reporting requires subscription and payment data (Phase 5). Upload management depends on the complete media pipeline (Phase 3).
+**Business capability unlocked:** Partners have a full dashboard — upload queue management, content performance analytics, and revenue reporting broken down by content.
+
+| Batch | Name | Classification |
+|-------|------|---------------|
+| 13 | Partner Portal | PARTNER |
+
+---
+
+## PHASE 7 — ADMIN & MODERATION
+
+**Purpose:** Give platform admins the tools to govern content, users, and platform state.
+**Dependency reasoning:** Admin moderation requires content (Phase 2), users (Phase 1), and subscriptions (Phase 5) to exist at scale. Admin session revocation governance is provided by the Auth Refactor (Phase 1). Admin coupon management requires the billing domain (Phase 5).
+**Business capability unlocked:** Admins can moderate the content review queue, manage user accounts, suspend or ban users with session revocation, feature/unfeature content, manage coupons, and view the platform-wide analytics dashboard.
+
+| Batch | Name | Classification |
+|-------|------|---------------|
+| 14 | Admin Moderation System | ADMIN |
+
+---
+
+## PHASE 8 — OBSERVABILITY & HARDENING
+
+**Purpose:** Make the platform production-ready: reliable, observable, automated, and resilient.
+**Dependency reasoning:** Notification delivery, analytics aggregation, and background job automation depend on all domain data and events existing. Observability wraps everything — it is meaningless before the system has features to observe.
+**Business capability unlocked:** Platform has structured JSON logging with trace IDs, health checks covering all infrastructure, automated background jobs (subscription expiration, token cleanup, analytics aggregation), event-driven notification delivery (email + in-app), and security hardening for production deployment.
+
+| Batch | Name | Classification |
+|-------|------|---------------|
+| 15 | Notification System | OBSERVABILITY |
+| 16 | Analytics System | OBSERVABILITY |
+| 17 | Background Jobs + Automation | OBSERVABILITY |
+| 18 | Observability + Production Hardening | OBSERVABILITY |
+
+---
+
+## PHASE 9 — SCALE & OPTIMIZATION
+
+**Purpose:** Optimize for production traffic growth — caching strategy, index tuning, horizontal scaling, and upgrade paths.
+**Dependency reasoning:** You cannot optimize what is not yet complete and production-validated. Scaling decisions require real load data and production metrics.
+**Business capability unlocked:** Platform handles production traffic load. Worker scales horizontally without coordination. Cache hit rates are high. DB queries are indexed and profiled. Future capability upgrades (full-text search engine, WebSocket invalidation, suspicious login detection) have a clear integration path.
+
+| Batch | Name | Classification |
+|-------|------|---------------|
+| Future | Search upgrade (Elasticsearch / Meilisearch) | SCALING |
+| Future | WebSocket session invalidation | SCALING |
+| Future | Suspicious login tracking + device analytics | SCALING |
+| Future | Partner revenue automation + payout integration | SCALING |
+
+---
+
+# SPECKIT EXECUTION INSTRUCTIONS
+
+> These instructions govern every Speckit run for TinnieStudio. They are mandatory and non-negotiable.
+
+## Execution Model
+
+Speckit executes **incrementally** — one batch at a time, one task at a time, one step at a time. There is no bulk mode. Every batch is a complete feature lifecycle from Speckit's perspective.
+
+## The Five-Step Feature Loop
+
+```
+speckit-specify   → spec.md
+                    (business requirement, acceptance criteria, domain boundaries, non-goals)
+speckit-plan      → plan.md
+                    (implementation design, file structure, design artifacts)
+speckit-tasks     → tasks.md
+                    (ordered, dependency-aware, TDD task list)
+speckit-implement → execute tasks
+                    (one task at a time, failing test first)
+speckit-analyze   → cross-artifact consistency check
+                    (spec ↔ plan ↔ tasks ↔ implementation alignment verified)
+```
+
+## Non-Negotiable Execution Rules
+
+1. **No implementation without specification.** `speckit-specify` must produce an approved `spec.md` before `speckit-plan` is invoked.
+
+2. **TDD is the implementation method.** Every task in `tasks.md` follows: write failing test → confirm fail → implement minimal code → confirm pass → commit. Code is never written before the failing test exists.
+
+3. **One batch at a time.** `speckit-implement` processes tasks for the current batch only. Work discovered that belongs to a different batch is deferred and logged — never executed inline.
+
+4. **Dependency state is checked before starting.** If any batch in the `dependsOn` list is not COMPLETE, the Speckit run is rejected. Fix the dependency state, then retry.
+
+5. **Completion gates must all pass.** `speckit-implement` does not exit a batch until all five completion gates are verified (functional, security, integration, performance, rollback).
+
+6. **Architecture drift is a blocking issue.** Any implementation choice that violates Section 8 (Architecture Drift Prevention) above is a blocker — not a code review comment. It must be fixed before the batch can be marked COMPLETE.
+
+7. **No architecture drift is allowed.** All governance rules defined in this document and in `server/.specify/memory/constitution.md` are mandatory and override any default Spring Boot conventions or personal coding preferences.
+
+8. **Queue contracts are versioned and immutable once published.** Any change to a queue payload schema requires a version bump and a migration plan for all consumers before the change is deployed.
+
+## Enforcement
+
+Speckit run failures are not bugs to work around. If a batch cannot pass its completion gates, the batch implementation is incomplete — not the gates. Fix the implementation, fix the drift, then re-run the gates.
+
+---
+
 # BATCH 0 — CORE FOUNDATION
 > **Goal:** Lay the entire architectural skeleton before any business logic.
 > Both services must compile, start, and connect to all infrastructure before Batch 1 begins.
@@ -2512,342 +2962,6 @@ POST /webhooks/storage
 ---
 
 # COMMON QUERY PARAMETERS
-
-### Pagination (all list endpoints)
-```
-page         Integer, default 1
-limit        Integer, default 20, max 100
-```
-
-### Sorting
-```
-sortBy       Field name
-sortOrder    ASC | DESC
-```
-
-### Common Filters
-```
-search       Full-text search string
-status       Entity status enum
-createdAtFrom  ISO 8601
-createdAtTo    ISO 8601
-```
-
----
-
-*TinnieStudio Execution Roadmap — Internal Development Reference*
-*Architecture: Modular Monolith + Clean Architecture + Event-Driven Media Pipeline*
-       ↓
-Spring Boot Media Worker
-       ↓
-   FFmpeg Pipeline
-       ↓
-   CDN (Cloudflare / Bunny)
-       ↓
-   HLS Playback Clients
-```
-
----
-
-# BATCH 0 — CORE FOUNDATION
-> **Goal:** Lay the entire architectural skeleton before any business logic.
-> Both services must compile, start, and connect to all infrastructure before Batch 1 begins.
-
----
-
-## 0.1 · Monorepo & Module Structure
-
-### Technology
-- Gradle multi-project build
-- Docker Compose for local infra
-
-### Directory Layout
-```
-/tinniestudio
-  /api-service          ← Main Spring Boot API
-    /src/main/java/com/tinniestudio/api
-      /config
-      /common
-        /entity
-        /exception
-        /response
-        /validation
-        /pagination
-      /modules           ← Feature modules live here
-      /infra
-        /storage
-        /queue
-        /cache
-        /mail
-  /media-worker         ← Standalone Spring Boot Worker
-    /src/main/java/com/tinniestudio/worker
-      /config
-      /consumer
-      /processor
-      /ffmpeg
-      /storage
-  /docker
-    docker-compose.yml
-    docker-compose.override.yml
-  build.gradle
-  settings.gradle
-```
-
-### Deliverables
-- `./gradlew :api-service:bootRun` works
-- `./gradlew :media-worker:bootRun` works
-- `docker-compose up` starts: PostgreSQL, RabbitMQ, Redis, MinIO (local S3)
-
----
-
-## 0.2 · Centralized Configuration System
-
-### Technology
-- `@ConfigurationProperties` beans (never `@Value` directly)
-- `application.yml` per profile: `local`, `dev`, `prod`
-
-### Config Beans to Create
-```
-DatabaseConfig
-RedisConfig
-RabbitMQConfig
-JwtConfig
-  - accessTokenTtlSeconds
-  - refreshTokenTtlSeconds
-  - secret
-StorageConfig
-  - provider (S3 | R2)
-  - bucket
-  - region
-  - endpoint
-  - presignedUrlTtlSeconds
-CdnConfig
-  - baseUrl
-MailConfig
-  - from
-  - provider
-UploadConfig
-  - maxFileSizeBytes
-  - allowedMimeTypes
-  - sessionTtlMinutes
-PlaybackConfig
-  - signedUrlEnabled
-  - signedUrlTtlSeconds
-```
-
-### Rules
-- Never access `System.getenv()` or `@Value("${...}")` inside service/use-case classes
-- All config accessed via injected config beans
-
----
-
-## 0.3 · Common Shared Components
-
-### Base Entity
-```java
-@MappedSuperclass
-public abstract class BaseEntity {
-    UUID id;            // @GeneratedValue(UUID)
-    Instant createdAt;  // @CreationTimestamp
-    Instant updatedAt;  // @UpdateTimestamp
-}
-```
-
-### Response Envelope
-```json
-{
-  "success": true,
-  "data": {},
-  "error": null,
-  "meta": { "page": 1, "limit": 20, "total": 100 }
-}
-```
-
-### Exception Hierarchy
-```
-AppException (base)
-├── NotFoundException (404)
-├── UnauthorizedException (401)
-├── ForbiddenException (403)
-├── ValidationException (422)
-├── ConflictException (409)
-└── InternalException (500)
-```
-
-### Global Exception Handler
-- `@RestControllerAdvice` maps all exceptions to the response envelope
-- Logs 5xx errors with full stack; logs 4xx at WARN level
-
-### Pagination Abstraction
-- `PageRequest` DTO (page, limit, sortBy, sortOrder)
-- `PageResult<T>` response wrapper
-
----
-
-## 0.4 · Security Layer
-
-### Technology
-- Spring Security 6
-- JWT (JJWT library)
-- BCrypt password hashing
-
-### JWT Flow
-```
-POST /auth/login
-  → Validate credentials
-  → Issue accessToken (15 min) in response body
-  → Issue refreshToken (7 days) in HttpOnly Secure cookie
-  → Store refreshToken hash in Redis (key = userId:tokenId)
-
-Subsequent requests:
-  Authorization: Bearer <accessToken>
-  → JwtAuthFilter validates signature + expiry
-  → Loads CurrentUser from token claims
-  → Refresh rotation on /auth/refresh
-```
-
-### Role Hierarchy
-```
-SUPER_ADMIN > ADMIN > PARTNER > USER
-```
-
-### Permission System
-- Role-based (`@PreAuthorize("hasRole('ADMIN')")`)
-- Ownership checks inside service layer (not annotation-based)
-
-### Rate Limiting
-- Redis token bucket per IP + per user
-- Configurable per endpoint group (auth = 10/min, api = 300/min)
-
-### CurrentUser Abstraction
-```java
-@Component
-public class CurrentUserProvider {
-    public UserPrincipal get();       // from SecurityContext
-    public UUID getUserId();
-    public boolean hasRole(Role role);
-}
-```
-
----
-
-## 0.5 · Storage Abstraction Layer
-
-### Interface
-```java
-public interface StorageService {
-    PresignedUrl generateUploadUrl(String key, String mimeType, long maxBytes, Duration ttl);
-    PresignedUrl generateDownloadUrl(String key, Duration ttl);
-    boolean objectExists(String key);
-    void deleteObject(String key);
-    void copyObject(String sourceKey, String destKey);
-    ObjectMetadata getMetadata(String key);
-}
-```
-
-### Implementations
-- `S3StorageService` — AWS S3 via AWS SDK v2
-- `R2StorageService` — Cloudflare R2 (S3-compatible)
-- `MinioStorageService` — Local dev via MinIO
-
-### Selection
-- Controlled by `StorageConfig.provider` property
-- `@ConditionalOnProperty` or `@Primary` bean selection
-
----
-
-## 0.6 · Queue Infrastructure
-
-### Technology
-- RabbitMQ with Spring AMQP
-- Dead Letter Exchange (DLX) pattern
-
-### Exchange / Queue Topology
-```
-Exchange: tinniestudio.direct
-
-Queues:
-  media.video.process     → DLX: media.video.failed
-  media.video.retry       → TTL + re-routes to media.video.process
-  media.video.failed      → dead letters, manual review
-  notifications.send
-  analytics.ingest
-```
-
-### Message Envelope
-```java
-public class QueueMessage<T> {
-    String messageId;   // UUID, for idempotency
-    String type;
-    Instant publishedAt;
-    int attempt;
-    T payload;
-}
-```
-
-### Publisher Service
-```java
-public interface QueuePublisher {
-    void publish(String queue, Object payload);
-    void publishWithDelay(String queue, Object payload, Duration delay);
-}
-```
-
----
-
-## 0.7 · Redis Infrastructure
-
-### Key Namespacing Convention
-```
-tinnie:{module}:{key}
-Examples:
-  tinnie:auth:refresh:{userId}:{tokenId}   → refresh token hash, TTL 7d
-  tinnie:auth:otp:{email}                  → OTP code, TTL 10min
-  tinnie:rate:{ip}:{endpoint}              → token bucket counter
-  tinnie:playback:{contentId}:{userId}     → signed URL cache, TTL 5min
-  tinnie:upload:{sessionId}                → temp upload state, TTL 30min
-```
-
-### Redis Service
-```java
-public interface CacheService {
-    void set(String key, Object value, Duration ttl);
-    <T> Optional<T> get(String key, Class<T> type);
-    void delete(String key);
-    boolean exists(String key);
-    void increment(String key, Duration ttl);
-}
-```
-
----
-
-## 0.8 · Flyway Database Migrations
-
-### Convention
-```
-V{batch}_{sequence}__{description}.sql
-Examples:
-  V1__create_users.sql
-  V2__create_refresh_tokens.sql
-  V4__create_content.sql
-```
-
-### Rules
-- Never edit existing migration files
-- One migration file per entity or schema change
-- Rollback scripts stored separately (not run automatically)
-
----
-
-✅ **Batch 0 Complete When:**
-- API service starts with all config loaded
-- Worker service starts and connects to RabbitMQ
-- PostgreSQL migrations run cleanly
-- Storage abstraction tested against MinIO locally
-- Queue can publish and consume a test message
-- Redis connects and basic ops work
-
----
 
 ### Pagination (all list endpoints)
 ```

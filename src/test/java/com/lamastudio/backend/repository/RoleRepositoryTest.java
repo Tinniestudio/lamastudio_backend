@@ -45,8 +45,8 @@ class RoleRepositoryTest {
     @Test
     @DisplayName("findByName returns seeded role")
     void findByName() {
-        // Roles are seeded via Flyway V2__seed_roles.sql
+        // Roles are seeded via Flyway V2__seed_roles.sql (ROLE_ADMIN removed in V8)
         assertThat(roleRepository.findByName(RoleName.ROLE_USER)).isPresent();
-        assertThat(roleRepository.findByName(RoleName.ROLE_ADMIN)).isPresent();
+        assertThat(roleRepository.findByName(RoleName.ROLE_PARTNER)).isPresent();
     }
 }

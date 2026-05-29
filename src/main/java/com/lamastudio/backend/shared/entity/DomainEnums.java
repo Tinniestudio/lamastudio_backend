@@ -107,4 +107,9 @@ public final class DomainEnums {
         DELETED
     }
 
+    public enum DiscountType {
+        PERCENTAGE,
+        FIXED
+    }
+
 }
