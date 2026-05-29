@@ -5,13 +5,20 @@ import com.lamastudio.backend.modules.auth.exception.BadCredentialsException;
 import com.lamastudio.backend.modules.auth.exception.EmailAlreadyExistsException;
 import com.lamastudio.backend.modules.auth.exception.InvalidEmailStateException;
 import com.lamastudio.backend.modules.auth.exception.InvalidTokenException;
+import com.lamastudio.backend.modules.auth.exception.MissingRefreshTokenException;
+import com.lamastudio.backend.modules.auth.user.service.SessionService;
+import com.lamastudio.backend.modules.billing.repository.SubscriptionPlanRepository;
+import com.lamastudio.backend.modules.billing.repository.UserSubscriptionRepository;
 import com.lamastudio.backend.modules.role.repository.RoleRepository;
 import com.lamastudio.backend.shared.entity.DomainEnums.AccountStatus;
 import com.lamastudio.backend.shared.entity.DomainEnums.AuthProvider;
+import com.lamastudio.backend.shared.entity.DomainEnums.SubscriptionStatus;
 import com.lamastudio.backend.modules.user.repository.UserRepository;
 import com.lamastudio.backend.shared.config.AppProperties;
 import com.lamastudio.backend.shared.entity.RoleName;
+import com.lamastudio.backend.shared.entity.SubscriptionPlan;
 import com.lamastudio.backend.shared.entity.User;
+import com.lamastudio.backend.shared.entity.UserSubscription;
 import com.lamastudio.backend.shared.exception.*;
 import com.lamastudio.backend.shared.security.jwt.CookieFactory;
 import com.lamastudio.backend.shared.security.jwt.JwtTokenProvider;
@@ -51,17 +58,17 @@ public class AuthService {
     private final CookieFactory cookieFactory;
     private final EmailService emailService;
     private final AppProperties appProperties;
+    private final SessionService sessionService;
+    private final UserSubscriptionRepository userSubscriptionRepository;
+    private final SubscriptionPlanRepository subscriptionPlanRepository;
 
     // ── Register ──────────────────────────────────────────────────────────────
 
     @Transactional
     public AuthResponse register(RegisterRequest request, HttpServletResponse response) {
-        if (request == null) {
-            throw new BadRequestException("Request body is required");
-        }
+        if (request == null) throw new BadRequestException("Request body is required");
 
         String email = normalizeEmail(request.getEmail());
-
         if (userRepository.existsByEmail(email)) {
             throw new EmailAlreadyExistsException("Email address is already registered");
         }
@@ -80,12 +87,8 @@ public class AuthService {
         user.setAccountStatus(AccountStatus.ACTIVE);
         user.setEmailVerified(false);
 
-        java.util.Optional<com.lamastudio.backend.shared.entity.Role> roleOpt = roleRepository
-                .findByName(RoleName.ROLE_USER);
-        if (roleOpt.isPresent())
-            user.addRole(roleOpt.get());
+        roleRepository.findByName(RoleName.ROLE_USER).ifPresent(user::addRole);
 
-        // Generate email verification token
         String verificationToken = UUID.randomUUID().toString();
         user.setEmailVerificationToken(verificationToken);
         user.setEmailVerificationTokenExpiry(
@@ -93,16 +96,20 @@ public class AuthService {
 
         user = userRepository.save(user);
 
-        // Send verification email async (fire-and-forget)
+        // Auto-create FREE subscription
+        createFreeSubscription(user.getId());
+
         try {
             emailService.sendVerificationEmail(user.getEmail(), resolveDisplayName(user), verificationToken);
         } catch (Exception ex) {
-            log.warn("Failed to send verification email to {}: {}", user.getEmail(), ex.getMessage(), ex);
+            log.warn("Failed to send verification email to {}: {}", user.getEmail(), ex.getMessage());
         }
 
-        // Issue tokens immediately so user can proceed (email verification enforced at
-        // sensitive ops)
-        issueTokenCookies(user, response);
+        // Register doesn't create a session — user must log in separately after registration
+        // (access token issued immediately so user can proceed before verifying email)
+        String rawRefreshToken = UUID.randomUUID().toString();
+        UUID sessionId = sessionService.createSession(user.getId(), rawRefreshToken, null);
+        issueTokenCookies(user, sessionId, response);
 
         log.info("New user registered: {}", user.getEmail());
         return toAuthResponse(user, "Registration successful. Please check your email to verify your account.");
@@ -110,9 +117,9 @@ public class AuthService {
 
     // ── Login ─────────────────────────────────────────────────────────────────
 
-    @Transactional(readOnly = true)
-    public AuthResponse login(LoginRequest request, HttpServletResponse response) {
-
+    @Transactional
+    public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest,
+                               HttpServletResponse response) {
         String email = request != null ? request.getEmail() : null;
         String password = request != null ? request.getPassword() : null;
 
@@ -124,9 +131,7 @@ public class AuthService {
 
         try {
             authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            normalizedEmail,
-                            password));
+                    new UsernamePasswordAuthenticationToken(normalizedEmail, password));
         } catch (org.springframework.security.authentication.BadCredentialsException ex) {
             throw new BadCredentialsException("Invalid email or password");
         } catch (DisabledException ex) {
@@ -137,11 +142,18 @@ public class AuthService {
             throw new BadCredentialsException("Invalid email or password");
         }
 
-        // Fetch user AFTER successful auth
         User user = userRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        issueTokenCookies(user, response);
+        // Generate raw refresh token, create session (evicts oldest if over device limit)
+        String rawRefreshToken = generateSecureToken();
+        UUID sessionId = sessionService.createSession(user.getId(), rawRefreshToken, httpRequest);
+        issueTokenCookies(user, sessionId, response);
+
+        // Write the actual refresh token cookie value with the raw token
+        String accessToken = jwtTokenProvider.generateAccessToken(user, sessionId);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user, sessionId);
+        cookieFactory.addAuthCookies(response, accessToken, refreshToken);
 
         log.info("User logged in: {}", user.getEmail());
         return toAuthResponse(user, null);
@@ -149,21 +161,20 @@ public class AuthService {
 
     // ── Refresh ───────────────────────────────────────────────────────────────
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse refresh(HttpServletRequest request, HttpServletResponse response) {
         String refreshToken = extractRefreshToken(request);
-
         if (refreshToken == null) {
-            throw new com.lamastudio.backend.modules.auth.exception.MissingRefreshTokenException(
-                    "Refresh token is missing");
+            throw new MissingRefreshTokenException("Refresh token is missing");
         }
 
         if (!jwtTokenProvider.validateRefreshToken(refreshToken)) {
-            throw new InvalidTokenException("Refresh token is missing or invalid");
+            throw new InvalidTokenException("Refresh token is invalid or expired");
         }
 
         Claims claims = jwtTokenProvider.parseRefreshToken(refreshToken);
         UUID userId = UUID.fromString(claims.getSubject());
+        String sessionIdStr = claims.get(JwtTokenProvider.CLAIM_SESSION_ID, String.class);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new InvalidTokenException("User not found for refresh token"));
@@ -172,14 +183,39 @@ public class AuthService {
             throw new AccountNotActiveException("Account is " + user.getAccountStatus().name().toLowerCase());
         }
 
-        issueTokenCookies(user, response);
+        String newRawRefreshToken = generateSecureToken();
+        UUID sessionId = sessionIdStr != null ? UUID.fromString(sessionIdStr) : null;
+
+        if (sessionId != null) {
+            sessionService.validateAndRotate(userId, sessionId, refreshToken, newRawRefreshToken);
+        }
+
+        String newAccessToken = jwtTokenProvider.generateAccessToken(user, sessionId);
+        String newRefreshToken = jwtTokenProvider.generateRefreshToken(user, sessionId);
+        cookieFactory.addAuthCookies(response, newAccessToken, newRefreshToken);
 
         return toAuthResponse(user, null);
     }
 
     // ── Logout ────────────────────────────────────────────────────────────────
 
-    public void logout(HttpServletResponse response) {
+    public void logout(HttpServletRequest request, HttpServletResponse response) {
+        // Extract sessionId from request attribute (set by JwtAuthenticationFilter)
+        String sessionIdAttr = (String) request.getAttribute("sessionId");
+        if (StringUtils.hasText(sessionIdAttr)) {
+            try {
+                String tokenStr = extractRefreshToken(request);
+                Claims claims = tokenStr != null && jwtTokenProvider.validateRefreshToken(tokenStr)
+                        ? jwtTokenProvider.parseRefreshToken(tokenStr) : null;
+                UUID userId = claims != null ? UUID.fromString(claims.getSubject()) : null;
+                UUID sessionId = UUID.fromString(sessionIdAttr);
+                if (userId != null) {
+                    sessionService.revokeSession(userId, sessionId, null);
+                }
+            } catch (Exception ex) {
+                log.debug("Could not revoke session on logout: {}", ex.getMessage());
+            }
+        }
         cookieFactory.clearAuthCookies(response);
     }
 
@@ -192,130 +228,85 @@ public class AuthService {
 
         if (user.getEmailVerificationTokenExpiry() == null ||
                 Instant.now().isAfter(user.getEmailVerificationTokenExpiry())) {
-            throw new EmailTokenExpiredException("Email verification token has expired. Please request a new one.");
+            throw new com.lamastudio.backend.shared.exception.EmailTokenExpiredException(
+                    "Email verification token has expired. Please request a new one.");
         }
 
         user.setEmailVerified(true);
         user.setEmailVerificationToken(null);
         user.setEmailVerificationTokenExpiry(null);
         userRepository.save(user);
-
         log.info("Email verified for user: {}", user.getEmail());
     }
 
-    /**
-     * Enhanced verify email with idempotency support.
-     * Returns response with alreadyVerified flag.
-     *
-     * @param token the verification token
-     * @return VerifyEmailResponse with status information
-     */
     @Transactional
     public VerifyEmailResponse verifyEmailEnhanced(String token) {
-        User user = userRepository.findByEmailVerificationToken(token)
-                .orElse(null);
+        User user = userRepository.findByEmailVerificationToken(token).orElse(null);
 
-        // Check if token not found but email might already be verified
         if (user == null) {
             throw new InvalidTokenException("Email verification token is invalid or does not exist");
         }
 
-        // If token is null, it was already used. Check if already verified (idempotent)
         if (user.getEmailVerificationToken() == null) {
             if (user.isEmailVerified()) {
-                log.debug("Idempotent: Email already verified for user: {}", user.getEmail());
                 return VerifyEmailResponse.builder()
-                        .message("Email already verified")
-                        .alreadyVerified(true)
-                        .timestamp(Instant.now())
-                        .build();
-            } else {
-                // Malformed state - token cleared but email not verified
-                throw new InvalidTokenException("Email verification token is invalid or does not exist");
+                        .message("Email already verified").alreadyVerified(true).timestamp(Instant.now()).build();
             }
+            throw new InvalidTokenException("Email verification token is invalid or does not exist");
         }
 
-        // Check if token has expired
         if (user.getEmailVerificationTokenExpiry() == null ||
                 Instant.now().isAfter(user.getEmailVerificationTokenExpiry())) {
-            throw new EmailTokenExpiredException("Email verification token has expired. Please request a new one.");
+            throw new com.lamastudio.backend.shared.exception.EmailTokenExpiredException(
+                    "Email verification token has expired. Please request a new one.");
         }
 
-        // Verify the email
         user.setEmailVerified(true);
         user.setEmailVerificationToken(null);
         user.setEmailVerificationTokenExpiry(null);
         userRepository.save(user);
-
         log.info("Email verified for user: {}", user.getEmail());
         return VerifyEmailResponse.builder()
-                .message("Email verified successfully")
-                .alreadyVerified(false)
-                .timestamp(Instant.now())
-                .build();
+                .message("Email verified successfully").alreadyVerified(false).timestamp(Instant.now()).build();
     }
 
-    /**
-     * Resend email verification.
-     * Allows user to request a new verification email if original expired.
-     *
-     * @param email the user's email address
-     */
     @Transactional
     public void resendVerificationEmail(String email) {
         String normalizedEmail = normalizeEmail(email);
-
         User user = userRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("No user found with this email address"));
 
-        // Check if email already verified
-        if (user.isEmailVerified()) {
-            throw new InvalidEmailStateException("Email is already verified");
-        }
-
-        // Check if user is OAuth2-only (no password)
+        if (user.isEmailVerified()) throw new InvalidEmailStateException("Email is already verified");
         if (user.getProvider() != AuthProvider.LOCAL) {
-            throw new InvalidEmailStateException(
-                    "Cannot resend verification for OAuth-only accounts. Email cannot be verified.");
+            throw new InvalidEmailStateException("Cannot resend verification for OAuth-only accounts.");
         }
-
-        // Check if account is not active
         if (!user.isActive()) {
             throw new AccountNotActiveException("Account is " + user.getAccountStatus().name().toLowerCase());
         }
 
-        // Invalidate old token and generate new one
-        String newVerificationToken = UUID.randomUUID().toString();
-        user.setEmailVerificationToken(newVerificationToken);
+        String newToken = UUID.randomUUID().toString();
+        user.setEmailVerificationToken(newToken);
         user.setEmailVerificationTokenExpiry(
                 Instant.now().plus(appProperties.getEmailVerification().getTokenExpiryHours(), ChronoUnit.HOURS));
-
         userRepository.save(user);
 
-        // Send verification email
         try {
-            emailService.sendVerificationEmail(user.getEmail(), resolveDisplayName(user), newVerificationToken);
+            emailService.sendVerificationEmail(user.getEmail(), resolveDisplayName(user), newToken);
             log.info("Resent verification email to: {}", user.getEmail());
         } catch (Exception ex) {
-            log.warn("Failed to send verification email to {}: {}", user.getEmail(), ex.getMessage(), ex);
+            log.warn("Failed to send verification email to {}: {}", user.getEmail(), ex.getMessage());
             throw new RuntimeException("Failed to send verification email. Please try again later.");
         }
     }
 
-    // ── Forgot Password ───────────────────────────────────────────────────────
+    // ── Forgot / Reset Password ───────────────────────────────────────────────
 
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
-        if (request == null) {
-            throw new BadRequestException("Request body is required");
-        }
+        if (request == null) throw new BadRequestException("Request body is required");
         String email = normalizeEmail(request.getEmail());
-        // Always return 200 regardless of whether email exists (prevent enumeration)
         userRepository.findByEmail(email).ifPresent(user -> {
-            if (user.getProvider() != AuthProvider.LOCAL) {
-                // OAuth users have no password — silently ignore
-                return;
-            }
+            if (user.getProvider() != AuthProvider.LOCAL) return;
 
             String resetToken = UUID.randomUUID().toString();
             user.setPasswordResetToken(resetToken);
@@ -326,20 +317,17 @@ public class AuthService {
             try {
                 emailService.sendPasswordResetEmail(user.getEmail(), resolveDisplayName(user), resetToken);
             } catch (Exception ex) {
-                log.warn("Failed to send password reset email to {}: {}", user.getEmail(), ex.getMessage(), ex);
+                log.warn("Failed to send password reset email to {}: {}", user.getEmail(), ex.getMessage());
             }
         });
     }
 
-    // ── Reset Password ────────────────────────────────────────────────────────
-
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
-        if (request == null) {
-            throw new BadRequestException("Request body is required");
-        }
+        if (request == null) throw new BadRequestException("Request body is required");
         requireText(request.getToken(), "Password reset token is required");
         requireText(request.getNewPassword(), "New password is required");
+
         User user = userRepository.findByPasswordResetToken(request.getToken())
                 .orElseThrow(() -> new InvalidTokenException("Password reset token is invalid or expired"));
 
@@ -352,33 +340,45 @@ public class AuthService {
         user.setPasswordResetToken(null);
         user.setPasswordResetTokenExpiry(null);
         userRepository.save(user);
-
         log.info("Password reset for user: {}", user.getEmail());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private void issueTokenCookies(User user, HttpServletResponse response) {
-        String accessToken = jwtTokenProvider.generateAccessToken(user);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user);
+    private void createFreeSubscription(UUID userId) {
+        subscriptionPlanRepository.findByNameIgnoreCase("FREE").ifPresent(freePlan -> {
+            UserSubscription sub = new UserSubscription();
+            sub.setUserId(userId);
+            sub.setPlan(freePlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setStartDate(Instant.now());
+            sub.setContentWatchesUsed(0);
+            userSubscriptionRepository.save(sub);
+        });
+    }
+
+    private void issueTokenCookies(User user, UUID sessionId, HttpServletResponse response) {
+        String accessToken = jwtTokenProvider.generateAccessToken(user, sessionId);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user, sessionId);
         cookieFactory.addAuthCookies(response, accessToken, refreshToken);
     }
 
+    private String generateSecureToken() {
+        return UUID.randomUUID().toString() + "-" + UUID.randomUUID();
+    }
+
     private String extractRefreshToken(HttpServletRequest request) {
-        if (request.getCookies() == null)
-            return null;
+        if (request.getCookies() == null) return null;
         return Arrays.stream(request.getCookies())
                 .filter(c -> CookieFactory.REFRESH_TOKEN_COOKIE.equals(c.getName()))
                 .map(Cookie::getValue)
-                .findFirst()
-                .orElse(null);
+                .findFirst().orElse(null);
     }
 
     private AuthResponse toAuthResponse(User user, String message) {
         Set<String> roles = user.getRoles().stream()
                 .map(r -> r.getName().name())
                 .collect(Collectors.toSet());
-
         return AuthResponse.builder()
                 .userId(user.getId())
                 .email(user.getEmail())
@@ -394,29 +394,12 @@ public class AuthService {
     }
 
     private String resolveDisplayName(User user) {
-        if (user == null) {
-            return "User";
-        }
-
-        if (StringUtils.hasText(user.getDisplayName())) {
-            return user.getDisplayName().strip();
-        }
-
-        String firstName = user.getFirstName();
-        String lastName = user.getLastName();
-
-        if (StringUtils.hasText(firstName) && StringUtils.hasText(lastName)) {
-            return (firstName.strip() + " " + lastName.strip()).trim();
-        }
-
-        if (StringUtils.hasText(firstName)) {
-            return firstName.strip();
-        }
-
-        if (StringUtils.hasText(lastName)) {
-            return lastName.strip();
-        }
-
+        if (user == null) return "User";
+        if (StringUtils.hasText(user.getDisplayName())) return user.getDisplayName().strip();
+        String fn = user.getFirstName(), ln = user.getLastName();
+        if (StringUtils.hasText(fn) && StringUtils.hasText(ln)) return (fn.strip() + " " + ln.strip()).trim();
+        if (StringUtils.hasText(fn)) return fn.strip();
+        if (StringUtils.hasText(ln)) return ln.strip();
         return "User";
     }
 
@@ -425,10 +408,7 @@ public class AuthService {
     }
 
     private String requireText(String value, String message) {
-        if (!StringUtils.hasText(value)) {
-            throw new BadRequestException(message);
-        }
+        if (!StringUtils.hasText(value)) throw new BadRequestException(message);
         return value;
     }
-
 }

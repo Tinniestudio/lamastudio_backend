@@ -18,11 +18,15 @@ public class AppProperties {
     private String frontendUrl;
 
     private Jwt jwt = new Jwt();
+    private AdminJwt adminJwt = new AdminJwt();
     private Cookie cookie = new Cookie();
     private EmailVerification emailVerification = new EmailVerification();
+    private AdminPasswordReset adminPasswordReset = new AdminPasswordReset();
     private PasswordReset passwordReset = new PasswordReset();
     private Cors cors = new Cors();
     private Resend resend = new Resend();
+    private String adminBootstrapToken;
+    private int freeTierContentLimit = 2;
 
     @Getter
     @Setter
@@ -47,6 +51,26 @@ public class AppProperties {
             private String secret;
             private long expirationMs;
         }
+    }
+
+    @Getter
+    @Setter
+    public static class AdminJwt {
+        private TokenConfig accessToken = new TokenConfig();
+        private TokenConfig refreshToken = new TokenConfig();
+
+        @Getter
+        @Setter
+        public static class TokenConfig {
+            private String secret;
+            private long expirationMs;
+        }
+    }
+
+    @Getter
+    @Setter
+    public static class AdminPasswordReset {
+        private int tokenExpiryMinutes = 15;
     }
 
     @Getter

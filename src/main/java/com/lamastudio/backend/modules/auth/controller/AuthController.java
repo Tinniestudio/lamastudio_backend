@@ -2,6 +2,8 @@ package com.lamastudio.backend.modules.auth.controller;
 
 import com.lamastudio.backend.modules.auth.dto.*;
 import com.lamastudio.backend.modules.auth.service.AuthService;
+import com.lamastudio.backend.modules.auth.user.dto.AuthProfileResponse;
+import com.lamastudio.backend.modules.auth.user.service.AuthProfileService;
 import com.lamastudio.backend.modules.user.repository.UserRepository;
 import com.lamastudio.backend.shared.entity.User;
 import com.lamastudio.backend.shared.exception.ErrorResponse;
@@ -23,6 +25,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -43,6 +46,7 @@ public class AuthController {
     private final AuthService authService;
     private final JwtTokenProvider jwtTokenProvider;
     private final UserRepository userRepository;
+    private final AuthProfileService authProfileService;
 
     @Operation(summary = "Register a new user", description = "Creates a new LOCAL user account. Auto-assigns ROLE_USER, sends verification email, and sets auth cookies.")
     @ApiResponses({
@@ -78,8 +82,10 @@ public class AuthController {
     @RateLimit(maxRequests = 10, windowMinutes = 15, keyStrategy = "IP_ONLY")
     @PostMapping("/login")
     @SecurityRequirements({})
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
-        return ResponseEntity.ok(authService.login(request, response));
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request,
+                                              HttpServletRequest httpRequest,
+                                              HttpServletResponse response) {
+        return ResponseEntity.ok(authService.login(request, httpRequest, response));
     }
 
     @Operation(summary = "Refresh access token", description = "Issues a new access_token and refresh_token pair using the refresh_token cookie. Call this when a 401 is received.")
@@ -101,8 +107,8 @@ public class AuthController {
         content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
             examples = @ExampleObject(value = "{\"message\":\"Logged out successfully\"}")))
     @PostMapping("/logout")
-    public ResponseEntity<Map<String, String>> logout(HttpServletResponse response) {
-        authService.logout(response);
+    public ResponseEntity<Map<String, String>> logout(HttpServletRequest request, HttpServletResponse response) {
+        authService.logout(request, response);
         return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
     }
 
@@ -196,39 +202,22 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "Password reset successfully. Please log in."));
     }
 
-    @Operation(summary = "Get current authenticated user", description = "Returns the current user based on the access_token cookie. Returns 401 when token is missing/invalid/expired.")
+    @Operation(summary = "Get current authenticated user (enriched)", description = "Returns identity, subscription, and active session list. Returns 401 when token is missing/invalid/expired.")
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Authenticated user",
-            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = UserResponseDto.class))),
+        @ApiResponse(responseCode = "200", description = "Authenticated user profile",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = AuthProfileResponse.class))),
         @ApiResponse(responseCode = "401", description = "Unauthorized / token missing or invalid")
     })
     @GetMapping("/me")
-    public ResponseEntity<UserResponseDto> me(HttpServletRequest request) {
-        if (request.getCookies() == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+    public ResponseEntity<AuthProfileResponse> me(
+            @AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails,
+            HttpServletRequest request) {
+        if (userDetails == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
 
-    String token = Arrays.stream(request.getCookies())
-        .filter(c -> CookieFactory.ACCESS_TOKEN_COOKIE.equals(c.getName()))
-        .map(c -> c.getValue())
-        .findFirst()
-        .orElse(null);
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        String sessionIdAttr = (String) request.getAttribute("sessionId");
+        UUID sessionId = sessionIdAttr != null ? UUID.fromString(sessionIdAttr) : null;
 
-        if (token == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        if (!jwtTokenProvider.validateAccessToken(token)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        Claims claims = jwtTokenProvider.parseAccessToken(token);
-        UUID userId = UUID.fromString(claims.getSubject());
-
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-
-        UserResponseDto dto = UserResponseDto.from(user);
-        return ResponseEntity.ok(dto);
+        return ResponseEntity.ok(authProfileService.getProfile(userId, sessionId));
     }
 }

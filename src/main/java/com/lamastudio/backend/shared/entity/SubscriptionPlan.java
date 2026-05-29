@@ -34,4 +34,6 @@ public class SubscriptionPlan extends BaseEntity {
   private VideoQuality videoQuality;
 
   private Boolean isActive = true;
+
+  private Integer contentLimit;
 }

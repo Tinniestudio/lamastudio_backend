@@ -32,4 +32,7 @@ public class UserSubscription extends BaseEntity {
   private Instant endDate;
 
   private Boolean autoRenew = true;
+
+  @Column(name = "content_watches_used", nullable = false)
+  private int contentWatchesUsed = 0;
 }
