@@ -76,9 +76,10 @@ src/main/java/com/lamastudio/backend/shared/config/
 src/main/resources/db/migration/
 ├── V3__add_admin_tables.sql
 ├── V4__add_user_sessions.sql
-├── V5__add_coupons.sql
-├── V6__add_subscription_fields.sql
-└── V7__remove_admin_roles_from_users.sql
+├── V5__add_subscription_tables.sql
+├── V6__add_coupons.sql
+├── V7__add_subscription_fields.sql
+└── V8__remove_admin_roles_from_users.sql
 ```
 
 ---
@@ -107,7 +108,7 @@ FREE_TIER_CONTENT_LIMIT=2
 
 1. Pull the branch: `git checkout 001-auth-architecture-refactor`
 2. Add the new env vars to your `.env` / `application-local.yml`
-3. Start the app — Flyway will auto-run V3–V6 migrations
+3. Start the app — Flyway will auto-run V3–V8 migrations
 4. Bootstrap the super admin:
    ```bash
    curl -X POST http://localhost:8080/auth/admin/bootstrap \

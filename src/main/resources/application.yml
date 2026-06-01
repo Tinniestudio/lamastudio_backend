@@ -116,6 +116,11 @@ app:
   admin-bootstrap-token: ${ADMIN_BOOTSTRAP_TOKEN:}
   free-tier-content-limit: ${FREE_TIER_CONTENT_LIMIT:2}
 
+stripe:
+  secret-key: ${STRIPE_SECRET_KEY:}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+  cdn-base-url: ${CDN_BASE_URL:http://localhost:9000}
+
   cookie:
     secure: ${COOKIE_SECURE}    # true in production (HTTPS)
     same-site: ${COOKIE_SAME_SITE}

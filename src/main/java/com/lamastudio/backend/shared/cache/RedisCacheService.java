@@ -34,4 +34,10 @@ public class RedisCacheService implements CacheService {
         Boolean result = redisTemplate.hasKey(key);
         return Boolean.TRUE.equals(result);
     }
+
+    @Override
+    public boolean setIfAbsent(String key, String value, Duration ttl) {
+        Boolean result = redisTemplate.opsForValue().setIfAbsent(key, value, ttl);
+        return Boolean.TRUE.equals(result);
+    }
 }

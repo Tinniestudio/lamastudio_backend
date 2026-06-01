@@ -6,6 +6,8 @@ import com.lamastudio.backend.modules.auth.exception.EmailAlreadyExistsException
 import com.lamastudio.backend.modules.auth.exception.InvalidEmailStateException;
 import com.lamastudio.backend.modules.auth.exception.InvalidTokenException;
 import com.lamastudio.backend.modules.auth.exception.MissingRefreshTokenException;
+import com.lamastudio.backend.modules.auth.user.dto.AuthProfileResponse;
+import com.lamastudio.backend.modules.auth.user.service.AuthProfileService;
 import com.lamastudio.backend.modules.auth.user.service.SessionService;
 import com.lamastudio.backend.modules.billing.repository.SubscriptionPlanRepository;
 import com.lamastudio.backend.modules.billing.repository.UserSubscriptionRepository;
@@ -61,11 +63,12 @@ public class AuthService {
     private final SessionService sessionService;
     private final UserSubscriptionRepository userSubscriptionRepository;
     private final SubscriptionPlanRepository subscriptionPlanRepository;
+    private final AuthProfileService authProfileService;
 
     // ── Register ──────────────────────────────────────────────────────────────
 
     @Transactional
-    public AuthResponse register(RegisterRequest request, HttpServletResponse response) {
+    public AuthProfileResponse register(RegisterRequest request, HttpServletResponse response) {
         if (request == null) throw new BadRequestException("Request body is required");
 
         String email = normalizeEmail(request.getEmail());
@@ -112,13 +115,13 @@ public class AuthService {
         issueTokenCookies(user, sessionId, response);
 
         log.info("New user registered: {}", user.getEmail());
-        return toAuthResponse(user, "Registration successful. Please check your email to verify your account.");
+        // return toAuthResponse(user, "Registration successful. Please check your email to verify your account.");
+        return authProfileService.getProfile(user.getId(), sessionId, "Registration successful. Please check your email to verify your account.");
     }
 
     // ── Login ─────────────────────────────────────────────────────────────────
-
     @Transactional
-    public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest,
+    public AuthProfileResponse login(LoginRequest request, HttpServletRequest httpRequest,
                                HttpServletResponse response) {
         String email = request != null ? request.getEmail() : null;
         String password = request != null ? request.getPassword() : null;
@@ -156,13 +159,12 @@ public class AuthService {
         cookieFactory.addAuthCookies(response, accessToken, refreshToken);
 
         log.info("User logged in: {}", user.getEmail());
-        return toAuthResponse(user, null);
+        return authProfileService.getProfile(user.getId(), sessionId, "Login successful");
     }
 
     // ── Refresh ───────────────────────────────────────────────────────────────
-
     @Transactional
-    public AuthResponse refresh(HttpServletRequest request, HttpServletResponse response) {
+    public AuthProfileResponse refresh(HttpServletRequest request, HttpServletResponse response) {
         String refreshToken = extractRefreshToken(request);
         if (refreshToken == null) {
             throw new MissingRefreshTokenException("Refresh token is missing");
@@ -194,7 +196,9 @@ public class AuthService {
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(user, sessionId);
         cookieFactory.addAuthCookies(response, newAccessToken, newRefreshToken);
 
-        return toAuthResponse(user, null);
+        return authProfileService.getProfile(user.getId(), sessionId, "Token refreshed successfully");
+
+        // return toAuthResponse(user, null);
     }
 
     // ── Logout ────────────────────────────────────────────────────────────────

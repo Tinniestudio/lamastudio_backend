@@ -6,6 +6,8 @@ import com.lamastudio.backend.modules.auth.exception.BadCredentialsException;
 import com.lamastudio.backend.modules.auth.exception.EmailAlreadyExistsException;
 import com.lamastudio.backend.modules.auth.service.AuthService;
 import com.lamastudio.backend.modules.auth.service.EmailService;
+import com.lamastudio.backend.modules.auth.user.dto.AuthProfileResponse;
+import com.lamastudio.backend.modules.auth.user.service.AuthProfileService;
 import com.lamastudio.backend.modules.auth.user.service.SessionService;
 import com.lamastudio.backend.modules.billing.repository.SubscriptionPlanRepository;
 import com.lamastudio.backend.modules.billing.repository.UserSubscriptionRepository;
@@ -61,6 +63,7 @@ class AuthServiceTest {
     @Mock private SessionService sessionService;
     @Mock private UserSubscriptionRepository userSubscriptionRepository;
     @Mock private SubscriptionPlanRepository subscriptionPlanRepository;
+    @Mock private AuthProfileService authProfileService;
 
     private AppProperties appProperties;
     private AuthService authService;
@@ -79,7 +82,8 @@ class AuthServiceTest {
                 appProperties,
                 sessionService,
                 userSubscriptionRepository,
-                subscriptionPlanRepository
+                subscriptionPlanRepository,
+                authProfileService
         );
     }
 
@@ -107,6 +111,11 @@ class AuthServiceTest {
         when(jwtTokenProvider.generateAccessToken(any(User.class), any(UUID.class))).thenReturn("access");
         when(jwtTokenProvider.generateRefreshToken(any(User.class), any(UUID.class))).thenReturn("refresh");
         when(subscriptionPlanRepository.findByNameIgnoreCase("FREE")).thenReturn(Optional.empty());
+        when(authProfileService.getProfile(any(UUID.class), any(UUID.class), any()))
+            .thenReturn(AuthProfileResponse.builder()
+                .email("test@example.com")
+                .roles(Set.of(RoleName.ROLE_USER.name()))
+                .provider("LOCAL").emailVerified(false).build());
 
         HttpServletResponse response = new MockHttpServletResponse();
         var authResponse = authService.register(request, response);
@@ -148,6 +157,10 @@ class AuthServiceTest {
         when(sessionService.createSession(any(), any(), any())).thenReturn(sessionId);
         when(jwtTokenProvider.generateAccessToken(any(User.class), any(UUID.class))).thenReturn("access");
         when(jwtTokenProvider.generateRefreshToken(any(User.class), any(UUID.class))).thenReturn("refresh");
+        when(authProfileService.getProfile(any(UUID.class), any(UUID.class), any()))
+            .thenReturn(AuthProfileResponse.builder()
+                .email(user.getEmail())
+                .provider("LOCAL").emailVerified(true).build());
 
         HttpServletRequest httpRequest = new MockHttpServletRequest();
         HttpServletResponse response = new MockHttpServletResponse();

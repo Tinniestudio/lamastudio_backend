@@ -112,4 +112,11 @@ public final class DomainEnums {
         FIXED
     }
 
+    public enum PaymentStatus {
+        PENDING,
+        SUCCESSFUL,
+        FAILED,
+        REFUNDED
+    }
+
 }
