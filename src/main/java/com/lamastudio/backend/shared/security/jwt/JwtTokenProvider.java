@@ -19,6 +19,9 @@ import java.util.stream.Collectors;
 @Component
 public class JwtTokenProvider {
 
+    public static final String AUDIENCE_USER = "user";
+    public static final String CLAIM_SESSION_ID = "sid";
+
     private final AppProperties appProperties;
 
     public JwtTokenProvider(AppProperties appProperties) {
@@ -27,7 +30,7 @@ public class JwtTokenProvider {
 
     // ── Access Token ──────────────────────────────────────────────────────────
 
-    public String generateAccessToken(User user) {
+    public String generateAccessToken(User user, UUID sessionId) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + appProperties.getJwt().getAccessToken().getExpirationMs());
 
@@ -39,9 +42,11 @@ public class JwtTokenProvider {
                 .id(UUID.randomUUID().toString())
                 .issuer(appProperties.getJwt().getIssuer())
                 .subject(user.getId().toString())
+                .audience().add(AUDIENCE_USER).and()
                 .claim("email", user.getEmail())
                 .claim("roles", roles)
                 .claim("provider", user.getProvider().name())
+                .claim(CLAIM_SESSION_ID, sessionId != null ? sessionId.toString() : null)
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(getAccessTokenKey())
@@ -58,7 +63,7 @@ public class JwtTokenProvider {
 
     // ── Refresh Token ─────────────────────────────────────────────────────────
 
-    public String generateRefreshToken(User user) {
+    public String generateRefreshToken(User user, UUID sessionId) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + appProperties.getJwt().getRefreshToken().getExpirationMs());
 
@@ -66,6 +71,8 @@ public class JwtTokenProvider {
                 .id(UUID.randomUUID().toString())
                 .issuer(appProperties.getJwt().getIssuer())
                 .subject(user.getId().toString())
+                .audience().add(AUDIENCE_USER).and()
+                .claim(CLAIM_SESSION_ID, sessionId != null ? sessionId.toString() : null)
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(getRefreshTokenKey())
@@ -80,7 +87,7 @@ public class JwtTokenProvider {
         return validateToken(token, getRefreshTokenKey());
     }
 
-    // ── Shared helpers ────────────────────────────────────────────────────────
+    // ── Expiry helpers ────────────────────────────────────────────────────────
 
     public long getAccessTokenExpiryMs() {
         return appProperties.getJwt().getAccessToken().getExpirationMs();
@@ -89,6 +96,8 @@ public class JwtTokenProvider {
     public long getRefreshTokenExpiryMs() {
         return appProperties.getJwt().getRefreshToken().getExpirationMs();
     }
+
+    // ── Shared helpers ────────────────────────────────────────────────────────
 
     private boolean validateToken(String token, SecretKey key) {
         try {

@@ -105,6 +105,22 @@ app:
       expiration-ms: ${JWT_REFRESH_EXPIRATION_MS}    # 7 days
     issuer: lamastudio
 
+  admin-jwt:
+    access-token:
+      secret: ${JWT_ADMIN_ACCESS_SECRET}
+      expiration-ms: ${JWT_ADMIN_ACCESS_EXPIRATION_MS:900000}   # 15 minutes
+    refresh-token:
+      secret: ${JWT_ADMIN_REFRESH_SECRET}
+      expiration-ms: ${JWT_ADMIN_REFRESH_EXPIRATION_MS:604800000} # 7 days
+
+  admin-bootstrap-token: ${ADMIN_BOOTSTRAP_TOKEN:}
+  free-tier-content-limit: ${FREE_TIER_CONTENT_LIMIT:2}
+
+stripe:
+  secret-key: ${STRIPE_SECRET_KEY:}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+  cdn-base-url: ${CDN_BASE_URL:http://localhost:9000}
+
   cookie:
     secure: ${COOKIE_SECURE}    # true in production (HTTPS)
     same-site: ${COOKIE_SAME_SITE}

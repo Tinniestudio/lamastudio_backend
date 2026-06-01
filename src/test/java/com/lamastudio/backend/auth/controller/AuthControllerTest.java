@@ -5,6 +5,7 @@ import com.lamastudio.backend.modules.auth.controller.AuthController;
 import com.lamastudio.backend.modules.auth.dto.*;
 import com.lamastudio.backend.modules.auth.exception.BadCredentialsException;
 import com.lamastudio.backend.modules.auth.service.AuthService;
+import com.lamastudio.backend.modules.auth.user.service.AuthProfileService;
 import com.lamastudio.backend.modules.user.repository.UserRepository;
 import com.lamastudio.backend.modules.user.service.UserDetailsServiceImpl;
 import com.lamastudio.backend.shared.security.jwt.JwtAuthenticationFilter;
@@ -49,6 +50,7 @@ class AuthControllerTest {
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtAuthenticationFilter jwtAuthenticationFilter;
     @MockBean private UserDetailsServiceImpl userDetailsService;
+    @MockBean private AuthProfileService authProfileService;
 
     private static final String CONTEXT_PATH = "/api/v1";
 
@@ -65,7 +67,8 @@ class AuthControllerTest {
         req.setFirstName("Jane");
         req.setLastName("Doe");
 
-        AuthResponse response = AuthResponse.builder()
+        com.lamastudio.backend.modules.auth.user.dto.AuthProfileResponse response =
+            com.lamastudio.backend.modules.auth.user.dto.AuthProfileResponse.builder()
                 .userId(UUID.randomUUID())
                 .email(req.getEmail())
                 .roles(Set.of("ROLE_USER"))
@@ -100,7 +103,8 @@ class AuthControllerTest {
         req.setEmail("user@example.com");
         req.setPassword("Password1!");
 
-        AuthResponse response = AuthResponse.builder()
+        com.lamastudio.backend.modules.auth.user.dto.AuthProfileResponse response =
+            com.lamastudio.backend.modules.auth.user.dto.AuthProfileResponse.builder()
                 .userId(UUID.randomUUID())
                 .email(req.getEmail())
                 .roles(Set.of("ROLE_USER"))
@@ -108,7 +112,7 @@ class AuthControllerTest {
                 .emailVerified(true)
                 .build();
 
-        when(authService.login(any(LoginRequest.class), any())).thenReturn(response);
+        when(authService.login(any(LoginRequest.class), any(), any())).thenReturn(response);
 
     mockMvc.perform(postWithContext("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -125,7 +129,7 @@ class AuthControllerTest {
         req.setEmail("user@example.com");
         req.setPassword("bad");
 
-        when(authService.login(any(LoginRequest.class), any())).thenThrow(new BadCredentialsException("Invalid email or password"));
+        when(authService.login(any(LoginRequest.class), any(), any())).thenThrow(new BadCredentialsException("Invalid email or password"));
 
     mockMvc.perform(postWithContext("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

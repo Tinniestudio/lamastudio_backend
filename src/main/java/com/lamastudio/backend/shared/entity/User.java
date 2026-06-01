@@ -21,8 +21,9 @@ import java.util.UUID;
     name = "users",
     indexes = {
         @Index(name = "idx_users_email", columnList = "email"),
-        @Index(name = "idx_users_provider_id", columnList = "provider_id"),
-        @Index(name = "idx_users_account_status", columnList = "account_status")
+        @Index(name = "idx_users_provider_id", columnList = "provider, provider_id"),
+        @Index(name = "idx_users_account_status", columnList = "account_status"),
+        @Index(name = "idx_users_deleted_at", columnList = "deleted_at")
     }
 )
 @Getter

@@ -1,16 +1,22 @@
 package com.lamastudio.backend.modules.auth.service;
 
 import com.lamastudio.backend.modules.auth.dto.AuthResponse;
+import com.lamastudio.backend.modules.auth.user.service.SessionService;
+import com.lamastudio.backend.modules.billing.repository.UserSubscriptionRepository;
 import com.lamastudio.backend.modules.role.repository.RoleRepository;
 import com.lamastudio.backend.shared.entity.DomainEnums.AccountStatus;
 import com.lamastudio.backend.shared.entity.DomainEnums.AuthProvider;
+import com.lamastudio.backend.shared.entity.DomainEnums.SubscriptionStatus;
 import com.lamastudio.backend.modules.user.repository.UserRepository;
 import com.lamastudio.backend.shared.entity.RoleName;
+import com.lamastudio.backend.shared.entity.SubscriptionPlan;
 import com.lamastudio.backend.shared.entity.User;
+import com.lamastudio.backend.shared.entity.UserSubscription;
 import com.lamastudio.backend.shared.exception.BadRequestException;
 import com.lamastudio.backend.shared.security.jwt.CookieFactory;
 import com.lamastudio.backend.shared.security.jwt.JwtTokenProvider;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -29,9 +36,12 @@ public class OAuth2Service {
     private final RoleRepository roleRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final CookieFactory cookieFactory;
+    private final SessionService sessionService;
+    private final UserSubscriptionRepository userSubscriptionRepository;
+    private final com.lamastudio.backend.modules.billing.repository.SubscriptionPlanRepository subscriptionPlanRepository;
 
     @Transactional
-    public AuthResponse handleOAuthLogin(org.springframework.security.oauth2.core.user.OAuth2User oauthUser, jakarta.servlet.http.HttpServletResponse response) {
+    public AuthResponse handleOAuthLogin(org.springframework.security.oauth2.core.user.OAuth2User oauthUser, HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) {
         log.info("OAuth2 login initiated for provider: google");
         
         // Extract & validate attributes
@@ -54,9 +64,11 @@ public class OAuth2Service {
         log.info("User provisioned successfully: userId={}, email={}, provider={}", 
                  user.getId(), user.getEmail(), user.getProvider());
 
-        // Issue tokens and set cookies
-        String accessToken  = jwtTokenProvider.generateAccessToken(user);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user);
+        // Create session and issue tokens
+        String rawRefreshToken = UUID.randomUUID().toString();
+        UUID sessionId = sessionService.createSession(user.getId(), rawRefreshToken, request);
+        String accessToken  = jwtTokenProvider.generateAccessToken(user, sessionId);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user, sessionId);
         cookieFactory.addAuthCookies(response, accessToken, refreshToken);
         log.debug("JWT tokens issued and auth cookies set for user: {}", user.getEmail());
 
@@ -153,7 +165,22 @@ public class OAuth2Service {
 
         User savedUser = userRepository.save(user);
         log.info("New OAuth2 user created: id={}, email={}", savedUser.getId(), savedUser.getEmail());
+        createFreeSubscription(savedUser.getId());
         return savedUser;
+    }
+
+    private void createFreeSubscription(UUID userId) {
+        boolean hasSubscription = userSubscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE).isPresent();
+        if (hasSubscription) return;
+        subscriptionPlanRepository.findByNameIgnoreCase("FREE").ifPresent(freePlan -> {
+            UserSubscription sub = new UserSubscription();
+            sub.setUserId(userId);
+            sub.setPlan(freePlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setAutoRenew(false);
+            sub.setContentWatchesUsed(0);
+            userSubscriptionRepository.save(sub);
+        });
     }
 
     private String buildDisplayName(String firstName, String lastName, String email) {

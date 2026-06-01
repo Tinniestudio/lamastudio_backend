@@ -107,4 +107,16 @@ public final class DomainEnums {
         DELETED
     }
 
+    public enum DiscountType {
+        PERCENTAGE,
+        FIXED
+    }
+
+    public enum PaymentStatus {
+        PENDING,
+        SUCCESSFUL,
+        FAILED,
+        REFUNDED
+    }
+
 }

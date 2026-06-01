@@ -27,7 +27,7 @@ class JwtTokenProviderTest {
 
         User user = buildUser();
 
-        String token = provider.generateAccessToken(user);
+        String token = provider.generateAccessToken(user, UUID.randomUUID());
 
         assertThat(provider.validateAccessToken(token)).isTrue();
         Claims claims = provider.parseAccessToken(token);
@@ -45,7 +45,7 @@ class JwtTokenProviderTest {
         JwtTokenProvider provider = new JwtTokenProvider(props);
         User user = buildUser();
 
-        String token = provider.generateAccessToken(user);
+        String token = provider.generateAccessToken(user, UUID.randomUUID());
         // ensure expiry passes
         Thread.sleep(10L);
 
@@ -60,7 +60,7 @@ class JwtTokenProviderTest {
         JwtTokenProvider provider = new JwtTokenProvider(props);
         User user = buildUser();
 
-        String token = provider.generateRefreshToken(user);
+        String token = provider.generateRefreshToken(user, UUID.randomUUID());
 
         assertThat(provider.validateRefreshToken(token)).isTrue();
         Claims claims = provider.parseRefreshToken(token);

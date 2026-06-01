@@ -13,11 +13,14 @@ import java.time.Duration;
 @RequiredArgsConstructor
 public class CookieFactory {
 
-    public static final String ACCESS_TOKEN_COOKIE  = "access_token";
-    public static final String REFRESH_TOKEN_COOKIE = "refresh_token";
+    public static final String ACCESS_TOKEN_COOKIE       = "access_token";
+    public static final String REFRESH_TOKEN_COOKIE      = "refresh_token";
+    public static final String ADMIN_ACCESS_TOKEN_COOKIE = "admin_access_token";
+    public static final String ADMIN_REFRESH_TOKEN_COOKIE = "admin_refresh_token";
 
     private final AppProperties appProperties;
     private final JwtTokenProvider jwtTokenProvider;
+    private final AdminJwtTokenProvider adminJwtTokenProvider;
 
     public ResponseCookie buildAccessTokenCookie(String token) {
         return buildCookie(
@@ -51,6 +54,28 @@ public class CookieFactory {
     public void clearAuthCookies(HttpServletResponse response) {
         response.addHeader("Set-Cookie", buildClearAccessTokenCookie().toString());
         response.addHeader("Set-Cookie", buildClearRefreshTokenCookie().toString());
+    }
+
+    // ── Admin cookies ──────────────────────────────────────────────────────────
+
+    public ResponseCookie buildAdminAccessTokenCookie(String token) {
+        return buildCookie(ADMIN_ACCESS_TOKEN_COOKIE, token,
+                adminJwtTokenProvider.getAccessTokenExpiryMs() / 1000);
+    }
+
+    public ResponseCookie buildAdminRefreshTokenCookie(String token) {
+        return buildCookie(ADMIN_REFRESH_TOKEN_COOKIE, token,
+                adminJwtTokenProvider.getRefreshTokenExpiryMs() / 1000);
+    }
+
+    public void addAdminAuthCookies(HttpServletResponse response, String accessToken, String refreshToken) {
+        response.addHeader("Set-Cookie", buildAdminAccessTokenCookie(accessToken).toString());
+        response.addHeader("Set-Cookie", buildAdminRefreshTokenCookie(refreshToken).toString());
+    }
+
+    public void clearAdminAuthCookies(HttpServletResponse response) {
+        response.addHeader("Set-Cookie", clearCookie(ADMIN_ACCESS_TOKEN_COOKIE).toString());
+        response.addHeader("Set-Cookie", clearCookie(ADMIN_REFRESH_TOKEN_COOKIE).toString());
     }
 
     private ResponseCookie buildCookie(String name, String value, long maxAgeSeconds) {
