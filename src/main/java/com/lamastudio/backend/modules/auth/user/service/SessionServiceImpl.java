@@ -136,6 +136,22 @@ public class SessionServiceImpl implements SessionService {
         }
     }
 
+    @Override
+    @Transactional
+    public void revokeAllExcept(UUID userId, UUID currentSessionId) {
+        List<UserSession> sessions = userSessionRepository.findByUserIdAndRevokedFalse(userId);
+        for (UserSession s : sessions) {
+            if (!s.getId().equals(currentSessionId)) {
+                s.revoke(null);
+                cacheService.delete(sessionKey(userId, s.getId()));
+            }
+        }
+        userSessionRepository.saveAll(sessions.stream()
+            .filter(s -> !s.getId().equals(currentSessionId))
+            .collect(Collectors.toList()));
+        log.info("Revoked {} sessions for user {} (kept session {})", sessions.size() - 1, userId, currentSessionId);
+    }
+
     // ── List ──────────────────────────────────────────────────────────────────
 
     @Override

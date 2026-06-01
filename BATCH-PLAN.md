@@ -1105,6 +1105,145 @@ PATCH  /users/me/avatar           Authenticated
 
 ---
 
+
+# BATCH 12 — SUBSCRIPTION + BILLING
+> **Service:** API Service
+> **Goal:** Monetization layer with plan management and payment integration.
+
+---
+
+## 12.1 · Database Schema
+
+**subscription_plans** table
+```sql
+id UUID PRIMARY KEY
+name VARCHAR(100) NOT NULL
+slug VARCHAR(100) UNIQUE NOT NULL
+description TEXT
+price NUMERIC(10,2) NOT NULL
+currency VARCHAR(10) DEFAULT 'NGN'
+billing_cycle VARCHAR(20) NOT NULL   -- MONTHLY, YEARLY
+max_devices INTEGER DEFAULT 1
+video_quality VARCHAR(20)            -- SD, HD, FULL_HD
+trial_days INTEGER DEFAULT 0
+is_active BOOLEAN DEFAULT true
+display_order INTEGER
+created_at TIMESTAMP
+```
+
+**user_subscriptions** table
+```sql
+id UUID PRIMARY KEY
+user_id UUID REFERENCES users(id)
+plan_id UUID REFERENCES subscription_plans(id)
+status VARCHAR(50) NOT NULL         -- ACTIVE, EXPIRED, CANCELLED, PAST_DUE, TRIALING
+start_date TIMESTAMP NOT NULL
+end_date TIMESTAMP NOT NULL
+trial_ends_at TIMESTAMP
+auto_renew BOOLEAN DEFAULT true
+cancelled_at TIMESTAMP
+created_at TIMESTAMP
+updated_at TIMESTAMP
+```
+
+**payments** table
+```sql
+id UUID PRIMARY KEY
+user_id UUID REFERENCES users(id)
+subscription_id UUID REFERENCES user_subscriptions(id)
+provider VARCHAR(50)               -- PAYSTACK, STRIPE, FLUTTERWAVE
+provider_reference VARCHAR(255) UNIQUE
+amount NUMERIC(10,2)
+currency VARCHAR(10)
+status VARCHAR(50)                 -- PENDING, SUCCESSFUL, FAILED, REFUNDED
+paid_at TIMESTAMP
+created_at TIMESTAMP
+```
+
+**coupons** table
+```sql
+id UUID PRIMARY KEY
+code VARCHAR(100) UNIQUE NOT NULL
+discount_type VARCHAR(20)          -- PERCENTAGE, FIXED
+discount_value NUMERIC(10,2)
+max_uses INTEGER
+used_count INTEGER DEFAULT 0
+plan_ids UUID[]                    -- null = all plans
+expires_at TIMESTAMP
+is_active BOOLEAN DEFAULT true
+created_at TIMESTAMP
+```
+
+---
+
+## 12.2 · Feature Flow
+
+### Checkout Flow
+```
+POST /subscriptions/checkout
+  Request: { planId, couponCode? }
+  1. Load plan (must be active)
+  2. Check no active subscription already exists
+  3. If couponCode: validate coupon (exists, active, not expired, not maxed, plan eligible)
+  4. Compute final price after discount
+  5. Create pending payment record
+  6. Call payment provider SDK to initialize payment
+  7. Return { paymentUrl, paymentReference }
+
+POST /webhooks/payment (Paystack/Stripe webhook)
+  1. Verify webhook signature
+  2. Load payment by provider_reference
+  3. If SUCCESSFUL:
+     - Update payment status=SUCCESSFUL
+     - Create/activate UserSubscription
+     - Publish SUBSCRIPTION_ACTIVATED notification
+  4. If FAILED:
+     - Update payment status=FAILED
+     - Publish PAYMENT_FAILED notification
+```
+
+### Subscription Expiration (Background Job)
+```
+Scheduled daily (03:00):
+  1. Find subscriptions where end_date < now() AND status=ACTIVE
+  2. Set status=EXPIRED
+  3. Publish SUBSCRIPTION_EXPIRED notification
+```
+
+### Cancel Subscription
+```
+PATCH /subscriptions/cancel
+  1. Load user's active subscription
+  2. Set auto_renew=false, cancelled_at=now()
+  3. Status remains ACTIVE until end_date (no immediate cutoff)
+  4. Publish SUBSCRIPTION_CANCELLED notification
+```
+
+---
+
+## 12.3 · API Endpoints
+
+```
+GET  /subscriptions/plans           Public
+POST /subscriptions/checkout        Authenticated
+GET  /subscriptions/me              Authenticated
+PATCH /subscriptions/cancel         Authenticated
+POST /subscriptions/apply-coupon    Authenticated (validate only)
+POST /webhooks/payment              Public (signature validated)
+```
+
+---
+
+✅ **Batch 12 Complete When:**
+- Plans seeded in DB
+- Checkout creates payment and returns URL
+- Webhook handler activates subscription
+- Subscription expiry job runs and marks expired correctly
+- Playback endpoint blocks user with expired subscription
+
+---
+
+
 # BATCH 3 — CATEGORY + DISCOVERY FOUNDATION
 > **Service:** API Service
 > **Goal:** Content taxonomy and homepage configuration system.
@@ -2093,143 +2232,6 @@ PATCH /admin/reviews/:id/status      Admin
 - One review per user/content enforced
 - Aggregate rating updates after review create/update/delete
 - Admin moderation flag working
-
----
-
-# BATCH 12 — SUBSCRIPTION + BILLING
-> **Service:** API Service
-> **Goal:** Monetization layer with plan management and payment integration.
-
----
-
-## 12.1 · Database Schema
-
-**subscription_plans** table
-```sql
-id UUID PRIMARY KEY
-name VARCHAR(100) NOT NULL
-slug VARCHAR(100) UNIQUE NOT NULL
-description TEXT
-price NUMERIC(10,2) NOT NULL
-currency VARCHAR(10) DEFAULT 'NGN'
-billing_cycle VARCHAR(20) NOT NULL   -- MONTHLY, YEARLY
-max_devices INTEGER DEFAULT 1
-video_quality VARCHAR(20)            -- SD, HD, FULL_HD
-trial_days INTEGER DEFAULT 0
-is_active BOOLEAN DEFAULT true
-display_order INTEGER
-created_at TIMESTAMP
-```
-
-**user_subscriptions** table
-```sql
-id UUID PRIMARY KEY
-user_id UUID REFERENCES users(id)
-plan_id UUID REFERENCES subscription_plans(id)
-status VARCHAR(50) NOT NULL         -- ACTIVE, EXPIRED, CANCELLED, PAST_DUE, TRIALING
-start_date TIMESTAMP NOT NULL
-end_date TIMESTAMP NOT NULL
-trial_ends_at TIMESTAMP
-auto_renew BOOLEAN DEFAULT true
-cancelled_at TIMESTAMP
-created_at TIMESTAMP
-updated_at TIMESTAMP
-```
-
-**payments** table
-```sql
-id UUID PRIMARY KEY
-user_id UUID REFERENCES users(id)
-subscription_id UUID REFERENCES user_subscriptions(id)
-provider VARCHAR(50)               -- PAYSTACK, STRIPE, FLUTTERWAVE
-provider_reference VARCHAR(255) UNIQUE
-amount NUMERIC(10,2)
-currency VARCHAR(10)
-status VARCHAR(50)                 -- PENDING, SUCCESSFUL, FAILED, REFUNDED
-paid_at TIMESTAMP
-created_at TIMESTAMP
-```
-
-**coupons** table
-```sql
-id UUID PRIMARY KEY
-code VARCHAR(100) UNIQUE NOT NULL
-discount_type VARCHAR(20)          -- PERCENTAGE, FIXED
-discount_value NUMERIC(10,2)
-max_uses INTEGER
-used_count INTEGER DEFAULT 0
-plan_ids UUID[]                    -- null = all plans
-expires_at TIMESTAMP
-is_active BOOLEAN DEFAULT true
-created_at TIMESTAMP
-```
-
----
-
-## 12.2 · Feature Flow
-
-### Checkout Flow
-```
-POST /subscriptions/checkout
-  Request: { planId, couponCode? }
-  1. Load plan (must be active)
-  2. Check no active subscription already exists
-  3. If couponCode: validate coupon (exists, active, not expired, not maxed, plan eligible)
-  4. Compute final price after discount
-  5. Create pending payment record
-  6. Call payment provider SDK to initialize payment
-  7. Return { paymentUrl, paymentReference }
-
-POST /webhooks/payment (Paystack/Stripe webhook)
-  1. Verify webhook signature
-  2. Load payment by provider_reference
-  3. If SUCCESSFUL:
-     - Update payment status=SUCCESSFUL
-     - Create/activate UserSubscription
-     - Publish SUBSCRIPTION_ACTIVATED notification
-  4. If FAILED:
-     - Update payment status=FAILED
-     - Publish PAYMENT_FAILED notification
-```
-
-### Subscription Expiration (Background Job)
-```
-Scheduled daily (03:00):
-  1. Find subscriptions where end_date < now() AND status=ACTIVE
-  2. Set status=EXPIRED
-  3. Publish SUBSCRIPTION_EXPIRED notification
-```
-
-### Cancel Subscription
-```
-PATCH /subscriptions/cancel
-  1. Load user's active subscription
-  2. Set auto_renew=false, cancelled_at=now()
-  3. Status remains ACTIVE until end_date (no immediate cutoff)
-  4. Publish SUBSCRIPTION_CANCELLED notification
-```
-
----
-
-## 12.3 · API Endpoints
-
-```
-GET  /subscriptions/plans           Public
-POST /subscriptions/checkout        Authenticated
-GET  /subscriptions/me              Authenticated
-PATCH /subscriptions/cancel         Authenticated
-POST /subscriptions/apply-coupon    Authenticated (validate only)
-POST /webhooks/payment              Public (signature validated)
-```
-
----
-
-✅ **Batch 12 Complete When:**
-- Plans seeded in DB
-- Checkout creates payment and returns URL
-- Webhook handler activates subscription
-- Subscription expiry job runs and marks expired correctly
-- Playback endpoint blocks user with expired subscription
 
 ---
 

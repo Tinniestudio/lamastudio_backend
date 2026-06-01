@@ -254,8 +254,9 @@ The `User` entity remains unchanged structurally. The `Set<Role>` via `user_role
 |-----------|-------------|
 | V3 | Add `admins`, `admin_roles`, `admin_sessions` tables |
 | V4 | Add `user_sessions` table |
-| V5 | Add `coupons`, `coupon_redemptions` tables |
-| V6 | Add `content_limit` to `subscription_plans`; add `content_watches_used` to `user_subscriptions` |
-| V7 | Remove `ROLE_ADMIN` / `ROLE_SUPER_ADMIN` from `roles` + `user_roles`; add `AdminRoleName` seed if needed |
+| V5 | Add `subscription_plans`, `user_subscriptions` tables + seed FREE/SILVER/GOLD plans |
+| V6 | Add `coupons`, `coupon_redemptions` tables |
+| V7 | Add `content_limit` to `subscription_plans`; add `content_watches_used` to `user_subscriptions` |
+| V8 | Remove `ROLE_ADMIN` / `ROLE_SUPER_ADMIN` from `roles` + `user_roles`; seed `ROLE_PARTNER` |
 
 All migrations are additive except V7 (destructive removal of admin roles from user table). V7 must run after admin module is fully in place.

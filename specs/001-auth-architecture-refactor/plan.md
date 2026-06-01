@@ -134,9 +134,10 @@ src/main/resources/db/migration/
 ├── V2__seed_roles.sql                      # Existing — unchanged
 ├── V3__add_admin_tables.sql                # NEW
 ├── V4__add_user_sessions.sql               # NEW
-├── V5__add_coupons.sql                     # NEW
-├── V6__add_subscription_fields.sql         # NEW
-└── V7__remove_admin_roles_from_users.sql   # NEW
+├── V5__add_subscription_tables.sql         # NEW
+├── V6__add_coupons.sql                     # NEW
+├── V7__add_subscription_fields.sql         # NEW
+└── V8__remove_admin_roles_from_users.sql   # NEW
 
 src/test/java/com/lamastudio/backend/
 ├── admin/
@@ -177,12 +178,13 @@ The implementation is divided into ordered batches. Each batch must reach COMPLE
 **Deliverables**:
 - V3: `admins`, `admin_roles`, `admin_sessions` tables + triggers
 - V4: `user_sessions` table + indexes
-- V5: `coupons`, `coupon_redemptions` tables
-- V6: `content_limit` on `subscription_plans`, `content_watches_used` on `user_subscriptions`
+- V5: `subscription_plans`, `user_subscriptions` tables + seed data
+- V6: `coupons`, `coupon_redemptions` tables
+- V7: `content_limit` on `subscription_plans`, `content_watches_used` on `user_subscriptions`
 - JPA entities: `Admin`, `AdminSession`, `UserSession`, `Coupon`, `CouponRedemption`
 - Modified entities: `SubscriptionPlan.contentLimit`, `UserSubscription.contentWatchesUsed`
 - Repositories: `AdminRepository`, `AdminSessionRepository`, `UserSessionRepository`, `CouponRepository`, `CouponRedemptionRepository`
-- Modified enum: `RoleName` (remove admin roles — V7 migration deferred to Batch 5)
+- Modified enum: `RoleName` (remove admin roles — V8 migration deferred to Batch 6)
 
 **Completion gates**:
 - Flyway migrations run cleanly on a fresh DB
@@ -293,14 +295,14 @@ The implementation is divided into ordered batches. Each batch must reach COMPLE
   - `validateCoupon(code, userId)`: 4-rule validation (active, date window, uses count, uniqueness) — returns specific reason on failure
   - `redeemCoupon(couponId, userId, subscriptionId)`: atomic increment + redemption record insert in `@Transactional`
 - `Coupon` + `CouponRedemption` entities (from Batch 1) wired to service
-- V7 migration: remove `ROLE_ADMIN` / `ROLE_SUPER_ADMIN` from `roles` + `user_roles` tables (runs last to avoid FK issues during transition)
+- V8 migration: remove `ROLE_ADMIN` / `ROLE_SUPER_ADMIN` from `roles` + `user_roles` tables (runs last to avoid FK issues during transition)
 - Error codes: `expired`, `already_used`, `not_found`, `limit_reached` mapped to 400 responses
 
 **Completion gates**:
 - Concurrent checkout with same coupon code — only one redemption succeeds (DB constraint test)
 - All 4 invalid-coupon scenarios return correct error code
 - Valid coupon correctly reduces checkout price
-- V7 migration runs cleanly and removes admin roles from user table
+- V8 migration runs cleanly and removes admin roles from user table
 
 ---
 
@@ -312,4 +314,4 @@ The implementation is divided into ordered batches. Each batch must reach COMPLE
 | `securityValidation` | Batch 2 (filter chains) + Batch 3 (admin routes) + Batch 4 (session revocation) |
 | `integrationValidation` | Batch 3 (bootstrap → login → refresh → logout) + Batch 4 (session enforcement) |
 | `performanceValidation` | Batch 4 — Redis caching verified; no N+1 on session list; indexes applied |
-| `rollbackReadiness` | All Flyway migrations verified on fresh DB; V7 has documented rollback path |
+| `rollbackReadiness` | All Flyway migrations verified on fresh DB; V8 has documented rollback path |

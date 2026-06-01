@@ -44,7 +44,7 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
             log.info("Starting OAuth2 user provisioning for: {}", email);
             
             // Delegate user resolution, token issuance and response cookie handling to OAuth2Service
-            oAuth2Service.handleOAuthLogin(oAuth2User, response);
+            oAuth2Service.handleOAuthLogin(oAuth2User, request, response);
 
             String returnTo = extractReturnToFromState(request.getParameter("state"));
             UriComponentsBuilder redirectBuilder = UriComponentsBuilder

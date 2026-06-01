@@ -27,7 +27,7 @@ public class AuthProfileService {
     private final CapabilityService capabilityService;
 
     @Transactional(readOnly = true)
-    public AuthProfileResponse getProfile(UUID userId, UUID currentSessionId) {
+    public AuthProfileResponse getProfile(UUID userId, UUID currentSessionId, String message) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
@@ -38,6 +38,6 @@ public class AuthProfileService {
         List<SessionDto> sessions = sessionService.getActiveSessions(userId);
         boolean canWatch = capabilityService.canWatch(userId);
 
-        return AuthProfileResponse.of(user, sub, sessions, currentSessionId, canWatch);
+        return AuthProfileResponse.of(user, sub, sessions, currentSessionId, canWatch, message);
     }
 }

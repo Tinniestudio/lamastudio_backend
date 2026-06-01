@@ -67,7 +67,8 @@ class AuthControllerTest {
         req.setFirstName("Jane");
         req.setLastName("Doe");
 
-        AuthResponse response = AuthResponse.builder()
+        com.lamastudio.backend.modules.auth.user.dto.AuthProfileResponse response =
+            com.lamastudio.backend.modules.auth.user.dto.AuthProfileResponse.builder()
                 .userId(UUID.randomUUID())
                 .email(req.getEmail())
                 .roles(Set.of("ROLE_USER"))
@@ -102,7 +103,8 @@ class AuthControllerTest {
         req.setEmail("user@example.com");
         req.setPassword("Password1!");
 
-        AuthResponse response = AuthResponse.builder()
+        com.lamastudio.backend.modules.auth.user.dto.AuthProfileResponse response =
+            com.lamastudio.backend.modules.auth.user.dto.AuthProfileResponse.builder()
                 .userId(UUID.randomUUID())
                 .email(req.getEmail())
                 .roles(Set.of("ROLE_USER"))

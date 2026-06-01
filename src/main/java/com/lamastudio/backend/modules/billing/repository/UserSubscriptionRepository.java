@@ -12,4 +12,10 @@ import java.util.UUID;
 public interface UserSubscriptionRepository extends JpaRepository<UserSubscription, UUID> {
 
     Optional<UserSubscription> findByUserIdAndStatus(UUID userId, SubscriptionStatus status);
+
+    Optional<UserSubscription> findTopByUserIdOrderByCreatedAtDesc(UUID userId);
+
+    java.util.List<UserSubscription> findByStatusAndEndDateBefore(SubscriptionStatus status, java.time.Instant date);
+
+    java.util.List<UserSubscription> findByStatusAndAutoRenewFalseAndEndDateBetween(SubscriptionStatus status, java.time.Instant from, java.time.Instant to);
 }

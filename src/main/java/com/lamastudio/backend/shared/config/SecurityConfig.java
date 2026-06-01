@@ -21,7 +21,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
@@ -48,6 +47,7 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final UserDetailsServiceImpl userDetailsService;
     private final AdminUserDetailsServiceImpl adminUserDetailsService;
+    private final PasswordEncoder passwordEncoder;
 
     @Autowired
     public SecurityConfig(
@@ -60,7 +60,8 @@ public class SecurityConfig {
             OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler,
             @Lazy JwtAuthenticationFilter jwtAuthenticationFilter,
             @Lazy UserDetailsServiceImpl userDetailsService,
-            @Lazy AdminUserDetailsServiceImpl adminUserDetailsService
+            @Lazy AdminUserDetailsServiceImpl adminUserDetailsService,
+            PasswordEncoder passwordEncoder
     ) {
         this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
         this.jwtAccessDeniedHandler = jwtAccessDeniedHandler;
@@ -72,6 +73,7 @@ public class SecurityConfig {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.userDetailsService = userDetailsService;
         this.adminUserDetailsService = adminUserDetailsService;
+        this.passwordEncoder = passwordEncoder;
     }
 
     // ── Admin filter chain — @Order(1) covers /auth/admin/** ──────────────────
@@ -129,6 +131,10 @@ public class SecurityConfig {
         "/api/v1/oauth2/**",
         "/auth/oauth2/authorize/**",
         "/api/v1/auth/oauth2/authorize/**",
+        "/subscriptions/plans",
+        "/api/v1/subscriptions/plans",
+        "/webhooks/stripe",
+        "/api/v1/webhooks/stripe",
         "/actuator/health",
         "/swagger-ui.html",
         "/swagger-ui/**",
@@ -176,18 +182,13 @@ public class SecurityConfig {
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
         provider.setUserDetailsService(userDetailsService);
-        provider.setPasswordEncoder(passwordEncoder());
+        provider.setPasswordEncoder(passwordEncoder);
         return provider;
     }
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(12);
     }
 
     @Bean

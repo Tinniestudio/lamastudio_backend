@@ -41,8 +41,10 @@
 
 - [x] T007 Write Flyway migration `src/main/resources/db/migration/V3__add_admin_tables.sql`: create `admins`, `admin_roles`, `admin_sessions` tables with all constraints, indexes, and `updated_at` trigger on `admins`
 - [x] T008 Write Flyway migration `src/main/resources/db/migration/V4__add_user_sessions.sql`: create `user_sessions` table with `idx_user_sessions_user_id` and `idx_user_sessions_active` partial index
-- [x] T009 Write Flyway migration `src/main/resources/db/migration/V5__add_coupons.sql`: create `coupons` and `coupon_redemptions` tables; add `UNIQUE (coupon_id, user_id)` constraint
-- [x] T010 Write Flyway migration `src/main/resources/db/migration/V6__add_subscription_fields.sql`: `ALTER TABLE subscription_plans ADD COLUMN content_limit INT; ALTER TABLE user_subscriptions ADD COLUMN content_watches_used INT NOT NULL DEFAULT 0;`
+- [x] T009 Write Flyway migration `src/main/resources/db/migration/V6__add_coupons.sql`: create `coupons` and `coupon_redemptions` tables; add `UNIQUE (coupon_id, user_id)` constraint
+- [x] T010 Write Flyway migration `src/main/resources/db/migration/V7__add_subscription_fields.sql`: `ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS content_limit INT; ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS content_watches_used INT NOT NULL DEFAULT 0;`
+
+> **Note**: V5 (`V5__add_subscription_tables.sql`) creates `subscription_plans` and `user_subscriptions` and is tracked separately. Migration order in filesystem is V3→V4→V5→V6→V7→V8.
 
 ### 2B — JPA Entities (parallelizable after T007–T010)
 
@@ -52,7 +54,7 @@
 - [x] T014 [P] Create `src/main/java/com/lamastudio/backend/modules/auth/user/entity/UserSession.java` JPA entity mapping `user_sessions` table; include `revokedByAdminId` FK field
 - [x] T015 [P] Create `src/main/java/com/lamastudio/backend/shared/entity/Coupon.java` JPA entity with `DomainEnums.DiscountType` enum (add PERCENTAGE, FIXED to `DomainEnums.java`)
 - [x] T016 [P] Create `src/main/java/com/lamastudio/backend/shared/entity/CouponRedemption.java` JPA entity
-- [x] T017 [P] Modify `src/main/java/com/lamastudio/backend/shared/entity/RoleName.java`: remove `ROLE_ADMIN` and `ROLE_SUPER_ADMIN` values (V7 migration runs in Batch 6 — code change first)
+- [x] T017 [P] Modify `src/main/java/com/lamastudio/backend/shared/entity/RoleName.java`: remove `ROLE_ADMIN` and `ROLE_SUPER_ADMIN` values (V8 migration runs in Batch 6 — code change first)
 - [x] T018 [P] Modify `src/main/java/com/lamastudio/backend/shared/entity/SubscriptionPlan.java`: add `private Integer contentLimit;` field
 - [x] T019 [P] Modify `src/main/java/com/lamastudio/backend/shared/entity/UserSubscription.java`: add `private int contentWatchesUsed = 0;` field
 
@@ -189,7 +191,7 @@
 ### Tests for US5
 
 - [x] T067 [P] [US5] Add to `SessionServiceTest.java`: (a) valid session + matching hash → new hash stored, Redis TTL reset, old token invalid; (b) valid session + non-matching hash (replay) → session revoked in DB + Redis deleted → throws `InvalidTokenException`
-- [x] T068 [P] [US5] Write integration test `src/test/java/com/lamastudio/backend/session/TokenRotationIntegrationTest.java`: login → refresh → replay original token → 401
+- [x] T068 [P] [US5] Write integration test `src/test/java/com/lamastudio/backend/session/TokenRotationIntegrationTest.java`: login → refresh → replay original token → 401; confirm all sessions are revoked after replay (validates SC-003)
 
 ### Implementation for US5
 
@@ -211,7 +213,7 @@
 ### Tests for US6
 
 - [x] T073 [P] [US6] Write unit test `src/test/java/com/lamastudio/backend/auth/service/AuthProfileServiceTest.java`: (a) user with FREE sub + 1 session → all three domains present; (b) calling session ID matches → `current: true` on that session; (c) `canWatch: false` when quota exhausted
-- [x] T074 [P] [US6] Write integration test: `GET /auth/me` after login → validate full response shape matches contracts/api-contracts.md
+- [x] T074 [P] [US6] Write integration test: `GET /auth/me` after login → validate full response shape matches `contracts/api-contracts.md`
 
 ### Implementation for US6
 
@@ -289,24 +291,41 @@
 - [x] T098 [US9] Create `src/main/java/com/lamastudio/backend/modules/billing/dto/CouponValidationResult.java` with `valid`, `reason`, `discountType`, `discountValue` fields
 - [x] T099 [US9] Implement `src/main/java/com/lamastudio/backend/modules/billing/service/CouponService.java` interface with `CouponValidationResult validateCoupon(String code, UUID userId)` and `void redeemCoupon(UUID couponId, UUID userId, UUID subscriptionId)`
 - [x] T100 [US9] Implement `src/main/java/com/lamastudio/backend/modules/billing/service/CouponServiceImpl.java`: `validateCoupon()` — lookup by code; check `isActive`; check date window; check `usesCount < maxUses`; check `couponRedemptionRepository.existsByCouponIdAndUserId()`; `redeemCoupon()` — `@Transactional`: `UPDATE coupons SET uses_count = uses_count + 1 WHERE id = ?`; insert `CouponRedemption`; DB UNIQUE constraint on `(coupon_id, user_id)` catches concurrent duplicate attempts
-- [x] T101 [US9] Write Flyway migration `src/main/resources/db/migration/V7__remove_admin_roles_from_users.sql`: `DELETE FROM user_roles WHERE role_id IN (SELECT id FROM roles WHERE name IN ('ROLE_ADMIN','ROLE_SUPER_ADMIN')); DELETE FROM roles WHERE name IN ('ROLE_ADMIN','ROLE_SUPER_ADMIN');`
+- [x] T101 [US9] Write Flyway migration `src/main/resources/db/migration/V8__remove_admin_roles_from_users.sql`: `DELETE FROM user_roles WHERE role_id IN (SELECT id FROM roles WHERE name IN ('ROLE_ADMIN','ROLE_SUPER_ADMIN')); DELETE FROM roles WHERE name IN ('ROLE_ADMIN','ROLE_SUPER_ADMIN'); INSERT INTO roles (name) VALUES ('ROLE_PARTNER') ON CONFLICT DO NOTHING;`
 - [x] T102 [US9] Run all US9 tests and confirm they pass
 
 **Checkpoint**: All 9 user stories complete. Full feature is functional.
 
 ---
 
+## Phase 12: Entity–DB Alignment & Documentation Fixes
+
+**Purpose**: Address findings from `/speckit-analyze` (2026-05-31). Correct JPA entity declarations to precisely match the Flyway-owned schema. Fix migration reference drift in documentation artifacts.
+
+**⚠️ NOTE**: These tasks do NOT change DB schema or service behavior. All changes are JPA annotation corrections and documentation fixes only.
+
+- [x] T103 [P] Fix `src/main/java/com/lamastudio/backend/shared/entity/BaseEntity.java`: change `@GeneratedValue` to `@GeneratedValue(strategy = GenerationType.UUID)` to make UUID generation strategy explicit under Hibernate 6
+- [x] T104 [P] Fix `src/main/java/com/lamastudio/backend/shared/entity/User.java` index annotations: update `idx_users_provider_id` to `columnList = "provider, provider_id"` (composite, matching V1 migration); add `@Index(name = "idx_users_deleted_at", columnList = "deleted_at")` to the `@Table` indexes array (was in migration, absent from entity)
+- [x] T105 [P] Fix `src/main/java/com/lamastudio/backend/shared/entity/SubscriptionPlan.java` column constraints to match `subscription_plans` table (V5 migration): add `@Column(nullable = false, length = 100)` on `name`; add `precision = 10, scale = 2` to `price` `@Column`; add `@Column(length = 3)` on `currency`; add `@Column(length = 20)` on `billingCycle` and `videoQuality`; add `@Column(name = "is_active", nullable = false)` on `isActive`
+- [x] T106 [P] Fix `src/main/java/com/lamastudio/backend/shared/entity/UserSubscription.java` column constraints to match `user_subscriptions` table (V5 migration): add `@Column(nullable = false)` on `status`; add `@Column(nullable = false)` on `autoRenew`
+- [x] T107 [P] Fix documentation migration references: update `specs/001-auth-architecture-refactor/quickstart.md` "V3–V6 migrations" → "V3–V8"; update `specs/001-auth-architecture-refactor/plan.md` Batch 1 deliverables and Batch 6 — V5→V6 (coupons), V6→V7 (subscription fields), V7→V8 (remove admin roles); update `specs/001-auth-architecture-refactor/data-model.md` Flyway Migration Order table to match actual V3–V8 filenames
+- [x] T108 Run full Flyway migration sequence V3→V8 on fresh PostgreSQL database via Testcontainers to confirm all 6 migrations apply cleanly in order
+- [x] T109 Verify application startup with entity changes: `mvn compile` — clean, no HibernateException or compilation errors
+
+**Checkpoint**: All entity `@Column` annotations precisely match the Flyway-owned DB schema. Documentation references correct migration filenames. Full migration sequence verified on fresh DB.
+
+---
+
 ## Final Phase: Polish & Cross-Cutting Concerns
 
-- [x] T103 [P] Add SpringDoc/OpenAPI annotations to all new admin endpoints in `AdminAuthController.java` (operation summaries, response schemas, security schemes for `admin_access_token` cookie)
-- [x] T104 [P] Add SpringDoc/OpenAPI annotation to enhanced `AuthController.me()` documenting the new `subscription` and `devices` response fields
-- [x] T105 [P] Review all new service classes for `@Value` annotation usage — replace any with `@ConfigurationProperties`-bound values (constitution drift check)
-- [x] T106 [P] Review all new service classes for direct `RedisTemplate` injection — replace any with `CacheService` calls (constitution drift check)
-- [x] T107 Run `speckit-analyze` cross-artifact consistency check
-- [x] T108 Run full test suite — confirm all tests pass
-- [x] T109 Run Flyway migration sequence V3→V7 on fresh PostgreSQL database — confirm all migrations apply cleanly
-- [x] T110 Validate `quickstart.md` steps work end-to-end on local environment
-- [x] T111 [P] Add `UserSession.deviceName` UA parser utility: create `src/main/java/com/lamastudio/backend/shared/util/DeviceNameParser.java` (simple regex-based, no external dependency) if not extracted during SessionService implementation
+- [x] T110 [P] Add SpringDoc/OpenAPI annotations to all new admin endpoints in `AdminAuthController.java` (operation summaries, response schemas, security schemes for `admin_access_token` cookie)
+- [x] T111 [P] Add SpringDoc/OpenAPI annotation to enhanced `AuthController.me()` documenting the new `subscription` and `devices` response fields
+- [x] T112_old [P] Review all new service classes for `@Value` annotation usage — replace any with `@ConfigurationProperties`-bound values (constitution drift check)
+- [x] T113_old [P] Review all new service classes for direct `RedisTemplate` injection — replace any with `CacheService` calls (constitution drift check)
+- [ ] T114_old Run `speckit-analyze` cross-artifact consistency check (re-run after Phase 12 completes)
+- [ ] T115_old Run full test suite — confirm all tests pass
+- [ ] T116_old Run `quickstart.md` steps end-to-end on local environment
+- [ ] T117_old [P] Add `UserSession.deviceName` UA parser utility: create `src/main/java/com/lamastudio/backend/shared/util/DeviceNameParser.java` (simple regex-based, no external dependency) if not extracted during SessionService implementation
 
 ---
 
@@ -329,7 +348,8 @@
 - **US7 Content Quota (Phase 9)**: Depends on Phase 6 (UserSubscription auto-creation in register)
 - **US8 Force-Logout (Phase 10)**: Depends on Phase 6+7 (revokeSession implementations)
 - **US9 Coupon (Phase 11)**: Depends on Phase 2 (Coupon entities) — otherwise independent of other stories
-- **Polish (Final)**: Depends on all stories complete
+- **Entity Alignment (Phase 12)**: Independent — can run at any time; no service behavior change
+- **Polish (Final)**: Depends on all stories + Phase 12 complete
 
 ### User Story Dependencies
 
@@ -354,6 +374,9 @@
 **Phase 2D** (partially parallel with 2B/2C):
 - T025 (test) + T027 (AdminJwtTokenProvider) can run together
 
+**Phase 12** (all parallelizable — different files):
+- T103 BaseEntity, T104 User, T105 SubscriptionPlan, T106 UserSubscription, T107 docs — all run in parallel
+
 ---
 
 ## Parallel Example: User Story 4 (Device Enforcement)
@@ -369,6 +392,19 @@ Task T063: SessionServiceImpl.createSession()
 # Then wire into AuthService (depends on T063):
 Task T064: AuthService.login() enhanced
 Task T065: AuthService.register() - UserSubscription creation
+```
+
+---
+
+## Parallel Example: Phase 12 (Entity Alignment)
+
+```bash
+# All run in parallel — no shared files:
+Task T103: BaseEntity.java - @GeneratedValue strategy
+Task T104: User.java - index corrections
+Task T105: SubscriptionPlan.java - @Column constraints
+Task T106: UserSubscription.java - @Column nullable
+Task T107: quickstart.md + plan.md - migration reference fixes
 ```
 
 ---
@@ -392,6 +428,7 @@ Task T065: AuthService.register() - UserSubscription creation
 4. Add US6 → enriched `/auth/me` live
 5. Add US7 → free tier quota enforcement live
 6. Add US8 + US9 → admin controls + coupon system live
+7. Phase 12 → entity-DB alignment hardened
 
 ### Parallel Team Strategy
 
@@ -407,5 +444,7 @@ With two developers after Phase 2:
 - All `[P]` tasks operate on different files — no write conflicts
 - TDD is enforced: every test task must fail before its corresponding implementation task runs
 - Each user story phase ends with a **Checkpoint** — validate independently before proceeding
-- V7 migration (T101) runs last intentionally — removes admin roles from user table only after admin module is fully deployed
-- `CacheService` interface is assumed to exist or be created in Phase 2 foundation — if not yet implemented, add `T_CACHE: Create CacheService interface + RedisTemplateCacheService implementation in src/main/java/com/lamastudio/backend/shared/cache/` before T063
+- V8 migration (T101) runs last intentionally — removes admin roles from user table only after admin module is fully deployed
+- Migration order in filesystem: V3→V4→V5(subscription\_tables)→V6(coupons)→V7(subscription\_fields)→V8(remove\_admin\_roles)
+- `CacheService` interface is assumed to exist — if not yet implemented, add before T063
+- Phase 12 tasks are annotation-only changes — no behavior change, no new migrations required

@@ -16,5 +16,7 @@ public interface SessionService {
 
     void revokeAllUserSessions(UUID userId, UUID adminId);
 
+    void revokeAllExcept(UUID userId, UUID currentSessionId);
+
     List<SessionDto> getActiveSessions(UUID userId);
 }
