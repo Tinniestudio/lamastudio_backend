@@ -1,7 +1,10 @@
 package com.lamastudio.backend.modules.user.service;
 
 import com.lamastudio.backend.modules.auth.service.EmailService;
+import com.lamastudio.backend.modules.auth.user.dto.SessionDto;
 import com.lamastudio.backend.modules.auth.user.service.SessionService;
+import com.lamastudio.backend.modules.billing.repository.UserSubscriptionRepository;
+import com.lamastudio.backend.modules.billing.service.CapabilityService;
 import com.lamastudio.backend.modules.user.dto.AvatarConfirmRequest;
 import com.lamastudio.backend.modules.user.dto.AvatarUpdateRequest;
 import com.lamastudio.backend.modules.user.dto.AvatarUploadResponse;
@@ -12,8 +15,10 @@ import com.lamastudio.backend.modules.user.dto.UserProfileResponse;
 import com.lamastudio.backend.modules.user.repository.UserProfileRepository;
 import com.lamastudio.backend.shared.config.StripeProperties;
 import com.lamastudio.backend.shared.entity.DomainEnums.AuthProvider;
+import com.lamastudio.backend.shared.entity.DomainEnums.SubscriptionStatus;
 import com.lamastudio.backend.shared.entity.User;
 import com.lamastudio.backend.shared.entity.UserProfile;
+import com.lamastudio.backend.shared.entity.UserSubscription;
 import com.lamastudio.backend.shared.exception.BadRequestException;
 import com.lamastudio.backend.shared.exception.ResourceNotFoundException;
 import com.lamastudio.backend.shared.storage.PresignedUploadResult;
@@ -26,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -47,13 +53,21 @@ public class UserProfileServiceImpl implements UserProfileService {
     private final EmailService emailService;
     private final StorageService storageService;
     private final StripeProperties stripeProperties;
+    private final UserSubscriptionRepository userSubscriptionRepository;
+    private final CapabilityService capabilityService;
 
     @Override
     @Transactional(readOnly = true)
     public UserProfileResponse getProfile(UUID userId) {
         User user = loadUser(userId);
-        UserProfile profile = userProfileRepository.findByUserId(userId).orElse(null);
-        return UserProfileResponse.from(user, profile);
+        UserSubscription sub = userSubscriptionRepository
+                .findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE)
+                .orElse(null);
+        List<SessionDto> sessions = sessionService.getActiveSessions(userId);
+        boolean canWatch = capabilityService.canWatch(userId);
+        UserProfile profile = userProfileRepository.findByUserId(userId)
+            .orElseGet(() -> createEmptyProfile(user));
+        return UserProfileResponse.from(user, profile, sub, sessions, canWatch);
     }
 
     @Override
@@ -79,7 +93,7 @@ public class UserProfileServiceImpl implements UserProfileService {
 
         userRepository.save(user);
         userProfileRepository.save(profile);
-        return UserProfileResponse.from(user, profile);
+        return UserProfileResponse.from(user, profile, null, null, capabilityService.canWatch(userId));
     }
 
     @Override

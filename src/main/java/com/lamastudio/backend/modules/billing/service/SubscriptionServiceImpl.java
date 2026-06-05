@@ -111,6 +111,8 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         String cancelUrl  = frontendUrl + "/checkout/cancelled";
 
         Payment payment = new Payment();
+        // Pre-generate id so Stripe metadata can include it before persistence.
+        payment.setId(UUID.randomUUID());
         payment.setUserId(userId);
         payment.setPlanId(plan.getId());
         payment.setAmount(finalAmount);
@@ -119,7 +121,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         payment.setCouponId(couponId);
         payment.setDiscountAmount(discountAmount);
         payment.setStatus(PaymentStatus.PENDING);
-        payment = paymentRepository.save(payment);
 
         StripeService.CreateCheckoutResult checkout = stripeService.createCheckoutSession(
             amountCents,

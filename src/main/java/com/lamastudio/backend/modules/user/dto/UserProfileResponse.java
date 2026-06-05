@@ -1,12 +1,17 @@
 package com.lamastudio.backend.modules.user.dto;
 
+import com.lamastudio.backend.modules.auth.user.dto.SessionDto;
 import com.lamastudio.backend.shared.entity.User;
 import com.lamastudio.backend.shared.entity.UserProfile;
+import com.lamastudio.backend.shared.entity.UserSubscription;
+
 import lombok.Builder;
 import lombok.Getter;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -32,8 +37,11 @@ public class UserProfileResponse {
     private boolean notificationEmail;
     private Set<String> roles;
     private Instant createdAt;
+    private Optional<UserSubscription> subscription;
+    private Optional<List<SessionDto>> sessions;
+    private Optional<Boolean> canWatch;
 
-    public static UserProfileResponse from(User user, UserProfile profile) {
+    public static UserProfileResponse from(User user, UserProfile profile, UserSubscription sub, List<SessionDto> sessions, boolean canWatch) {
         return UserProfileResponse.builder()
                 .userId(user.getId())
                 .email(user.getEmail())
@@ -52,6 +60,9 @@ public class UserProfileResponse {
                 .notificationEmail(profile == null || profile.isNotificationEmail())
                 .roles(user.getRoles().stream().map(r -> r.getName().name()).collect(Collectors.toSet()))
                 .createdAt(user.getCreatedAt())
+                .subscription(Optional.ofNullable(sub))
+                .sessions(Optional.ofNullable(sessions))
+                .canWatch(Optional.ofNullable(canWatch))
                 .build();
     }
 }

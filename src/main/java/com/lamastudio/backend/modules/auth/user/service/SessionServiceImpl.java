@@ -5,7 +5,6 @@ import com.lamastudio.backend.modules.auth.user.dto.SessionDto;
 import com.lamastudio.backend.modules.auth.user.entity.UserSession;
 import com.lamastudio.backend.modules.auth.user.repository.UserSessionRepository;
 import com.lamastudio.backend.modules.billing.repository.UserSubscriptionRepository;
-import com.lamastudio.backend.shared.entity.UserSubscription;
 import com.lamastudio.backend.shared.cache.CacheService;
 import com.lamastudio.backend.shared.config.AppProperties;
 import com.lamastudio.backend.shared.entity.DomainEnums.SubscriptionStatus;
@@ -38,7 +37,6 @@ public class SessionServiceImpl implements SessionService {
     private final UserSubscriptionRepository userSubscriptionRepository;
     private final PasswordEncoder passwordEncoder;
     private final CacheService cacheService;
-    private final AppProperties appProperties;
 
     private static final String SESSION_KEY_PREFIX = "tinnie:session:";
     private static final Duration SESSION_TTL = Duration.ofDays(7);
