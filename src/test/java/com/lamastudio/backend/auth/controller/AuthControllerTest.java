@@ -83,8 +83,8 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.email").value(req.getEmail()))
-                .andExpect(jsonPath("$.roles[0]").value("ROLE_USER"));
+                .andExpect(jsonPath("$.data.email").value(req.getEmail()))
+                .andExpect(jsonPath("$.data.roles[0]").value("ROLE_USER"));
     }
 
     @Test
@@ -118,8 +118,8 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.email").value(req.getEmail()))
-                .andExpect(jsonPath("$.emailVerified").value(true));
+                .andExpect(jsonPath("$.data.email").value(req.getEmail()))
+                .andExpect(jsonPath("$.data.emailVerified").value(true));
     }
 
     @Test

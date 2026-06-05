@@ -1,6 +1,7 @@
 package com.lamastudio.backend.modules.user.dto;
 
 import com.lamastudio.backend.modules.auth.user.dto.SessionDto;
+import com.lamastudio.backend.shared.entity.DomainEnums.SubscriptionStatus;
 import com.lamastudio.backend.shared.entity.User;
 import com.lamastudio.backend.shared.entity.UserProfile;
 import com.lamastudio.backend.shared.entity.UserSubscription;
@@ -11,7 +12,6 @@ import lombok.Getter;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -19,6 +19,28 @@ import java.util.stream.Collectors;
 @Getter
 @Builder
 public class UserProfileResponse {
+
+    @Getter
+    @Builder
+    public static class SubscriptionSummary {
+        private UUID subscriptionId;
+        private String planName;
+        private SubscriptionStatus status;
+        private Instant startDate;
+        private Instant endDate;
+        private boolean autoRenew;
+
+        static SubscriptionSummary from(UserSubscription sub) {
+            return SubscriptionSummary.builder()
+                    .subscriptionId(sub.getId())
+                    .planName(sub.getPlan() != null ? sub.getPlan().getName() : null)
+                    .status(sub.getStatus())
+                    .startDate(sub.getStartDate())
+                    .endDate(sub.getEndDate())
+                    .autoRenew(Boolean.TRUE.equals(sub.getAutoRenew()))
+                    .build();
+        }
+    }
 
     private UUID userId;
     private String email;
@@ -37,9 +59,9 @@ public class UserProfileResponse {
     private boolean notificationEmail;
     private Set<String> roles;
     private Instant createdAt;
-    private Optional<UserSubscription> subscription;
-    private Optional<List<SessionDto>> sessions;
-    private Optional<Boolean> canWatch;
+    private SubscriptionSummary subscription;
+    private List<SessionDto> sessions;
+    private Boolean canWatch;
 
     public static UserProfileResponse from(User user, UserProfile profile, UserSubscription sub, List<SessionDto> sessions, boolean canWatch) {
         return UserProfileResponse.builder()
@@ -60,9 +82,9 @@ public class UserProfileResponse {
                 .notificationEmail(profile == null || profile.isNotificationEmail())
                 .roles(user.getRoles().stream().map(r -> r.getName().name()).collect(Collectors.toSet()))
                 .createdAt(user.getCreatedAt())
-                .subscription(Optional.ofNullable(sub))
-                .sessions(Optional.ofNullable(sessions))
-                .canWatch(Optional.ofNullable(canWatch))
+                .subscription(sub != null ? SubscriptionSummary.from(sub) : null)
+                .sessions(sessions)
+                .canWatch(canWatch)
                 .build();
     }
 }
