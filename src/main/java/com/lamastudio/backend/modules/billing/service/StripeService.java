@@ -20,5 +20,13 @@ public interface StripeService {
 
     Event constructWebhookEvent(String payload, String sigHeader);
 
+    /**
+     * Retrieves a Stripe Checkout Session and returns its current payment status.
+     * Used to manually verify payment when a webhook was missed or delayed.
+     */
+    VerifySessionResult verifyCheckoutSession(String checkoutSessionId);
+
     record CreateCheckoutResult(String checkoutSessionId, String paymentIntentId, String checkoutUrl) {}
+
+    record VerifySessionResult(String checkoutSessionId, String paymentIntentId, boolean paid, String status) {}
 }

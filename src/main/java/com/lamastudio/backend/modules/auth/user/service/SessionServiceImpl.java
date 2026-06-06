@@ -6,7 +6,6 @@ import com.lamastudio.backend.modules.auth.user.entity.UserSession;
 import com.lamastudio.backend.modules.auth.user.repository.UserSessionRepository;
 import com.lamastudio.backend.modules.billing.repository.UserSubscriptionRepository;
 import com.lamastudio.backend.shared.cache.CacheService;
-import com.lamastudio.backend.shared.config.AppProperties;
 import com.lamastudio.backend.shared.entity.DomainEnums.SubscriptionStatus;
 import com.lamastudio.backend.shared.util.DeviceNameParser;
 
@@ -80,30 +79,18 @@ public class SessionServiceImpl implements SessionService {
         return session.getId();
     }
 
-    // ── Validate + Rotate ─────────────────────────────────────────────────────
+    // ── Validate ──────────────────────────────────────────────────────────────
 
     @Override
     @Transactional
-    public void validateAndRotate(UUID userId, UUID sessionId, String rawOldRefreshToken,
-                                   String newRawRefreshToken) {
-        if (!cacheService.exists(sessionKey(userId, sessionId))) {
-            throw new InvalidTokenException("Session not found or revoked");
-        }
-
+    public void validateSession(UUID userId, UUID sessionId) {
         UserSession session = userSessionRepository
                 .findByUserIdAndIdAndRevokedFalse(userId, sessionId)
-                .orElseThrow(() -> new InvalidTokenException("Session is revoked"));
+                .orElseThrow(() -> new InvalidTokenException("Session not found or revoked"));
 
-        if (!passwordEncoder.matches(rawOldRefreshToken, session.getRefreshTokenHash())) {
-            session.revoke(null);
-            userSessionRepository.save(session);
-            cacheService.delete(sessionKey(userId, sessionId));
-            throw new InvalidTokenException("Refresh token has been rotated — possible replay attack");
-        }
-
-        session.setRefreshTokenHash(passwordEncoder.encode(newRawRefreshToken));
         session.setLastUsedAt(Instant.now());
         userSessionRepository.save(session);
+        // Restore cache entry if it expired (e.g., Redis eviction under memory pressure)
         cacheService.set(sessionKey(userId, sessionId), "1", SESSION_TTL);
     }
 
@@ -171,9 +158,12 @@ public class SessionServiceImpl implements SessionService {
     private int resolveMaxDevices(UUID userId) {
         return userSubscriptionRepository
                 .findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE)
-                .map(sub -> sub.getPlan() != null && sub.getPlan().getMaxDevices() != null
-                        ? sub.getPlan().getMaxDevices()
-                        : DEFAULT_MAX_DEVICES)
+                // Ignore subscriptions whose billing period has already ended —
+                // the nightly expiration job may not have run yet.
+                .filter(sub -> sub.getEndDate() == null || !sub.getEndDate().isBefore(Instant.now()))
+                // Read the snapshotted value written at subscription time, not the live plan,
+                // so admin plan edits don't silently change existing subscribers' device limits.
+                .map(sub -> sub.getMaxDevices() != null ? sub.getMaxDevices() : DEFAULT_MAX_DEVICES)
                 .orElse(DEFAULT_MAX_DEVICES);
     }
 

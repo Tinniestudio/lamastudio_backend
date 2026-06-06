@@ -59,7 +59,7 @@ public class AuthProfileResponse {
 
                 SubscriptionDto subscriptionDto = null;
                 if (sub != null && sub.getPlan() != null) {
-                        Integer maxDevices = sub.getPlan().getMaxDevices() != null ? sub.getPlan().getMaxDevices() : 1;
+                        int maxDevices = sub.getMaxDevices() != null ? sub.getMaxDevices() : 1;
                         subscriptionDto = SubscriptionDto.builder()
                                         .plan(sub.getPlan().getName())
                                         .status(sub.getStatus().name())

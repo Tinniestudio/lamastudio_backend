@@ -108,7 +108,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         long amountCents = finalAmount.multiply(BigDecimal.valueOf(100)).longValue();
         String frontendUrl = appProperties.getFrontendUrl();
         String successUrl = frontendUrl + "/checkout/success?session_id={CHECKOUT_SESSION_ID}";
-        String cancelUrl  = frontendUrl + "/checkout/cancelled";
+        String cancelUrl = frontendUrl + "/checkout/cancelled";
 
         Payment payment = new Payment();
         // Pre-generate id so Stripe metadata can include it before persistence.
@@ -123,16 +123,16 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         payment.setStatus(PaymentStatus.PENDING);
 
         StripeService.CreateCheckoutResult checkout = stripeService.createCheckoutSession(
-            amountCents,
-            payment.getCurrency(),
-            plan.getName(),
-            successUrl,
-            cancelUrl,
-            Map.of("paymentId", payment.getId().toString(), "userId", userId.toString())
-        );
+                amountCents,
+                payment.getCurrency(),
+                plan.getName(),
+                successUrl,
+                cancelUrl,
+                Map.of("paymentId", payment.getId().toString(), "userId", userId.toString()));
 
         payment.setProviderReference(checkout.paymentIntentId() != null
-            ? checkout.paymentIntentId() : checkout.checkoutSessionId());
+                ? checkout.paymentIntentId()
+                : checkout.checkoutSessionId());
         paymentRepository.save(payment);
 
         return CheckoutResponse.builder()
@@ -171,9 +171,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
         Instant now = Instant.now();
         Instant endDate = "YEARLY".equalsIgnoreCase(
-            plan.getBillingCycle() != null ? plan.getBillingCycle().name() : "MONTHLY")
-            ? now.plus(365, ChronoUnit.DAYS)
-            : now.plus(30, ChronoUnit.DAYS);
+                plan.getBillingCycle() != null ? plan.getBillingCycle().name() : "MONTHLY")
+                        ? now.plus(365, ChronoUnit.DAYS)
+                        : now.plus(30, ChronoUnit.DAYS);
 
         // Deactivate any existing FREE subscription
         subscriptionRepository.findByUserIdAndStatus(payment.getUserId(), SubscriptionStatus.ACTIVE)
@@ -190,6 +190,8 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         subscription.setStartDate(now);
         subscription.setEndDate(endDate);
         subscription.setContentWatchesUsed(0);
+        // Snapshot plan limits at activation time so future plan edits don't affect existing subscribers
+        subscription.setMaxDevices(plan.getMaxDevices() != null ? plan.getMaxDevices() : 1);
         subscription = subscriptionRepository.save(subscription);
 
         payment.setSubscriptionId(subscription.getId());
@@ -203,7 +205,8 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         }
         paymentRepository.save(payment);
 
-        // Send activation email (respects notificationEmail preference via EmailService)
+        // Send activation email (respects notificationEmail preference via
+        // EmailService)
         notifyUser(payment.getUserId(), plan.getName(), true, null);
         log.info("Subscription activated: userId={}, plan={}", payment.getUserId(), plan.getName());
     }
@@ -242,21 +245,37 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         if (sub == null) {
             return SubscriptionStatusResponse.builder()
                     .plan("FREE").status("ACTIVE").autoRenew(false)
-                    .contentWatchesUsed(0).contentWatchesLimit(2)
+                    .maxDevices(1).contentWatchesUsed(0).contentWatchesLimit(2)
                     .payments(paymentHistory).build();
         }
 
-        String planName = sub.getPlan() != null ? sub.getPlan().getName() : "FREE";
-        Integer contentLimit = sub.getPlan() != null ? sub.getPlan().getContentLimit() : 2;
+        // Treat subscription as expired if end date has passed, regardless of stored status
+        Instant now = Instant.now();
+        boolean periodExpired = sub.getEndDate() != null && sub.getEndDate().isBefore(now);
+        String effectiveStatus = periodExpired ? SubscriptionStatus.EXPIRED.name() : sub.getStatus().name();
+
+        SubscriptionPlan subPlan = sub.getPlan();
+        String planName = (subPlan != null && !periodExpired) ? subPlan.getName() : "FREE";
+
+        // Use snapshotted maxDevices; fall back to 1 if the migration backfill didn't cover it
+        int maxDevices = periodExpired ? 1 : (sub.getMaxDevices() != null ? sub.getMaxDevices() : 1);
+
+        // For active paid plans, null contentLimit means unlimited — only fall back to
+        // the FREE limit (2) when the subscription is expired or on the FREE plan.
+        boolean isFreeOrExpired = periodExpired || subPlan == null
+                || "FREE".equalsIgnoreCase(subPlan.getName());
+        // Integer.valueOf(2) keeps both ternary branches as Integer, preventing auto-unbox of a null contentLimit
+        Integer contentLimit = isFreeOrExpired ? Integer.valueOf(2) : subPlan.getContentLimit();
 
         return SubscriptionStatusResponse.builder()
                 .subscriptionId(sub.getId())
                 .plan(planName)
-                .status(sub.getStatus().name())
+                .status(effectiveStatus)
                 .startDate(sub.getStartDate())
                 .endDate(sub.getEndDate())
                 .autoRenew(Boolean.TRUE.equals(sub.getAutoRenew()))
                 .cancelledAt(sub.getCancelledAt() != null ? sub.getCancelledAt() : null)
+                .maxDevices(maxDevices)
                 .contentWatchesUsed(sub.getContentWatchesUsed())
                 .contentWatchesLimit(contentLimit)
                 .payments(paymentHistory)
@@ -282,12 +301,58 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         log.info("Subscription cancelled: userId={}, endDate={}", userId, sub.getEndDate());
     }
 
+    @Override
+    @Transactional
+    public SubscriptionStatusResponse verifyPayment(UUID userId, UUID paymentId) {
+        Payment payment = paymentRepository.findByIdAndUserId(paymentId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
+
+        if (payment.getStatus() == PaymentStatus.SUCCESSFUL) {
+            log.info("Payment {} already successful, skipping Stripe verification", paymentId);
+            return getSubscriptionStatus(userId);
+        }
+
+        if (payment.getStatus() == PaymentStatus.FAILED) {
+            throw new BadRequestException("Payment has already failed and cannot be recovered");
+        }
+
+        String ref = payment.getProviderReference();
+        if (ref == null || ref.isBlank()) {
+            throw new BadRequestException("No payment reference found for this payment");
+        }
+
+        StripeService.VerifySessionResult result = stripeService.verifyCheckoutSession(ref);
+
+        log.info("Stripe verification for payment {}: status={}, paid={}, checkoutSessionId={}, paymentIntentId={}",
+                paymentId, result.status(), result.paid(), result.checkoutSessionId(), result.paymentIntentId());
+
+        if (result.paid()) {
+            activateSubscription(result.checkoutSessionId(), result.paymentIntentId());
+            log.info("Payment {} manually verified and activated via Stripe for user {}", paymentId, userId);
+        } else if ("expired".equalsIgnoreCase(result.status())) {
+            payment.setStatus(PaymentStatus.FAILED);
+            payment.setFailureReason("Checkout session expired without payment");
+            paymentRepository.save(payment);
+            log.info("Payment {} marked as failed due to expired Stripe session for user {}", paymentId, userId);
+            throw new BadRequestException("Payment session has expired. Please try again.");
+        } else {
+            payment.setStatus(PaymentStatus.FAILED);
+            payment.setFailureReason("Unexpected Stripe session status: " + result.status());
+            paymentRepository.save(payment);
+            log.warn("Payment {} verification failed with unexpected Stripe session status '{}' for user {}",
+                    paymentId, result.status(), userId);
+            throw new BadRequestException("Payment verification failed. Please contact support if the issue persists.");
+        }
+
+        return getSubscriptionStatus(userId);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private BigDecimal applyDiscount(BigDecimal price, CouponValidationResult coupon) {
         if (coupon.getDiscountType() == DiscountType.PERCENTAGE) {
             BigDecimal factor = BigDecimal.ONE.subtract(
-                coupon.getDiscountValue().divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP));
+                    coupon.getDiscountValue().divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP));
             return price.multiply(factor).setScale(2, RoundingMode.HALF_UP);
         } else {
             return price.subtract(coupon.getDiscountValue()).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
@@ -313,11 +378,11 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     private String reasonMessage(String reason) {
         return switch (reason != null ? reason : "") {
-            case "expired"      -> "Coupon has expired";
+            case "expired" -> "Coupon has expired";
             case "already_used" -> "You have already used this coupon";
-            case "limit_reached"-> "Coupon usage limit has been reached";
-            case "not_found"    -> "Coupon not found";
-            default             -> "Invalid coupon";
+            case "limit_reached" -> "Coupon usage limit has been reached";
+            case "not_found" -> "Coupon not found";
+            default -> "Invalid coupon";
         };
     }
 }

@@ -38,6 +38,10 @@ public class UserSubscription extends BaseEntity {
   @Column(name = "content_watches_used", nullable = false)
   private int contentWatchesUsed = 0;
 
+  /** Snapshotted from the plan at subscription time. Isolates existing subscribers from plan edits. */
+  @Column(name = "max_devices")
+  private Integer maxDevices;
+
   @Column(name = "cancelled_at")
   private Instant cancelledAt;
 }

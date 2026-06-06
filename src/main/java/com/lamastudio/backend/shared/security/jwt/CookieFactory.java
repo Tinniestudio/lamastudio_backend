@@ -46,6 +46,10 @@ public class CookieFactory {
         return clearCookie(REFRESH_TOKEN_COOKIE);
     }
 
+    public void addAccessTokenCookie(HttpServletResponse response, String accessToken) {
+        response.addHeader("Set-Cookie", buildAccessTokenCookie(accessToken).toString());
+    }
+
     public void addAuthCookies(HttpServletResponse response, String accessToken, String refreshToken) {
         response.addHeader("Set-Cookie", buildAccessTokenCookie(accessToken).toString());
         response.addHeader("Set-Cookie", buildRefreshTokenCookie(refreshToken).toString());
