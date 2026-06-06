@@ -136,6 +136,9 @@ springdoc:
     enabled: true
   swagger-ui:
     path: /swagger-ui.html
+    config-url: /api/v1/api-docs/swagger-config
+    url: /api/v1/api-docs
+    disable-swagger-default-url: true
     enabled: true
     tags-sorter: alpha
     operations-sorter: method

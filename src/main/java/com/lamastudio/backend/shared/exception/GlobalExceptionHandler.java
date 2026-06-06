@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
@@ -165,6 +166,18 @@ public class GlobalExceptionHandler {
                 HttpStatus.FORBIDDEN.value(), request.getServletPath());
         body.put("reason", "upgrade_required");
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Object> handleMessageNotReadable(
+            HttpMessageNotReadableException ex,
+            HttpServletRequest request
+    ) {
+        log.debug("Malformed request body at {}: {}", request.getServletPath(), ex.getMessage());
+        Map<String, Object> body = buildStandardError("MALFORMED_REQUEST",
+                "Request body is malformed or contains invalid characters",
+                HttpStatus.BAD_REQUEST.value(), request.getServletPath());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     // ── Spring Security exceptions ────────────────────────────────────────────

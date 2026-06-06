@@ -19,6 +19,7 @@ public class SubscriptionStatusResponse {
     private Instant endDate;
     private boolean autoRenew;
     private Instant cancelledAt;
+    private int maxDevices;
     private int contentWatchesUsed;
     private Integer contentWatchesLimit;
     private List<PaymentSummary> payments;

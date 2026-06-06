@@ -20,4 +20,6 @@ public interface SubscriptionService {
     SubscriptionStatusResponse getSubscriptionStatus(UUID userId);
 
     void cancelSubscription(UUID userId);
+
+    SubscriptionStatusResponse verifyPayment(UUID userId, UUID paymentId);
 }

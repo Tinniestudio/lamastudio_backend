@@ -15,4 +15,6 @@ public interface SubscriptionPlanRepository extends JpaRepository<SubscriptionPl
     Optional<SubscriptionPlan> findByNameIgnoreCase(String name);
 
     List<SubscriptionPlan> findByNameInAndIsActiveTrue(Collection<String> names);
+
+    List<SubscriptionPlan> findAllByOrderByPriceAsc();
 }

@@ -113,7 +113,7 @@ class SubscriptionServiceTest {
 
             assertThat(response.getPaymentUrl()).isEqualTo("https://checkout.stripe.com/pay/cs_123");
             assertThat(response.getPlanName()).isEqualTo("SILVER");
-            verify(paymentRepository, times(2)).save(any());
+            verify(paymentRepository, times(1)).save(any());
         }
 
         @Test

@@ -5,6 +5,7 @@ import com.lamastudio.backend.modules.auth.dto.LoginRequest;
 import com.lamastudio.backend.modules.auth.dto.RegisterRequest;
 import com.lamastudio.backend.modules.user.dto.UpdateProfileRequest;
 import com.lamastudio.backend.shared.cache.CacheService;
+import com.lamastudio.backend.shared.ratelimit.RateLimiterService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -61,6 +62,7 @@ class UserProfileIntegrationTest {
 
     @MockBean private com.lamastudio.backend.modules.auth.service.EmailService emailService;
     @MockBean private CacheService cacheService;
+    @MockBean private RateLimiterService rateLimiterService;
 
     private static final String CONTEXT_PATH = "/api/v1";
 
@@ -88,13 +90,14 @@ class UserProfileIntegrationTest {
     void authenticated_returnsProfile() throws Exception {
         when(cacheService.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
         when(cacheService.get(anyString())).thenReturn(Optional.empty());
+        when(rateLimiterService.checkAndIncrement(anyString(), anyInt(), anyInt())).thenReturn(true);
 
         String accessToken = registerAndLogin("profile_user@example.com", "Password1!");
 
         mockMvc.perform(getCtx("/users/me")
                    .header("Authorization", "Bearer " + accessToken))
                .andExpect(status().isOk())
-               .andExpect(jsonPath("$.email").value("profile_user@example.com"));
+               .andExpect(jsonPath("$.data.email").value("profile_user@example.com"));
     }
 
     @Test
@@ -102,6 +105,7 @@ class UserProfileIntegrationTest {
     void patchProfile_updatesOnlyProvidedFields() throws Exception {
         when(cacheService.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
         when(cacheService.get(anyString())).thenReturn(Optional.empty());
+        when(rateLimiterService.checkAndIncrement(anyString(), anyInt(), anyInt())).thenReturn(true);
 
         String accessToken = registerAndLogin("patch_user@example.com", "Password1!");
 
@@ -114,8 +118,8 @@ class UserProfileIntegrationTest {
                    .contentType(MediaType.APPLICATION_JSON)
                    .content(objectMapper.writeValueAsString(req)))
                .andExpect(status().isOk())
-               .andExpect(jsonPath("$.bio").value("My test bio"))
-               .andExpect(jsonPath("$.countryCode").value("NG"));
+               .andExpect(jsonPath("$.data.bio").value("My test bio"))
+               .andExpect(jsonPath("$.data.countryCode").value("NG"));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

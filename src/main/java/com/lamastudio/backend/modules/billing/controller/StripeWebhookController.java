@@ -2,6 +2,7 @@ package com.lamastudio.backend.modules.billing.controller;
 
 import com.lamastudio.backend.modules.billing.service.StripeService;
 import com.lamastudio.backend.modules.billing.service.SubscriptionService;
+import com.lamastudio.backend.shared.web.SkipResponseWrapper;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.checkout.Session;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 import java.util.Optional;
 
+@SkipResponseWrapper
 @Tag(name = "Stripe Webhooks", description = "Stripe payment event handlers")
 @Slf4j
 @RestController

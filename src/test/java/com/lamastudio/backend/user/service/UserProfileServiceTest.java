@@ -2,11 +2,14 @@ package com.lamastudio.backend.user.service;
 
 import com.lamastudio.backend.modules.auth.service.EmailService;
 import com.lamastudio.backend.modules.auth.user.service.SessionService;
+import com.lamastudio.backend.modules.billing.repository.UserSubscriptionRepository;
+import com.lamastudio.backend.modules.billing.service.CapabilityService;
 import com.lamastudio.backend.modules.user.dto.*;
 import com.lamastudio.backend.modules.user.repository.UserProfileRepository;
 import com.lamastudio.backend.modules.user.service.UserProfileServiceImpl;
 import com.lamastudio.backend.shared.config.StripeProperties;
 import com.lamastudio.backend.shared.entity.DomainEnums.AuthProvider;
+import com.lamastudio.backend.shared.entity.DomainEnums.SubscriptionStatus;
 import com.lamastudio.backend.shared.entity.User;
 import com.lamastudio.backend.shared.entity.UserProfile;
 import com.lamastudio.backend.shared.exception.BadRequestException;
@@ -22,6 +25,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -41,6 +45,8 @@ class UserProfileServiceTest {
     @Mock private EmailService emailService;
     @Mock private StorageService storageService;
     @Mock private StripeProperties stripeProperties;
+    @Mock private UserSubscriptionRepository userSubscriptionRepository;
+    @Mock private CapabilityService capabilityService;
 
     @InjectMocks private UserProfileServiceImpl service;
 
@@ -71,6 +77,10 @@ class UserProfileServiceTest {
 
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+            when(userSubscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+                    .thenReturn(Optional.empty());
+            when(sessionService.getActiveSessions(userId)).thenReturn(List.of());
+            when(capabilityService.canWatch(userId)).thenReturn(false);
 
             UserProfileResponse response = service.getProfile(userId);
 
@@ -84,6 +94,10 @@ class UserProfileServiceTest {
         void withoutProfile_returnsDefaults() {
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.empty());
+            when(userSubscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+                    .thenReturn(Optional.empty());
+            when(sessionService.getActiveSessions(userId)).thenReturn(List.of());
+            when(capabilityService.canWatch(userId)).thenReturn(false);
 
             UserProfileResponse response = service.getProfile(userId);
 
@@ -116,6 +130,7 @@ class UserProfileServiceTest {
             when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
             when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
             when(userProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(capabilityService.canWatch(userId)).thenReturn(false);
 
             UpdateProfileRequest request = new UpdateProfileRequest();
             request.setBio("New bio");

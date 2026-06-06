@@ -60,6 +60,14 @@ public class SubscriptionController {
         return ResponseEntity.ok(subscriptionService.getSubscriptionStatus(userId(principal)));
     }
 
+    @Operation(summary = "Verify a pending payment against Stripe — use when webhook delivery was missed")
+    @PostMapping("/verify-payment/{paymentId}")
+    public ResponseEntity<SubscriptionStatusResponse> verifyPayment(
+            @AuthenticationPrincipal UserDetails principal,
+            @PathVariable UUID paymentId) {
+        return ResponseEntity.ok(subscriptionService.verifyPayment(userId(principal), paymentId));
+    }
+
     private UUID userId(UserDetails principal) {
         return UUID.fromString(principal.getUsername());
     }

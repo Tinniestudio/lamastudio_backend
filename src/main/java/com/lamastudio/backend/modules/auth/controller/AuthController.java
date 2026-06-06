@@ -42,7 +42,7 @@ public class AuthController {
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "User registered successfully",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = AuthResponse.class),
-                examples = @ExampleObject(name = "success", value = "{\"userId\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\"email\":\"jane@example.com\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"displayName\":\"Jane Doe\",\"avatarUrl\":null,\"roles\":[\"ROLE_USER\"],\"provider\":\"LOCAL\",\"emailVerified\":false,\"message\":\"Registration successful. Please check your email to verify your account.\"}"))),
+                examples = @ExampleObject(name = "success", value = "{\"success\":true,\"message\":\"Created successfully\",\"data\":{\"userId\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\"email\":\"jane@example.com\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"displayName\":\"Jane Doe\",\"avatarUrl\":null,\"roles\":[\"ROLE_USER\"],\"provider\":\"LOCAL\",\"emailVerified\":false}}"))),
         @ApiResponse(responseCode = "400", description = "Validation failed",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class),
                 examples = @ExampleObject(value = "{\"status\":400,\"error\":\"Validation Failed\",\"message\":\"One or more fields failed validation\",\"path\":\"/api/v1/auth/register\",\"timestamp\":\"2024-11-01T12:00:00Z\",\"fieldErrors\":{\"email\":\"Must be a valid email address\",\"password\":\"Password must contain at least one uppercase letter, lowercase letter, digit, and special character\"}}"))),
@@ -60,7 +60,7 @@ public class AuthController {
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Login successful",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = AuthProfileResponse.class),
-                examples = @ExampleObject(value = "{\"userId\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\"email\":\"jane@example.com\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"displayName\":\"Jane Doe\",\"avatarUrl\":\"https://example.com/avatar.jpg\",\"roles\":[\"ROLE_USER\"],\"provider\":\"LOCAL\",\"emailVerified\":true,\"message\":\"Login successful\"}"))),
+                examples = @ExampleObject(value = "{\"success\":true,\"message\":\"Retrieved successfully\",\"data\":{\"userId\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\"email\":\"jane@example.com\",\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"displayName\":\"Jane Doe\",\"avatarUrl\":\"https://example.com/avatar.jpg\",\"roles\":[\"ROLE_USER\"],\"provider\":\"LOCAL\",\"emailVerified\":true}}"))),
         @ApiResponse(responseCode = "401", description = "Invalid credentials",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class),
                 examples = @ExampleObject(value = "{\"status\":401,\"error\":\"Unauthorized\",\"message\":\"Invalid email or password\",\"path\":\"/api/v1/auth/login\",\"timestamp\":\"2024-11-01T12:00:00Z\"}"))),
@@ -95,7 +95,7 @@ public class AuthController {
     @Operation(summary = "Logout current user", description = "Clears auth cookies by setting them expired. Stateless — no server session to destroy. Tokens remain cryptographically valid until natural expiry.")
     @ApiResponse(responseCode = "200", description = "Logged out successfully",
         content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
-            examples = @ExampleObject(value = "{\"message\":\"Logged out successfully\"}")))
+            examples = @ExampleObject(value = "{\"success\":true,\"message\":\"Logged out successfully\"}")))
     @PostMapping("/logout")
     public ResponseEntity<Map<String, String>> logout(HttpServletRequest request, HttpServletResponse response) {
         authService.logout(request, response);
@@ -122,7 +122,7 @@ public class AuthController {
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Email verified",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
-                examples = @ExampleObject(value = "{\"message\":\"Email verified successfully\"}"))),
+                examples = @ExampleObject(value = "{\"success\":true,\"message\":\"Retrieved successfully\",\"data\":{\"message\":\"Email verified successfully\"}}"))),
         @ApiResponse(responseCode = "400", description = "Token invalid or expired",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class),
                 examples = @ExampleObject(value = "{\"status\":400,\"error\":\"Bad Request\",\"message\":\"Email verification token has expired\",\"path\":\"/api/v1/auth/verify-email\",\"timestamp\":\"2024-11-01T12:00:00Z\"}")))

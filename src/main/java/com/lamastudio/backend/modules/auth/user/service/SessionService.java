@@ -10,7 +10,7 @@ public interface SessionService {
 
     UUID createSession(UUID userId, String rawRefreshToken, HttpServletRequest request);
 
-    void validateAndRotate(UUID userId, UUID sessionId, String rawOldRefreshToken, String newRawRefreshToken);
+    void validateSession(UUID userId, UUID sessionId);
 
     void revokeSession(UUID userId, UUID sessionId, UUID adminId);
 
