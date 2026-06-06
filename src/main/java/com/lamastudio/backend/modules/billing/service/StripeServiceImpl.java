@@ -7,6 +7,7 @@ import com.stripe.model.Event;
 import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
 import com.stripe.param.checkout.SessionCreateParams;
+import com.stripe.param.checkout.SessionRetrieveParams;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,26 @@ public class StripeServiceImpl implements StripeService {
 
         } catch (StripeException ex) {
             log.error("Failed to create Stripe Checkout Session: {}", ex.getMessage(), ex);
+            throw new RuntimeException("Payment provider error: " + ex.getMessage(), ex);
+        }
+    }
+
+    @Override
+    public VerifySessionResult verifyCheckoutSession(String checkoutSessionId) {
+        try {
+            Session session = Session.retrieve(
+                    checkoutSessionId,
+                    SessionRetrieveParams.builder().build(),
+                    null
+            );
+            String paymentIntentId = session.getPaymentIntent();
+            boolean paid = "paid".equals(session.getPaymentStatus())
+                    || "complete".equals(session.getStatus());
+            log.info("Stripe session {} status={} paymentStatus={}", checkoutSessionId,
+                    session.getStatus(), session.getPaymentStatus());
+            return new VerifySessionResult(checkoutSessionId, paymentIntentId, paid, session.getStatus());
+        } catch (StripeException ex) {
+            log.error("Failed to retrieve Stripe session {}: {}", checkoutSessionId, ex.getMessage(), ex);
             throw new RuntimeException("Payment provider error: " + ex.getMessage(), ex);
         }
     }

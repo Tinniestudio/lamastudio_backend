@@ -137,10 +137,13 @@ public class SecurityConfig {
         "/api/v1/webhooks/stripe",
         "/actuator/health",
         "/swagger-ui.html",
+        "/swagger-ui",
         "/swagger-ui/**",
         "/api-docs",
         "/api-docs/**",
-        "/api-docs.yaml"
+        "/api-docs.yaml",
+        "/v3/api-docs",
+        "/v3/api-docs/**"
     };
 
     @Bean

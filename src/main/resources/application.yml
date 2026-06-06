@@ -152,6 +152,11 @@ springdoc:
     enabled: true
   swagger-ui:
     path: /swagger-ui.html
+    # Explicit URLs avoid the Petstore fallback when context-path (/api/v1) is set.
+    # Swagger UI resolves these as absolute paths from the server root.
+    config-url: /api/v1/api-docs/swagger-config
+    url: /api/v1/api-docs
+    disable-swagger-default-url: true
     enabled: true
     tags-sorter: alpha
     operations-sorter: method

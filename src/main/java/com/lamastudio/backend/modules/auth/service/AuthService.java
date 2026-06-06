@@ -148,15 +148,9 @@ public class AuthService {
         User user = userRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Generate raw refresh token, create session (evicts oldest if over device limit)
         String rawRefreshToken = generateSecureToken();
         UUID sessionId = sessionService.createSession(user.getId(), rawRefreshToken, httpRequest);
         issueTokenCookies(user, sessionId, response);
-
-        // Write the actual refresh token cookie value with the raw token
-        String accessToken = jwtTokenProvider.generateAccessToken(user, sessionId);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user, sessionId);
-        cookieFactory.addAuthCookies(response, accessToken, refreshToken);
 
         log.info("User logged in: {}", user.getEmail());
         return authProfileService.getProfile(user.getId(), sessionId, "Login successful");
@@ -185,16 +179,14 @@ public class AuthService {
             throw new AccountNotActiveException("Account is " + user.getAccountStatus().name().toLowerCase());
         }
 
-        String newRawRefreshToken = generateSecureToken();
         UUID sessionId = sessionIdStr != null ? UUID.fromString(sessionIdStr) : null;
 
         if (sessionId != null) {
-            sessionService.validateAndRotate(userId, sessionId, refreshToken, newRawRefreshToken);
+            sessionService.validateSession(userId, sessionId);
         }
 
         String newAccessToken = jwtTokenProvider.generateAccessToken(user, sessionId);
-        String newRefreshToken = jwtTokenProvider.generateRefreshToken(user, sessionId);
-        cookieFactory.addAuthCookies(response, newAccessToken, newRefreshToken);
+        cookieFactory.addAccessTokenCookie(response, newAccessToken);
 
         return authProfileService.getProfile(user.getId(), sessionId, "Token refreshed successfully");
 
@@ -357,6 +349,7 @@ public class AuthService {
             sub.setStatus(SubscriptionStatus.ACTIVE);
             sub.setStartDate(Instant.now());
             sub.setContentWatchesUsed(0);
+            sub.setMaxDevices(freePlan.getMaxDevices() != null ? freePlan.getMaxDevices() : 1);
             userSubscriptionRepository.save(sub);
         });
     }
