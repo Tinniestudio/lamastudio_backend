@@ -1,9 +1,12 @@
 package com.lamastudio.backend.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.lamastudio.backend.auth.dto.LoginRequest;
-import com.lamastudio.backend.auth.dto.RegisterRequest;
-import com.lamastudio.backend.user.repository.UserRepository;
+import com.lamastudio.backend.modules.auth.dto.LoginRequest;
+import com.lamastudio.backend.modules.auth.dto.RegisterRequest;
+import com.lamastudio.backend.modules.user.repository.UserRepository;
+import com.lamastudio.backend.shared.ratelimit.RateLimiterService;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +26,10 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
@@ -46,7 +53,7 @@ class AuthIntegrationTest {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
+        registry.add("spring.jpa.hibernate.ddl-auto", () -> "update");
         registry.add("spring.flyway.enabled", () -> true);
     }
 
@@ -61,9 +68,18 @@ class AuthIntegrationTest {
 
     // Avoid real email API calls during tests
     @MockBean
-    private com.lamastudio.backend.auth.service.EmailService emailService;
+    private com.lamastudio.backend.modules.auth.service.EmailService emailService;
+
+    // Bypass Redis-based rate limiter so tests don't accumulate counts across runs
+    @MockBean
+    private RateLimiterService rateLimiterService;
 
     private static final String CONTEXT_PATH = "/api/v1";
+
+    @BeforeEach
+    void setUp() {
+        when(rateLimiterService.checkAndIncrement(anyString(), anyInt(), anyInt())).thenReturn(true);
+    }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder postWithContext(String path) {
         return post(CONTEXT_PATH + path).contextPath(CONTEXT_PATH);

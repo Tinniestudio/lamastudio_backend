@@ -1,9 +1,11 @@
 package com.lamastudio.backend.user.service;
 
-import com.lamastudio.backend.exception.ResourceNotFoundException;
-import com.lamastudio.backend.user.entity.AccountStatus;
-import com.lamastudio.backend.user.entity.User;
-import com.lamastudio.backend.user.repository.UserRepository;
+import com.lamastudio.backend.modules.user.repository.UserRepository;
+import com.lamastudio.backend.modules.user.service.UserService;
+import com.lamastudio.backend.shared.entity.User;
+import com.lamastudio.backend.shared.entity.DomainEnums.AccountStatus;
+import com.lamastudio.backend.shared.exception.ResourceNotFoundException;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

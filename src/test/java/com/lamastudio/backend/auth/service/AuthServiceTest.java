@@ -1,20 +1,29 @@
 package com.lamastudio.backend.auth.service;
 
-import com.lamastudio.backend.auth.dto.LoginRequest;
-import com.lamastudio.backend.auth.dto.RegisterRequest;
-import com.lamastudio.backend.auth.jwt.CookieFactory;
-import com.lamastudio.backend.auth.jwt.JwtTokenProvider;
-import com.lamastudio.backend.config.AppProperties;
-import com.lamastudio.backend.exception.AccountNotActiveException;
-import com.lamastudio.backend.exception.BadCredentialsException;
-import com.lamastudio.backend.exception.EmailAlreadyExistsException;
-import com.lamastudio.backend.role.entity.Role;
-import com.lamastudio.backend.role.entity.RoleName;
-import com.lamastudio.backend.role.repository.RoleRepository;
-import com.lamastudio.backend.user.entity.AccountStatus;
-import com.lamastudio.backend.user.entity.AuthProvider;
-import com.lamastudio.backend.user.entity.User;
-import com.lamastudio.backend.user.repository.UserRepository;
+import com.lamastudio.backend.modules.auth.dto.LoginRequest;
+import com.lamastudio.backend.modules.auth.dto.RegisterRequest;
+import com.lamastudio.backend.modules.auth.exception.BadCredentialsException;
+import com.lamastudio.backend.modules.auth.exception.EmailAlreadyExistsException;
+import com.lamastudio.backend.modules.auth.service.AuthService;
+import com.lamastudio.backend.modules.auth.service.EmailService;
+import com.lamastudio.backend.modules.auth.user.dto.AuthProfileResponse;
+import com.lamastudio.backend.modules.auth.user.service.AuthProfileService;
+import com.lamastudio.backend.modules.auth.user.service.SessionService;
+import com.lamastudio.backend.modules.billing.repository.SubscriptionPlanRepository;
+import com.lamastudio.backend.modules.billing.repository.UserSubscriptionRepository;
+import com.lamastudio.backend.modules.role.repository.RoleRepository;
+import com.lamastudio.backend.shared.entity.DomainEnums.AccountStatus;
+import com.lamastudio.backend.shared.entity.DomainEnums.AuthProvider;
+import com.lamastudio.backend.modules.user.repository.UserRepository;
+import com.lamastudio.backend.shared.config.AppProperties;
+import com.lamastudio.backend.shared.entity.Role;
+import com.lamastudio.backend.shared.entity.RoleName;
+import com.lamastudio.backend.shared.entity.User;
+import com.lamastudio.backend.shared.exception.AccountNotActiveException;
+import com.lamastudio.backend.shared.security.jwt.CookieFactory;
+import com.lamastudio.backend.shared.security.jwt.JwtTokenProvider;
+
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.DisabledException;
@@ -50,6 +60,10 @@ class AuthServiceTest {
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private CookieFactory cookieFactory;
     @Mock private EmailService emailService;
+    @Mock private SessionService sessionService;
+    @Mock private UserSubscriptionRepository userSubscriptionRepository;
+    @Mock private SubscriptionPlanRepository subscriptionPlanRepository;
+    @Mock private AuthProfileService authProfileService;
 
     private AppProperties appProperties;
     private AuthService authService;
@@ -65,7 +79,11 @@ class AuthServiceTest {
                 jwtTokenProvider,
                 cookieFactory,
                 emailService,
-                appProperties
+                appProperties,
+                sessionService,
+                userSubscriptionRepository,
+                subscriptionPlanRepository,
+                authProfileService
         );
     }
 
@@ -79,32 +97,35 @@ class AuthServiceTest {
         request.setLastName("Doe");
 
         Role userRole = new Role(RoleName.ROLE_USER);
+        UUID sessionId = UUID.randomUUID();
 
         when(userRepository.existsByEmail("test@example.com")).thenReturn(false);
         when(roleRepository.findByName(RoleName.ROLE_USER)).thenReturn(Optional.of(userRole));
-        when(passwordEncoder.encode("Password1!"))
-                .thenReturn("encoded");
-        when(userRepository.save(any(User.class)))
-                .thenAnswer(invocation -> {
-                    User u = invocation.getArgument(0);
-                    u.setId(UUID.randomUUID());
-                    return u;
-                });
-        when(jwtTokenProvider.generateAccessToken(any(User.class))).thenReturn("access");
-        when(jwtTokenProvider.generateRefreshToken(any(User.class))).thenReturn("refresh");
+        when(passwordEncoder.encode("Password1!")).thenReturn("encoded");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            u.setId(UUID.randomUUID());
+            return u;
+        });
+        when(sessionService.createSession(any(), any(), any())).thenReturn(sessionId);
+        when(jwtTokenProvider.generateAccessToken(any(User.class), any(UUID.class))).thenReturn("access");
+        when(jwtTokenProvider.generateRefreshToken(any(User.class), any(UUID.class))).thenReturn("refresh");
+        when(subscriptionPlanRepository.findByNameIgnoreCase("FREE")).thenReturn(Optional.empty());
+        when(authProfileService.getProfile(any(UUID.class), any(UUID.class), any()))
+            .thenReturn(AuthProfileResponse.builder()
+                .email("test@example.com")
+                .roles(Set.of(RoleName.ROLE_USER.name()))
+                .provider("LOCAL").emailVerified(false).build());
 
         HttpServletResponse response = new MockHttpServletResponse();
-
         var authResponse = authService.register(request, response);
 
         assertThat(authResponse.getEmail()).isEqualTo("test@example.com");
         assertThat(authResponse.getRoles()).contains(RoleName.ROLE_USER.name());
         verify(userRepository).existsByEmail("test@example.com");
-        verify(roleRepository).findByName(RoleName.ROLE_USER);
         verify(passwordEncoder).encode("Password1!");
         verify(userRepository).save(any(User.class));
-    verify(emailService).sendVerificationEmail(eq("test@example.com"), eq("Jane Doe"), any());
-        verify(cookieFactory).addAuthCookies(eq(response), eq("access"), eq("refresh"));
+        verify(emailService).sendVerificationEmail(eq("test@example.com"), eq("Jane Doe"), any());
     }
 
     @Test
@@ -129,19 +150,26 @@ class AuthServiceTest {
         request.setEmail(user.getEmail());
         request.setPassword("Password1!");
 
+        UUID sessionId = UUID.randomUUID();
         when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                 .thenReturn(mock(Authentication.class));
-        when(jwtTokenProvider.generateAccessToken(user)).thenReturn("access");
-        when(jwtTokenProvider.generateRefreshToken(user)).thenReturn("refresh");
+        when(sessionService.createSession(any(), any(), any())).thenReturn(sessionId);
+        when(jwtTokenProvider.generateAccessToken(any(User.class), any(UUID.class))).thenReturn("access");
+        when(jwtTokenProvider.generateRefreshToken(any(User.class), any(UUID.class))).thenReturn("refresh");
+        when(authProfileService.getProfile(any(UUID.class), any(UUID.class), any()))
+            .thenReturn(AuthProfileResponse.builder()
+                .email(user.getEmail())
+                .provider("LOCAL").emailVerified(true).build());
 
+        HttpServletRequest httpRequest = new MockHttpServletRequest();
         HttpServletResponse response = new MockHttpServletResponse();
 
-        var authResponse = authService.login(request, response);
+        var authResponse = authService.login(request, httpRequest, response);
 
         assertThat(authResponse.getEmail()).isEqualTo(user.getEmail());
         verify(authenticationManager).authenticate(any(UsernamePasswordAuthenticationToken.class));
-        verify(cookieFactory).addAuthCookies(eq(response), eq("access"), eq("refresh"));
+        verify(sessionService).createSession(eq(user.getId()), any(), any());
     }
 
     @Test
@@ -154,26 +182,25 @@ class AuthServiceTest {
         request.setEmail(user.getEmail());
         request.setPassword("Password1!");
 
-    when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
-        .thenThrow(new DisabledException("Account is disabled"));
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new DisabledException("Account is disabled"));
 
-        assertThatThrownBy(() -> authService.login(request, new MockHttpServletResponse()))
+        assertThatThrownBy(() -> authService.login(request, new MockHttpServletRequest(), new MockHttpServletResponse()))
                 .isInstanceOf(AccountNotActiveException.class);
 
-    verify(authenticationManager).authenticate(any());
+        verify(authenticationManager).authenticate(any());
     }
 
     @Test
     @DisplayName("login: wrong password raises BadCredentialsException")
     void login_wrongPassword() {
-        User user = buildActiveUser();
         LoginRequest request = new LoginRequest();
-        request.setEmail(user.getEmail());
+        request.setEmail("user@example.com");
         request.setPassword("bad");
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                 .thenThrow(mock(AuthenticationException.class));
 
-        assertThatThrownBy(() -> authService.login(request, new MockHttpServletResponse()))
+        assertThatThrownBy(() -> authService.login(request, new MockHttpServletRequest(), new MockHttpServletResponse()))
                 .isInstanceOf(BadCredentialsException.class);
     }
 

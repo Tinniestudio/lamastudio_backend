@@ -3,7 +3,7 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     show-sql: false
   flyway:
     enabled: true
@@ -19,10 +19,24 @@ app:
     refresh-token:
       secret: dGhpc2lzcmVmcmVzaHNlY3JldGtleTEyMzQ1Njc4OTA=
       expiration-ms: 604800000
+  admin-jwt:
+    access-token:
+      secret: dGhpc2lzYWRtaW5hY2Nlc3NzZWNyZXRrZXkxMjM0NTY3OA==
+      expiration-ms: 900000
+    refresh-token:
+      secret: dGhpc2lzYWRtaW5yZWZyZXNoc2VjcmV0a2V5MTIzNDU2Nzg=
+      expiration-ms: 604800000
+  admin-bootstrap-token: test-bootstrap-token-for-testing-only
+  free-tier-content-limit: 2
   email-verification:
     token-expiry-hours: 24
   password-reset:
     token-expiry-hours: 1
+  admin-password-reset:
+    token-expiry-minutes: 15
+  cookie:
+    secure: false
+    same-site: Lax
 
 server:
   servlet:
