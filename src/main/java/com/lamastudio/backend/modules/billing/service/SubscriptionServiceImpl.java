@@ -235,6 +235,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .findByUserIdOrderByCreatedAtDesc(userId).stream()
                 .map(p -> SubscriptionStatusResponse.PaymentSummary.builder()
                         .paymentId(p.getId())
+                        .paymentReference(p.getProviderReference())
                         .amount(p.getAmount())
                         .currency(p.getCurrency())
                         .status(p.getStatus().name())
@@ -303,12 +304,12 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     @Transactional
-    public SubscriptionStatusResponse verifyPayment(UUID userId, UUID paymentId) {
-        Payment payment = paymentRepository.findByIdAndUserId(paymentId, userId)
+    public SubscriptionStatusResponse verifyPayment(UUID userId, String paymentReference) {
+        Payment payment = paymentRepository.findByProviderReference(paymentReference)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
 
         if (payment.getStatus() == PaymentStatus.SUCCESSFUL) {
-            log.info("Payment {} already successful, skipping Stripe verification", paymentId);
+            log.info("Payment {} already successful, skipping Stripe verification", paymentReference);
             return getSubscriptionStatus(userId);
         }
 
@@ -324,23 +325,23 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         StripeService.VerifySessionResult result = stripeService.verifyCheckoutSession(ref);
 
         log.info("Stripe verification for payment {}: status={}, paid={}, checkoutSessionId={}, paymentIntentId={}",
-                paymentId, result.status(), result.paid(), result.checkoutSessionId(), result.paymentIntentId());
+                paymentReference, result.status(), result.paid(), result.checkoutSessionId(), result.paymentIntentId());
 
         if (result.paid()) {
             activateSubscription(result.checkoutSessionId(), result.paymentIntentId());
-            log.info("Payment {} manually verified and activated via Stripe for user {}", paymentId, userId);
+            log.info("Payment {} manually verified and activated via Stripe for user {}", paymentReference, userId);
         } else if ("expired".equalsIgnoreCase(result.status())) {
             payment.setStatus(PaymentStatus.FAILED);
             payment.setFailureReason("Checkout session expired without payment");
             paymentRepository.save(payment);
-            log.info("Payment {} marked as failed due to expired Stripe session for user {}", paymentId, userId);
+            log.info("Payment {} marked as failed due to expired Stripe session for user {}", paymentReference, userId);
             throw new BadRequestException("Payment session has expired. Please try again.");
         } else {
             payment.setStatus(PaymentStatus.FAILED);
             payment.setFailureReason("Unexpected Stripe session status: " + result.status());
             paymentRepository.save(payment);
             log.warn("Payment {} verification failed with unexpected Stripe session status '{}' for user {}",
-                    paymentId, result.status(), userId);
+                    paymentReference, result.status(), userId);
             throw new BadRequestException("Payment verification failed. Please contact support if the issue persists.");
         }
 

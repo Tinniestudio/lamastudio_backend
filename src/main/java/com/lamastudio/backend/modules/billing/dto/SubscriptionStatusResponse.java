@@ -28,6 +28,7 @@ public class SubscriptionStatusResponse {
     @Builder
     public static class PaymentSummary {
         private UUID paymentId;
+        private String paymentReference;
         private BigDecimal amount;
         private String currency;
         private String status;
