@@ -7,6 +7,9 @@ spring:
     show-sql: false
   flyway:
     enabled: true
+  data:
+    redis:
+      url: redis://localhost:6379
 
 app:
   base-url: http://localhost:8080

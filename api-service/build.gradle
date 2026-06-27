@@ -62,14 +62,15 @@ dependencies {
     // Test
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
-    testImplementation 'org.testcontainers:junit-jupiter'
-    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:junit-jupiter:1.20.4'
+    testImplementation 'org.testcontainers:postgresql:1.20.4'
     testCompileOnly         'org.projectlombok:lombok:1.18.32'
     testAnnotationProcessor 'org.projectlombok:lombok:1.18.32'
 }
 
 test {
     useJUnitPlatform()
+    jvmArgs '-Dapi.version=1.41'
 }
 
 springBoot {
