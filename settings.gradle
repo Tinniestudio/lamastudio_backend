@@ -1,1 +1,4 @@
 rootProject.name = 'tinniestudio'
+
+include 'api-service'
+include 'media-worker'
