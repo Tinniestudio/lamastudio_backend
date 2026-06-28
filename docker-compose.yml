@@ -1,31 +1,66 @@
 services:
-  app:
-    build: .
-    container_name: lamastudio-app
+
+  api-service:
+    build:
+      context: .
+      dockerfile: api-service/Dockerfile
+    container_name: tinniestudio-api
     restart: unless-stopped
     ports:
       - "8080:8080"
-    # Prefer a local .env for development. See .env.example for values.
-    env_file:
-      - .env
+    env_file: .env
     environment:
-      # Database connection variables expected by application.yml
       DB_HOST: db
       DB_PORT: 5432
-      DB_NAME: lamastudio_db
+      DB_NAME: tinniestudio_db
       DB_USER: postgres
       DB_PASSWORD: postgres
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
     networks:
-      - lamastudio-network
+      - tinniestudio-network
+
+  media-worker:
+    build:
+      context: .
+      dockerfile: media-worker/Dockerfile
+    container_name: tinniestudio-worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: tinniestudio_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - tinniestudio-network
 
   db:
     image: postgis/postgis:16-3.4
-    container_name: lamastudio-db
+    container_name: tinniestudio-db
     restart: always
     environment:
-      POSTGRES_DB: lamastudio_db
+      POSTGRES_DB: tinniestudio_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
@@ -33,16 +68,57 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tinniestudio_db"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - lamastudio-network
+      - tinniestudio-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: tinniestudio-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - tinniestudio-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: tinniestudio-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tinniestudio-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: tinniestudio-minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - tinniestudio-network
 
 networks:
-  lamastudio-network:
+  tinniestudio-network:
     driver: bridge
 
 volumes:
   db_data:
+  minio_data:
