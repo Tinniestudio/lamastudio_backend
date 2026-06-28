@@ -256,7 +256,7 @@ List all purchasable subscription plans (SILVER and GOLD only).
       "name": "SILVER",
       "description": "Silver plan",
       "price": 9.99,
-      "currency": "USD",
+      "currency": "CAD",
       "billingCycle": "MONTHLY",
       "maxDevices": 1,
       "videoQuality": "HD",
@@ -267,7 +267,7 @@ List all purchasable subscription plans (SILVER and GOLD only).
       "name": "GOLD",
       "description": "Gold plan - multi-device",
       "price": 19.99,
-      "currency": "USD",
+      "currency": "CAD",
       "billingCycle": "MONTHLY",
       "maxDevices": 3,
       "videoQuality": "FULL_HD",
@@ -304,7 +304,7 @@ Validate a coupon code and return the discount details. No charge occurs.
     "discountValue": 20.00,
     "originalPrice": 9.99,
     "finalPrice": 7.99,
-    "currency": "USD"
+    "currency": "CAD"
   }
 }
 ```
@@ -352,7 +352,7 @@ Initiate a Stripe card payment for a subscription plan.
     "paymentReference": "pi_3Qx...",
     "paymentUrl": "https://checkout.stripe.com/pay/cs_...",
     "amount": 7.99,
-    "currency": "USD",
+    "currency": "CAD",
     "planName": "SILVER",
     "autoRenew": true,
     "expiresAt": "2026-06-01T12:30:00Z"
@@ -402,7 +402,7 @@ Get the authenticated user's current subscription status.
       {
         "paymentId": "uuid",
         "amount": 9.99,
-        "currency": "USD",
+        "currency": "CAD",
         "status": "SUCCESSFUL",
         "paidAt": "2026-05-01T10:00:00Z"
       }

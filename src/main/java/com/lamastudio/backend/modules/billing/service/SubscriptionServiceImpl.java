@@ -116,7 +116,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         payment.setUserId(userId);
         payment.setPlanId(plan.getId());
         payment.setAmount(finalAmount);
-        payment.setCurrency(plan.getCurrency() != null ? plan.getCurrency() : "USD");
+        payment.setCurrency(plan.getCurrency() != null ? plan.getCurrency() : "CAD");
         payment.setAutoRenew(Boolean.TRUE.equals(request.getAutoRenew()));
         payment.setCouponId(couponId);
         payment.setDiscountAmount(discountAmount);

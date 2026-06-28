@@ -187,7 +187,7 @@ CREATE TABLE coupons (
     code             VARCHAR(50) NOT NULL UNIQUE,
     discount_type    VARCHAR(20) NOT NULL,   -- PERCENTAGE, FIXED
     discount_value   DECIMAL(10,2) NOT NULL,
-    currency         VARCHAR(3),             -- for FIXED type (e.g. USD)
+    currency         VARCHAR(3),             -- for FIXED type (e.g. CAD)
     max_uses         INT,                    -- null = unlimited
     uses_count       INT NOT NULL DEFAULT 0,
     valid_from       TIMESTAMP,

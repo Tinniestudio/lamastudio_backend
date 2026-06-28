@@ -100,7 +100,7 @@ A discount code created by an admin for use at subscription checkout.
 | `code` | VARCHAR(50) | NOT NULL, UNIQUE | Case-insensitive lookup |
 | `discountType` | VARCHAR(20) | NOT NULL | Enum: PERCENTAGE, FIXED |
 | `discountValue` | DECIMAL(10,2) | NOT NULL | |
-| `currency` | VARCHAR(3) | NULLABLE | Required for FIXED type (e.g. USD) |
+| `currency` | VARCHAR(3) | NULLABLE | Required for FIXED type (e.g. CAD) |
 | `maxUses` | INT | NULLABLE | null = unlimited |
 | `usesCount` | INT | NOT NULL, DEFAULT 0 | Incremented atomically on redemption |
 | `validFrom` | TIMESTAMPTZ | NULLABLE | null = no start restriction |

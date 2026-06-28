@@ -57,7 +57,7 @@ class SubscriptionServiceTest {
         silverPlan.setId(UUID.randomUUID());
         silverPlan.setName("SILVER");
         silverPlan.setPrice(new BigDecimal("9.99"));
-        silverPlan.setCurrency("USD");
+        silverPlan.setCurrency("CAD");
         silverPlan.setBillingCycle(BillingCycle.MONTHLY);
         silverPlan.setMaxDevices(1);
         silverPlan.setIsActive(true);
@@ -100,7 +100,7 @@ class SubscriptionServiceTest {
             savedPayment.setUserId(userId);
             savedPayment.setPlanId(silverPlan.getId());
             savedPayment.setAmount(new BigDecimal("9.99"));
-            savedPayment.setCurrency("USD");
+            savedPayment.setCurrency("CAD");
             savedPayment.setAutoRenew(true);
             savedPayment.setStatus(PaymentStatus.PENDING);
             when(paymentRepository.save(any())).thenReturn(savedPayment);
@@ -148,7 +148,7 @@ class SubscriptionServiceTest {
             payment.setUserId(userId);
             payment.setPlanId(silverPlan.getId());
             payment.setAmount(new BigDecimal("9.99"));
-            payment.setCurrency("USD");
+            payment.setCurrency("CAD");
             payment.setAutoRenew(true);
             payment.setStatus(PaymentStatus.PENDING);
 

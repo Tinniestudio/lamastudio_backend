@@ -41,7 +41,7 @@ Tracks each Stripe card payment transaction. Linked to the subscription it creat
 | `provider` | VARCHAR(20) | NOT NULL, DEFAULT 'STRIPE' | Always STRIPE for this batch |
 | `providerReference` | VARCHAR(255) | NOT NULL, UNIQUE | Stripe Payment Intent ID (pi_...) — idempotency key |
 | `amount` | DECIMAL(10,2) | NOT NULL | Amount charged (after coupon discount) |
-| `currency` | VARCHAR(3) | NOT NULL | ISO 4217 currency code (e.g., NGN, USD) |
+| `currency` | VARCHAR(3) | NOT NULL | ISO 4217 currency code (e.g., NGN, CAD) |
 | `status` | VARCHAR(20) | NOT NULL, DEFAULT 'PENDING' | PENDING, SUCCESSFUL, FAILED, REFUNDED |
 | `autoRenew` | BOOLEAN | NOT NULL, DEFAULT true | Captured at checkout; applied to resulting subscription |
 | `couponId` | UUID | NULLABLE, FK → coupons(id) | Coupon applied (if any) |

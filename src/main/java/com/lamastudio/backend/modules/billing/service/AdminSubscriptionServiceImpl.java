@@ -91,7 +91,7 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
         plan.setName(request.getName().strip());
         plan.setDescription(request.getDescription());
         plan.setPrice(request.getPrice());
-        plan.setCurrency(request.getCurrency() != null ? request.getCurrency().toUpperCase() : "USD");
+        plan.setCurrency(request.getCurrency() != null ? request.getCurrency().toUpperCase() : "CAD");
         plan.setBillingCycle(request.getBillingCycle());
         plan.setMaxDevices(request.getMaxDevices());
         plan.setVideoQuality(request.getVideoQuality());
