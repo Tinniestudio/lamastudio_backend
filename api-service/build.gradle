@@ -73,6 +73,10 @@ test {
     jvmArgs '-Dapi.version=1.41'
 }
 
+bootRun {
+    workingDir = rootProject.projectDir
+}
+
 springBoot {
     mainClass = 'com.tinniestudio.api.ApiServiceApplication'
 }
