@@ -30,7 +30,7 @@ public class StorageServiceConfig {
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(props.getAccessKey(), props.getSecretKey())))
                 .region(Region.of(props.getRegion()))
-                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                .serviceConfiguration(pathStyleS3Config())
                 .build();
     }
 
@@ -42,7 +42,7 @@ public class StorageServiceConfig {
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(props.getAccessKey(), props.getSecretKey())))
                 .region(Region.of(props.getRegion()))
-                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                .serviceConfiguration(pathStyleS3Config())
                 .build();
     }
 
@@ -59,5 +59,9 @@ public class StorageServiceConfig {
     public StorageService noOpStorageService() {
         log.warn("Using NoOpStorageService — set app.storage.provider=MINIO to enable real object storage.");
         return new NoOpStorageService();
+    }
+
+    private S3Configuration pathStyleS3Config() {
+        return S3Configuration.builder().pathStyleAccessEnabled(true).build();
     }
 }
