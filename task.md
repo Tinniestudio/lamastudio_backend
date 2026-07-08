@@ -1,5 +1,5 @@
 # TinnieStudio — Master Task & Context Document
-> Last updated: 2026-06-27
+> Last updated: 2026-07-08
 > Purpose: Full context restoration for Claude across sessions. Read this before any implementation session.
 
 ---
@@ -28,8 +28,8 @@ Both deploy independently via Docker. Both share the same PostgreSQL database.
 | Dockerfiles | One per service | `api-service/Dockerfile`, `media-worker/Dockerfile` |
 | Database | PostgreSQL 16 + Flyway | Migrations owned by api-service only |
 | Cache | Redis 7 (Lettuce) | Key prefix: `tinnie:{module}:{key}` |
-| Queue | RabbitMQ 3.x + Spring AMQP | Not yet wired in codebase |
-| Storage | S3-compatible via `StorageService` interface | Interface exists, no real impl yet |
+| Queue | RabbitMQ 3.x + Spring AMQP | `QueuePublisher` interface + `RabbitQueuePublisher` done (api-service) |
+| Storage | S3-compatible via `StorageService` interface | `MinioStorageService` done (MINIO provider); NoOp fallback; `StorageException` wrapping |
 | Email | Resend SDK | `ResendEmailService` done |
 | Auth | JWT (access body + refresh HttpOnly cookie) | Dual JWT: user + admin separate secrets |
 | OAuth2 | Google | Done |
@@ -137,6 +137,8 @@ Both deploy independently via Docker. Both share the same PostgreSQL database.
 - Response envelope: ApiResponse, SuccessResponseWrapper, GlobalExceptionHandler
 - OpenAPI / Swagger UI
 - AsyncConfig: async executor
+- **RabbitMQ publisher** (2026-07-08): `QueuePublisher` interface, `RabbitQueuePublisher` (RabbitTemplate-backed, JSON), `QueueMessage<T>` envelope (messageId/type/publishedAt/attempt/version/payload), `RabbitConfig` (exchange `tinniestudio.direct` + 5 queues with DLX wiring). `RabbitTemplate` confined to `RabbitQueuePublisher` only.
+- **StorageService** (2026-07-08): `MinioStorageService` (AWS SDK v2, path-style for MinIO, S3Client+S3Presigner constructor-injected), `StorageServiceConfig` (@ConditionalOnProperty MINIO / @ConditionalOnMissingBean NoOp), `StorageProperties` (@ConfigurationProperties prefix=app.storage), `StorageException` wraps SDK types. S3Client/S3Presigner confined to infra layer only. `copyObject` + `getMetadata` deferred to Batch 7.
 
 **Entities** (JPA — tables created via Flyway)
 - User, UserProfile, UserSubscription, SubscriptionPlan, Payment, Coupon, CouponRedemption
@@ -177,9 +179,6 @@ Both deploy independently via Docker. Both share the same PostgreSQL database.
 
 | Batch | Feature |
 |---|---|
-| Migration | **Gradle multi-project + package rename** (immediate next task) |
-| Infra | RabbitMQ topology (exchanges, queues, DLX) |
-| Infra | Real StorageService (S3/R2/MinIO — only NoOpStorageService exists) |
 | Batch 3 | Category API controllers + homepage discovery |
 | Batch 4 | Content API (CRUD, status workflow: DRAFT→REVIEW→PUBLISHED→ARCHIVED) |
 | Batch 5 | Episode + Series API |
