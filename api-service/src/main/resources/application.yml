@@ -133,6 +133,15 @@ app:
   password-reset:
     token-expiry-hours: 1
 
+  storage:
+    provider: ${STORAGE_PROVIDER:NOOP}
+    bucket: ${STORAGE_BUCKET:tinniestudio}
+    region: ${STORAGE_REGION:us-east-1}
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    access-key: ${STORAGE_ACCESS_KEY:minioadmin}
+    secret-key: ${STORAGE_SECRET_KEY:minioadmin}
+    presigned-url-ttl-seconds: ${STORAGE_PRESIGNED_TTL:3600}
+
 stripe:
   secret-key: ${STRIPE_SECRET_KEY:}
   webhook-secret: ${STRIPE_WEBHOOK_SECRET:}

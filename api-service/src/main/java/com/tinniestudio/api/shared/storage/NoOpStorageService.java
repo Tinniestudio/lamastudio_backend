@@ -1,29 +1,31 @@
 package com.tinniestudio.api.shared.storage;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
 
 /**
- * Stub StorageService for local development without S3/MinIO configured.
- * Replace with S3StorageService or MinioStorageService in Batch 6.
+ * No-op StorageService. Active when app.storage.provider is not set or not MINIO/S3/R2.
+ * Registered as a @Bean in StorageServiceConfig — not a @Service.
  */
 @Slf4j
-@Service
-@ConditionalOnMissingBean(name = "s3StorageService")
 public class NoOpStorageService implements StorageService {
 
     @Override
     public PresignedUploadResult generateUploadUrl(String key, String mimeType, long maxBytes, Duration ttl) {
-        log.warn("NoOpStorageService: generateUploadUrl called for key={}. Configure a real StorageService for production.", key);
+        log.warn("NoOpStorageService: generateUploadUrl called for key={}. Set app.storage.provider=MINIO to enable real storage.", key);
         return new PresignedUploadResult(
             "http://localhost:9000/local-bucket/" + key + "?X-Amz-Signature=stub",
             key,
             Instant.now().plus(ttl)
         );
+    }
+
+    @Override
+    public String generateDownloadUrl(String key, Duration ttl) {
+        log.warn("NoOpStorageService: generateDownloadUrl called for key={}. Set app.storage.provider=MINIO to enable real storage.", key);
+        return "http://localhost:9000/local-bucket/" + key;
     }
 
     @Override

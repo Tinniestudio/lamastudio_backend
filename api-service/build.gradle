@@ -57,6 +57,10 @@ dependencies {
     // Stripe
     implementation 'com.stripe:stripe-java:26.3.0'
 
+    // AWS SDK v2 (S3-compatible — works with MinIO, S3, R2)
+    implementation platform('software.amazon.awssdk:bom:2.25.0')
+    implementation 'software.amazon.awssdk:s3'
+
     // Dev tools (excluded from production JAR automatically)
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
