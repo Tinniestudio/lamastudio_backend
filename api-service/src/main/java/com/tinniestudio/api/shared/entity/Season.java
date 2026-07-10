@@ -11,7 +11,7 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "seasons", uniqueConstraints = {
-    @UniqueConstraint(columnNames = { "content_id", "seasonNumber" })
+    @UniqueConstraint(columnNames = { "content_id", "season_number" })
 })
 @Getter
 @Setter

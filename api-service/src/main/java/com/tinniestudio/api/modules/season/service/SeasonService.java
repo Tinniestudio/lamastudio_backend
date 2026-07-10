@@ -60,13 +60,21 @@ public class SeasonService {
         season.setReleaseDate(req.releaseDate());
         season.setPosterUrl(req.posterUrl());
         season.setThumbnailUrl(req.thumbnailUrl());
-        return SeasonResponse.from(seasonRepository.save(season));
+        try {
+            return SeasonResponse.from(seasonRepository.save(season));
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Season number " + seasonNumber + " already exists for this content");
+        }
     }
 
     @Transactional
-    public SeasonResponse update(UUID id, UpdateSeasonRequest req) {
+    public SeasonResponse update(UUID contentId, UUID id, UpdateSeasonRequest req) {
         Season season = seasonRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + id));
+        if (!season.getContent().getId().equals(contentId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + id);
+        }
         if (req.title() != null)        season.setTitle(req.title());
         if (req.description() != null)  season.setDescription(req.description());
         if (req.releaseDate() != null)  season.setReleaseDate(req.releaseDate());
@@ -76,9 +84,12 @@ public class SeasonService {
     }
 
     @Transactional
-    public void delete(UUID id) {
+    public void delete(UUID contentId, UUID id) {
         Season season = seasonRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + id));
+        if (!season.getContent().getId().equals(contentId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + id);
+        }
         seasonRepository.delete(season);
     }
 }

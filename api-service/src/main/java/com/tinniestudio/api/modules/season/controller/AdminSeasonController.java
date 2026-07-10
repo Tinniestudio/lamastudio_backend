@@ -37,14 +37,14 @@ public class AdminSeasonController {
             @PathVariable UUID contentId,
             @PathVariable UUID id,
             @RequestBody UpdateSeasonRequest req) {
-        return ResponseEntity.ok(seasonService.update(id, req));
+        return ResponseEntity.ok(seasonService.update(contentId, id, req));
     }
 
     @Operation(summary = "Delete a season and all its episodes")
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> delete(@PathVariable UUID contentId, @PathVariable UUID id) {
-        seasonService.delete(id);
+        seasonService.delete(contentId, id);
         return ResponseEntity.noContent().build();
     }
 }

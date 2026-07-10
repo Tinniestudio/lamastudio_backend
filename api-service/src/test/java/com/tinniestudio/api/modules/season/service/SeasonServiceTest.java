@@ -230,7 +230,7 @@ class SeasonServiceTest {
             when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(s));
             when(seasonRepository.save(any(Season.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            SeasonResponse result = seasonService.update(seasonId, req);
+            SeasonResponse result = seasonService.update(contentId, seasonId, req);
 
             assertThat(result.title()).isEqualTo("Updated Title");
             assertThat(result.posterUrl()).isEqualTo("https://old-poster.jpg"); // unchanged
@@ -242,9 +242,26 @@ class SeasonServiceTest {
             UUID missingId = UUID.randomUUID();
             when(seasonRepository.findById(missingId)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> seasonService.update(missingId, new UpdateSeasonRequest(null, null, null, null, null)))
+            assertThatThrownBy(() -> seasonService.update(contentId, missingId, new UpdateSeasonRequest(null, null, null, null, null)))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
+        }
+
+        @Test
+        @DisplayName("update() throws 404 when season belongs to different content")
+        void updateThrowsWhenWrongContent() {
+            Season season = new Season();
+            season.setId(UUID.randomUUID());
+            season.setContent(seriesContent);
+            season.setSeasonNumber(1);
+            season.setEpisodes(new java.util.ArrayList<>());
+
+            UUID wrongContentId = UUID.randomUUID();
+            when(seasonRepository.findById(season.getId())).thenReturn(Optional.of(season));
+
+            assertThatThrownBy(() -> seasonService.update(wrongContentId, season.getId(), new UpdateSeasonRequest(null, null, null, null, null)))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
         }
     }
 
@@ -258,7 +275,7 @@ class SeasonServiceTest {
             Season s = buildSeason(1);
             when(seasonRepository.findById(s.getId())).thenReturn(Optional.of(s));
 
-            seasonService.delete(s.getId());
+            seasonService.delete(contentId, s.getId());
 
             verify(seasonRepository).delete(s);
         }
@@ -269,9 +286,28 @@ class SeasonServiceTest {
             UUID missingId = UUID.randomUUID();
             when(seasonRepository.findById(missingId)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> seasonService.delete(missingId))
+            assertThatThrownBy(() -> seasonService.delete(contentId, missingId))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
+        }
+    }
+
+    @Nested
+    @DisplayName("create() — race condition")
+    class CreateRaceConditionTests {
+
+        @Test
+        @DisplayName("throws 409 when save fails due to duplicate season number (race condition)")
+        void throwsConflictOnSaveViolation() {
+            CreateSeasonRequest req = new CreateSeasonRequest(null, "Season 1", null, null, null, null);
+            when(contentRepository.findById(seriesContent.getId())).thenReturn(Optional.of(seriesContent));
+            when(seasonRepository.findMaxSeasonNumberByContentId(seriesContent.getId())).thenReturn(Optional.of(0));
+            when(seasonRepository.save(any(Season.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
+
+            assertThatThrownBy(() -> seasonService.create(seriesContent.getId(), req))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(409));
         }
     }
 }
