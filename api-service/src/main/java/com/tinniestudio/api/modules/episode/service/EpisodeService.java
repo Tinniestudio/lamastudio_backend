@@ -80,7 +80,10 @@ public class EpisodeService {
         if (!episode.getSeason().getId().equals(seasonId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found: " + id);
         }
-        if (req.title() != null)           episode.setTitle(req.title());
+        if (req.title() != null) {
+            if (req.title().isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "title must not be blank");
+            episode.setTitle(req.title());
+        }
         if (req.description() != null)     episode.setDescription(req.description());
         if (req.releaseDate() != null)     episode.setReleaseDate(req.releaseDate());
         if (req.durationSeconds() != null) episode.setDurationSeconds(req.durationSeconds());
