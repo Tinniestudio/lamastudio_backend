@@ -50,4 +50,11 @@ public class ContentSpecifications {
     public static Specification<Content> isPublished() {
         return hasStatus(ContentStatus.PUBLISHED);
     }
+
+    public static Specification<Content> isViewable() {
+        return (root, query, cb) -> cb.and(
+            cb.notEqual(root.get("status"), ContentStatus.ARCHIVED),
+            cb.notEqual(root.get("status"), ContentStatus.REJECTED)
+        );
+    }
 }

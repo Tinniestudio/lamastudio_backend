@@ -30,28 +30,28 @@ public class DiscoverController {
     @GetMapping("/trending")
     public ResponseEntity<List<ContentSummaryResponse>> trending(
             @RequestParam(defaultValue = "20") int limit) {
-        return ResponseEntity.ok(discoverService.trending(Math.min(limit, 50)));
+        return ResponseEntity.ok(discoverService.trending(Math.max(1, Math.min(limit, 50))));
     }
 
     @Operation(summary = "Featured content")
     @GetMapping("/featured")
     public ResponseEntity<List<ContentSummaryResponse>> featured(
             @RequestParam(defaultValue = "10") int limit) {
-        return ResponseEntity.ok(discoverService.featured(Math.min(limit, 50)));
+        return ResponseEntity.ok(discoverService.featured(Math.max(1, Math.min(limit, 50))));
     }
 
     @Operation(summary = "New releases (most recently published)")
     @GetMapping("/new-releases")
     public ResponseEntity<List<ContentSummaryResponse>> newReleases(
             @RequestParam(defaultValue = "20") int limit) {
-        return ResponseEntity.ok(discoverService.newReleases(Math.min(limit, 50)));
+        return ResponseEntity.ok(discoverService.newReleases(Math.max(1, Math.min(limit, 50))));
     }
 
     @Operation(summary = "Coming soon content")
     @GetMapping("/coming-soon")
     public ResponseEntity<List<ContentSummaryResponse>> comingSoon(
             @RequestParam(defaultValue = "20") int limit) {
-        return ResponseEntity.ok(discoverService.comingSoon(Math.min(limit, 50)));
+        return ResponseEntity.ok(discoverService.comingSoon(Math.max(1, Math.min(limit, 50))));
     }
 
     @Operation(summary = "Content by category slug")
@@ -59,6 +59,6 @@ public class DiscoverController {
     public ResponseEntity<List<ContentSummaryResponse>> byCategory(
             @PathVariable String slug,
             @RequestParam(defaultValue = "20") int limit) {
-        return ResponseEntity.ok(discoverService.byCategory(slug, Math.min(limit, 50)));
+        return ResponseEntity.ok(discoverService.byCategory(slug, Math.max(1, Math.min(limit, 50))));
     }
 }

@@ -53,7 +53,7 @@ public class DiscoverService {
     @Transactional(readOnly = true)
     public List<ContentSummaryResponse> comingSoon(int limit) {
         return contentRepository.findAll(
-            ContentSpecifications.isComingSoon(true),
+            ContentSpecifications.isComingSoon(true).and(ContentSpecifications.isViewable()),
             PageRequest.of(0, limit, Sort.by(Sort.Direction.ASC, "releaseDate"))
         ).map(ContentSummaryResponse::from).toList();
     }

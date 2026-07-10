@@ -104,6 +104,40 @@ class DiscoverServiceTest {
     }
 
     @Nested
+    @DisplayName("newReleases()")
+    class NewReleasesTests {
+
+        @Test
+        @DisplayName("returns published non-coming-soon content")
+        void returnsNewReleases() {
+            when(contentRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(publishedContent())));
+
+            List<ContentSummaryResponse> result = discoverService.newReleases(20);
+
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).comingSoon()).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("byCategory()")
+    class ByCategoryTests {
+
+        @Test
+        @DisplayName("returns published content for given category slug")
+        void returnsByCategory() {
+            when(contentRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(publishedContent())));
+
+            List<ContentSummaryResponse> result = discoverService.byCategory("action", 20);
+
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).title()).isEqualTo("Interstellar");
+        }
+    }
+
+    @Nested
     @DisplayName("home()")
     class HomeTests {
 
