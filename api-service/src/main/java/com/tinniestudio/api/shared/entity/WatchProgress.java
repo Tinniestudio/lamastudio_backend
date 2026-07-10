@@ -26,6 +26,7 @@ public class WatchProgress extends BaseEntity {
 
   private Integer durationSeconds;
 
+  @Column(nullable = false)
   private Boolean completed = false;
 
   private Instant lastWatchedAt;

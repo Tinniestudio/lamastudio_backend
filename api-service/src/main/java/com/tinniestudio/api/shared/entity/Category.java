@@ -20,6 +20,7 @@ public class Category extends BaseEntity {
 
   private String description;
 
+  @Column(nullable = false)
   private Boolean isActive = true;
 
   private String posterUrl;

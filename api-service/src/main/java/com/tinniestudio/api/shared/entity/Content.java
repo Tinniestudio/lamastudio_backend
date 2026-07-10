@@ -51,6 +51,7 @@ public class Content extends BaseEntity {
 
     private String country;
 
+    @Column(nullable = false)
     private Boolean featured = false;
 
     private String posterUrl;
@@ -78,9 +79,9 @@ public class Content extends BaseEntity {
     @JoinTable(name = "content_categories", joinColumns = @JoinColumn(name = "content_id"), inverseJoinColumns = @JoinColumn(name = "category_id"))
     private Set<Category> categories = new HashSet<>();
 
-    @OneToMany(mappedBy = "content", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "content", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Season> seasons = new ArrayList<>();
 
-    @OneToMany(mappedBy = "content", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "content", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<VideoAsset> videoAssets = new ArrayList<>();
 }

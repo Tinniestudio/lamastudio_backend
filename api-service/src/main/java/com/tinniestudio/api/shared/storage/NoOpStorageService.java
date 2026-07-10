@@ -41,6 +41,7 @@ public class NoOpStorageService implements StorageService {
 
     @Override
     public String uploadFile(String key, byte[] content, String contentType) {
+        log.warn("NoOpStorageService.uploadFile called for key={}. No file was actually stored.", key);
         return "https://noop.storage/" + key;
     }
 }

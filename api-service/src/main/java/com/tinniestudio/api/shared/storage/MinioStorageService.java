@@ -127,7 +127,10 @@ public class MinioStorageService implements StorageService {
                     .build(),
                 RequestBody.fromBytes(content)
             );
-            return props.getEndpoint() + "/" + props.getBucket() + "/" + key;
+            String endpoint = props.getEndpoint().endsWith("/")
+                ? props.getEndpoint().substring(0, props.getEndpoint().length() - 1)
+                : props.getEndpoint();
+            return endpoint + "/" + props.getBucket() + "/" + key;
         } catch (SdkException e) {
             throw new StorageException("Failed to upload file for key=" + key, e);
         }

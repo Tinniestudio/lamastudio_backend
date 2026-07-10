@@ -223,12 +223,18 @@ class MinioStorageServiceTest {
     class UploadFileTests {
 
         @Test
-        @DisplayName("uploads bytes and returns public URL")
+        @DisplayName("uploads bytes and returns public URL with correct bucket and key")
         void returnsPublicUrl() {
             String url = service.uploadFile("posters/categories/action.jpg", new byte[]{1, 2, 3}, "image/jpeg");
 
             assertThat(url).isEqualTo("http://localhost:9000/tinniestudio/posters/categories/action.jpg");
-            verify(s3Client).putObject(any(PutObjectRequest.class), any(RequestBody.class));
+
+            ArgumentCaptor<PutObjectRequest> captor = ArgumentCaptor.forClass(PutObjectRequest.class);
+            verify(s3Client).putObject(captor.capture(), any(RequestBody.class));
+            assertThat(captor.getValue().bucket()).isEqualTo("tinniestudio");
+            assertThat(captor.getValue().key()).isEqualTo("posters/categories/action.jpg");
+            assertThat(captor.getValue().contentType()).isEqualTo("image/jpeg");
+            assertThat(captor.getValue().contentLength()).isEqualTo(3L);
         }
 
         @Test
