@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS categories (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_categories_slug        ON categories(slug);
 CREATE INDEX idx_categories_is_active   ON categories(is_active);
 CREATE INDEX idx_categories_order       ON categories(display_order);
 

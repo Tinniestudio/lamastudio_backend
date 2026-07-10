@@ -3,4 +3,4 @@ INSERT INTO homepage_sections (title, section_type, display_order, is_active) VA
     ('Featured',      'FEATURED',     2, true),
     ('New Releases',  'NEW_RELEASES', 3, true),
     ('Coming Soon',   'COMING_SOON',  4, true)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (section_type) DO NOTHING;

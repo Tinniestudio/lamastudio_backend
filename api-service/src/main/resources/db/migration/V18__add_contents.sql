@@ -22,7 +22,6 @@ CREATE TABLE IF NOT EXISTS contents (
     updated_at       TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_content_slug        ON contents(slug);
 CREATE INDEX idx_content_type        ON contents(type);
 CREATE INDEX idx_content_status      ON contents(status);
 CREATE INDEX idx_content_view_count  ON contents(view_count DESC);

@@ -12,4 +12,3 @@ CREATE TABLE IF NOT EXISTS seasons (
     UNIQUE (content_id, season_number)
 );
 
-CREATE INDEX idx_seasons_content_id ON seasons(content_id);
