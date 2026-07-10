@@ -50,7 +50,7 @@ public class HomepageSectionService {
         try {
             return SectionResponse.from(repository.save(section));
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "A section with this type already exists: " + req.sectionType());
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Failed to create section — a constraint was violated (sectionType may already exist): " + e.getMostSpecificCause().getMessage());
         }
     }
 
@@ -63,7 +63,9 @@ public class HomepageSectionService {
         if (req.sectionType() != null)  section.setSectionType(req.sectionType());
         if (req.displayOrder() != null) section.setDisplayOrder(req.displayOrder());
         if (req.isActive() != null)     section.setIsActive(req.isActive());
-        if (req.categoryId() != null) {
+        if (Boolean.TRUE.equals(req.removeCategory())) {
+            section.setCategory(null);
+        } else if (req.categoryId() != null) {
             section.setCategory(categoryRepository.findById(req.categoryId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found: " + req.categoryId())));
         }
@@ -73,9 +75,8 @@ public class HomepageSectionService {
     @Transactional
     @CacheEvict(value = "homepage-sections", allEntries = true)
     public void delete(UUID id) {
-        if (!repository.existsById(id)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Section not found: " + id);
-        }
-        repository.deleteById(id);
+        HomepageSection section = repository.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Section not found: " + id));
+        repository.delete(section);
     }
 }

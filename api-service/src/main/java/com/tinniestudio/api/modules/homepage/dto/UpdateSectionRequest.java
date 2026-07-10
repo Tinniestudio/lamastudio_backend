@@ -7,6 +7,7 @@ public record UpdateSectionRequest(
     String title,
     SectionType sectionType,
     UUID categoryId,
+    Boolean removeCategory,
     Integer displayOrder,
     Boolean isActive
 ) {}
