@@ -81,10 +81,15 @@ public class CategoryService {
     @Transactional
     @CacheEvict(value = "categories", allEntries = true)
     public void delete(UUID id) {
-        if (!categoryRepository.existsById(id)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found: " + id);
+        Category category = categoryRepository.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found: " + id));
+        try {
+            categoryRepository.delete(category);
+            categoryRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Category is referenced by one or more homepage sections and cannot be deleted");
         }
-        categoryRepository.deleteById(id);
     }
 
     private String uploadPoster(MultipartFile poster, String categoryName) {
