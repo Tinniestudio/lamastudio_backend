@@ -39,6 +39,9 @@ public class ContentSpecifications {
     public static Specification<Content> hasCategory(String categorySlug) {
         return (root, query, cb) -> {
             if (categorySlug == null) return cb.conjunction();
+            if (query != null && !Long.class.equals(query.getResultType())) {
+                query.distinct(true);
+            }
             var categories = root.join("categories", JoinType.INNER);
             return cb.equal(categories.get("slug"), categorySlug);
         };

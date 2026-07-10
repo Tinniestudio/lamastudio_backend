@@ -126,6 +126,22 @@ class ContentServiceTest {
             assertThat(result.categoryNames()).contains("Action");
             verify(categoryRepository).findAllById(List.of(catId));
         }
+
+        @Test
+        @DisplayName("throws 409 when title slug already exists")
+        void throwsConflictOnDuplicateSlug() {
+            UUID creatorId = UUID.randomUUID();
+            CreateContentRequest req = new CreateContentRequest(
+                "Inception", ContentType.MOVIE, MaturityRating.PG_13,
+                null, null, null, false, null, null
+            );
+            when(contentRepository.save(any(Content.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("slug unique violation"));
+
+            assertThatThrownBy(() -> contentService.create(req, creatorId))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(409));
+        }
     }
 
     @Nested
@@ -171,6 +187,31 @@ class ContentServiceTest {
 
             assertThat(result.title()).isEqualTo("Updated Title");
             assertThat(result.type()).isEqualTo("MOVIE"); // unchanged
+        }
+
+        @Test
+        @DisplayName("clears all categories when categoryIds is empty list")
+        void clearsCategoriesOnEmptyList() {
+            // pre-populate a category on the content
+            com.tinniestudio.api.shared.entity.Category existing = new com.tinniestudio.api.shared.entity.Category();
+            existing.setId(UUID.randomUUID());
+            existing.setName("Action");
+            existing.setSlug("action");
+            existing.setIsActive(true);
+            existing.setDisplayOrder(1);
+            content.setCategories(new java.util.HashSet<>(java.util.Set.of(existing)));
+
+            UpdateContentRequest req = new UpdateContentRequest(
+                null, null, null, null, null, null, null, null, null, null, null,
+                java.util.List.of() // empty — should clear categories
+            );
+            when(contentRepository.findById(content.getId())).thenReturn(Optional.of(content));
+            when(categoryRepository.findAllById(java.util.List.of())).thenReturn(java.util.List.of());
+            when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            ContentResponse result = contentService.update(content.getId(), req);
+
+            assertThat(result.categoryNames()).isEmpty();
         }
     }
 
@@ -238,6 +279,17 @@ class ContentServiceTest {
 
             assertThat(result.status()).isEqualTo("PUBLISHED");
             assertThat(result.publishedAt()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("throws 400 when transitioning out of ARCHIVED state")
+        void throwsOnArchivedTransition() {
+            content.setStatus(ContentStatus.ARCHIVED);
+            when(contentRepository.findById(content.getId())).thenReturn(Optional.of(content));
+
+            assertThatThrownBy(() -> contentService.transitionStatus(content.getId(), ContentStatus.DRAFT))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
         }
     }
 
