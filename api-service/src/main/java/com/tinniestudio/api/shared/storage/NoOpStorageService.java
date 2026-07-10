@@ -38,4 +38,9 @@ public class NoOpStorageService implements StorageService {
     public void deleteObject(String key) {
         log.warn("NoOpStorageService: deleteObject called for key={}. No-op in development.", key);
     }
+
+    @Override
+    public String uploadFile(String key, byte[] content, String contentType) {
+        return "https://noop.storage/" + key;
+    }
 }

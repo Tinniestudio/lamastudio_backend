@@ -21,4 +21,9 @@ public class Category extends BaseEntity {
   private String description;
 
   private Boolean isActive = true;
+
+  private String posterUrl;
+
+  @Column(nullable = false)
+  private Integer displayOrder = 0;
 }

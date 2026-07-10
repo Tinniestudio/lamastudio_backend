@@ -22,9 +22,28 @@ public final class DomainEnums {
 
     public enum ContentStatus {
         DRAFT,
+        REVIEW,
         PROCESSING,
         PUBLISHED,
+        REJECTED,
         ARCHIVED
+    }
+
+    public enum MaturityRating {
+        G,
+        PG,
+        PG_13,
+        R,
+        NOT_RATED
+    }
+
+    public enum SectionType {
+        TRENDING,
+        FEATURED,
+        CONTINUE_WATCHING,
+        CATEGORY,
+        NEW_RELEASES,
+        COMING_SOON
     }
 
     public enum VideoAssetType {

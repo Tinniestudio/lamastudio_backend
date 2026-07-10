@@ -16,4 +16,10 @@ public interface StorageService {
     boolean objectExists(String key);
 
     void deleteObject(String key);
+
+    /**
+     * Upload raw bytes to object storage and return the public URL of the stored object.
+     * Used for direct server-side uploads (e.g. category poster via multipart form).
+     */
+    String uploadFile(String key, byte[] content, String contentType);
 }

@@ -29,4 +29,11 @@ public class WatchProgress extends BaseEntity {
   private Boolean completed = false;
 
   private Instant lastWatchedAt;
+
+  private UUID videoAssetId;
+
+  @Column(precision = 5, scale = 2)
+  private java.math.BigDecimal completionPercentage;
+
+  private String deviceType;
 }

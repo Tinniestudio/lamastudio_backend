@@ -11,11 +11,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -213,6 +215,32 @@ class MinioStorageServiceTest {
             assertThatThrownBy(() -> service.deleteObject("raw/abc/original.mp4"))
                 .isInstanceOf(StorageException.class)
                 .hasMessageContaining("raw/abc/original.mp4");
+        }
+    }
+
+    @Nested
+    @DisplayName("uploadFile()")
+    class UploadFileTests {
+
+        @Test
+        @DisplayName("uploads bytes and returns public URL")
+        void returnsPublicUrl() {
+            String url = service.uploadFile("posters/categories/action.jpg", new byte[]{1, 2, 3}, "image/jpeg");
+
+            assertThat(url).isEqualTo("http://localhost:9000/tinniestudio/posters/categories/action.jpg");
+            verify(s3Client).putObject(any(PutObjectRequest.class), any(RequestBody.class));
+        }
+
+        @Test
+        @DisplayName("wraps SdkException as StorageException on upload failure")
+        void wrapsUploadException() {
+            doThrow(SdkException.builder().message("timeout").build())
+                .when(s3Client).putObject(any(PutObjectRequest.class), any(RequestBody.class));
+
+            assertThatThrownBy(() ->
+                service.uploadFile("posters/categories/action.jpg", new byte[]{1}, "image/jpeg")
+            ).isInstanceOf(StorageException.class)
+             .hasMessageContaining("posters/categories/action.jpg");
         }
     }
 }

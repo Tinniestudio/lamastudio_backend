@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
@@ -111,6 +112,24 @@ public class MinioStorageService implements StorageService {
             log.debug("Deleted object key={}", key);
         } catch (SdkException e) {
             throw new StorageException("Failed to delete object for key=" + key, e);
+        }
+    }
+
+    @Override
+    public String uploadFile(String key, byte[] content, String contentType) {
+        try {
+            s3Client.putObject(
+                PutObjectRequest.builder()
+                    .bucket(props.getBucket())
+                    .key(key)
+                    .contentType(contentType)
+                    .contentLength((long) content.length)
+                    .build(),
+                RequestBody.fromBytes(content)
+            );
+            return props.getEndpoint() + "/" + props.getBucket() + "/" + key;
+        } catch (SdkException e) {
+            throw new StorageException("Failed to upload file for key=" + key, e);
         }
     }
 }

@@ -17,9 +17,9 @@ import com.tinniestudio.api.shared.entity.DomainEnums.*;
 
 @Entity
 @Table(name = "contents", indexes = {
-        @Index(name = "idx_content_slug", columnList = "slug", unique = true),
-        @Index(name = "idx_content_type", columnList = "type"),
-        @Index(name = "idx_content_status", columnList = "status")
+        @Index(name = "idx_content_type",       columnList = "type"),
+        @Index(name = "idx_content_status",     columnList = "status"),
+        @Index(name = "idx_content_view_count", columnList = "view_count")
 })
 @Getter
 @Setter
@@ -61,6 +61,18 @@ public class Content extends BaseEntity {
     private UUID createdBy;
 
     private Instant publishedAt;
+
+    @Column(nullable = false)
+    private Long viewCount = 0L;
+
+    @Column(nullable = false)
+    private Boolean comingSoon = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private MaturityRating maturityRating = MaturityRating.NOT_RATED;
+
+    private Integer durationSeconds;
 
     @ManyToMany
     @JoinTable(name = "content_categories", joinColumns = @JoinColumn(name = "content_id"), inverseJoinColumns = @JoinColumn(name = "category_id"))

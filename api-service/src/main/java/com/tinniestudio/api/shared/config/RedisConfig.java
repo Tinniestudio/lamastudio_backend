@@ -20,6 +20,8 @@ import org.springframework.core.env.Environment;
 import io.lettuce.core.RedisURI;
 
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Redis configuration for rate limiting and caching.
@@ -85,9 +87,18 @@ public class RedisConfig {
                         RedisSerializationContext.SerializationPair.fromSerializer(
                                 new GenericJackson2JsonRedisSerializer()));
 
-        log.info("CacheManager configured with default TTL: {} minutes", DEFAULT_CACHE_TTL_MINUTES);
+        Map<String, RedisCacheConfiguration> cacheConfigs = new HashMap<>();
+        cacheConfigs.put("categories",        config.entryTtl(Duration.ofMinutes(10)));
+        cacheConfigs.put("homepage-sections", config.entryTtl(Duration.ofMinutes(5)));
+        cacheConfigs.put("content-list",      config.entryTtl(Duration.ofMinutes(2)));
+        cacheConfigs.put("content-detail",    config.entryTtl(Duration.ofMinutes(5)));
+        cacheConfigs.put("discover",          config.entryTtl(Duration.ofMinutes(2)));
+
+        log.info("CacheManager configured with default TTL: {} minutes + per-cache overrides",
+                DEFAULT_CACHE_TTL_MINUTES);
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(config)
+                .withInitialCacheConfigurations(cacheConfigs)
                 .build();
     }
 
