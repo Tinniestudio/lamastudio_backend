@@ -135,6 +135,8 @@ public class SecurityConfig {
         "/categories/**",
         "/api/v1/categories",
         "/api/v1/categories/**",
+        "/homepage-sections",
+        "/api/v1/homepage-sections",
         "/subscriptions/plans",
         "/api/v1/subscriptions/plans",
         "/webhooks/stripe",
