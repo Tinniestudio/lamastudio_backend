@@ -2,6 +2,7 @@ package com.tinniestudio.api.modules.discover.controller;
 
 import com.tinniestudio.api.modules.content.dto.ContentSummaryResponse;
 import com.tinniestudio.api.modules.discover.dto.HomeSectionDto;
+import com.tinniestudio.api.modules.discover.dto.HomeResponse;
 import com.tinniestudio.api.modules.discover.service.DiscoverService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,8 +22,8 @@ public class DiscoverController {
 
     @Operation(summary = "Homepage — all active sections with their content")
     @GetMapping("/home")
-    public ResponseEntity<List<HomeSectionDto>> home() {
-        return ResponseEntity.ok(discoverService.home());
+    public ResponseEntity<HomeResponse> home() {
+        return ResponseEntity.ok(new HomeResponse(discoverService.home()));
     }
 
     @Operation(summary = "Trending content (highest view count)")
