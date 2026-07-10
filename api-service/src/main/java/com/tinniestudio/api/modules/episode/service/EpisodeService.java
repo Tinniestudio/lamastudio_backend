@@ -32,10 +32,13 @@ public class EpisodeService {
     }
 
     @Transactional(readOnly = true)
-    public EpisodeResponse getById(UUID id) {
-        return episodeRepository.findById(id)
-            .map(EpisodeResponse::from)
+    public EpisodeResponse getById(UUID seasonId, UUID id) {
+        Episode episode = episodeRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found: " + id));
+        if (!episode.getSeason().getId().equals(seasonId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found: " + id);
+        }
+        return EpisodeResponse.from(episode);
     }
 
     @Transactional
@@ -98,9 +101,14 @@ public class EpisodeService {
     @Transactional
     public void reorder(UUID seasonId, ReorderEpisodesRequest req) {
         List<UUID> orderedIds = req.episodeIds();
+        List<Episode> allEpisodes = episodeRepository.findBySeasonIdOrderByEpisodeNumberAsc(seasonId);
+        if (allEpisodes.size() != orderedIds.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Reorder list must contain all " + allEpisodes.size() + " episodes in the season (received " + orderedIds.size() + ")");
+        }
         int tempBase = -(orderedIds.size() * 1000);
 
-        // Phase 1: assign temp negative numbers to avoid UNIQUE constraint violations mid-reorder
+        // Phase 1: assign temp negative numbers (avoids UNIQUE conflicts during reorder)
         int temp = tempBase;
         for (UUID epId : orderedIds) {
             Episode ep = episodeRepository.findById(epId)
@@ -116,7 +124,8 @@ public class EpisodeService {
         // Phase 2: assign final 1..N numbers
         int number = 1;
         for (UUID epId : orderedIds) {
-            Episode ep = episodeRepository.findById(epId).orElseThrow();
+            Episode ep = episodeRepository.findById(epId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found during reorder: " + epId));
             ep.setEpisodeNumber(number++);
             episodeRepository.save(ep);
         }

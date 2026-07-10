@@ -28,6 +28,6 @@ public class EpisodeController {
     @Operation(summary = "Get a specific episode")
     @GetMapping("/{id}")
     public ResponseEntity<EpisodeResponse> get(@PathVariable UUID seasonId, @PathVariable UUID id) {
-        return ResponseEntity.ok(episodeService.getById(id));
+        return ResponseEntity.ok(episodeService.getById(seasonId, id));
     }
 }

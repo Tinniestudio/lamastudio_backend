@@ -21,6 +21,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
@@ -110,10 +111,10 @@ class EpisodeServiceTest {
         @Test
         @DisplayName("returns response when found")
         void returnsResponseWhenFound() {
-            Episode ep = buildEpisode(1);
+            Episode ep = buildEpisode(1); // buildEpisode sets ep.setSeason(season) where season.getId() == seasonId
             when(episodeRepository.findById(ep.getId())).thenReturn(Optional.of(ep));
 
-            EpisodeResponse result = episodeService.getById(ep.getId());
+            EpisodeResponse result = episodeService.getById(seasonId, ep.getId());
 
             assertThat(result.episodeNumber()).isEqualTo(1);
             assertThat(result.seasonId()).isEqualTo(seasonId);
@@ -125,9 +126,31 @@ class EpisodeServiceTest {
             UUID missingId = UUID.randomUUID();
             when(episodeRepository.findById(missingId)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> episodeService.getById(missingId))
+            assertThatThrownBy(() -> episodeService.getById(seasonId, missingId))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
+        }
+
+        @Test
+        @DisplayName("throws 404 when episode belongs to wrong season")
+        void throws404WhenWrongSeason() {
+            UUID otherSeasonId = UUID.randomUUID();
+
+            Season otherSeason = new Season();
+            otherSeason.setId(otherSeasonId);
+
+            Episode ep = new Episode();
+            ep.setId(UUID.randomUUID());
+            ep.setSeason(otherSeason);
+            ep.setEpisodeNumber(1);
+            ep.setTitle("Ep 1");
+
+            when(episodeRepository.findById(ep.getId())).thenReturn(Optional.of(ep));
+
+            assertThatThrownBy(() -> episodeService.getById(seasonId, ep.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting("status")
+                .isEqualTo(HttpStatus.NOT_FOUND);
         }
     }
 
@@ -319,6 +342,7 @@ class EpisodeServiceTest {
             // reorder: ep1 should become #1, ep2 should become #2
             ReorderEpisodesRequest req = new ReorderEpisodesRequest(List.of(ep1Id, ep2Id));
 
+            when(episodeRepository.findBySeasonIdOrderByEpisodeNumberAsc(seasonId)).thenReturn(List.of(ep1, ep2));
             when(episodeRepository.findById(ep1Id)).thenReturn(Optional.of(ep1));
             when(episodeRepository.findById(ep2Id)).thenReturn(Optional.of(ep2));
             when(episodeRepository.save(any(Episode.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -330,6 +354,49 @@ class EpisodeServiceTest {
             assertThat(ep2.getEpisodeNumber()).isEqualTo(2);
             // save should be called twice per episode (phase 1 + phase 2)
             verify(episodeRepository, times(4)).save(any(Episode.class));
+        }
+
+        @Test
+        @DisplayName("throws 400 when reorder list is partial (not all episodes included)")
+        void throws400OnPartialReorderList() {
+            Episode ep1 = buildEpisode(1);
+            Episode ep2 = buildEpisode(2);
+
+            when(episodeRepository.findBySeasonIdOrderByEpisodeNumberAsc(seasonId)).thenReturn(List.of(ep1, ep2));
+
+            ReorderEpisodesRequest req = new ReorderEpisodesRequest(List.of(ep1.getId())); // only 1 of 2
+
+            assertThatThrownBy(() -> episodeService.reorder(seasonId, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting("status")
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        }
+
+        @Test
+        @DisplayName("throws 400 when reorder list contains episode from different season")
+        void throws400WhenEpisodeFromWrongSeason() {
+            UUID otherSeasonId = UUID.randomUUID();
+
+            Season rightSeason = new Season(); rightSeason.setId(seasonId);
+            Season wrongSeason = new Season(); wrongSeason.setId(otherSeasonId);
+
+            Episode ep1 = new Episode(); ep1.setId(UUID.randomUUID()); ep1.setEpisodeNumber(1); ep1.setTitle("E1");
+            ep1.setSeason(rightSeason);
+
+            Episode ep2 = new Episode(); ep2.setId(UUID.randomUUID()); ep2.setEpisodeNumber(2); ep2.setTitle("E2");
+            ep2.setSeason(wrongSeason); // wrong season
+
+            when(episodeRepository.findBySeasonIdOrderByEpisodeNumberAsc(seasonId)).thenReturn(List.of(ep1, ep2));
+            when(episodeRepository.findById(ep1.getId())).thenReturn(Optional.of(ep1));
+            when(episodeRepository.findById(ep2.getId())).thenReturn(Optional.of(ep2));
+            when(episodeRepository.save(any(Episode.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            ReorderEpisodesRequest req = new ReorderEpisodesRequest(List.of(ep1.getId(), ep2.getId()));
+
+            assertThatThrownBy(() -> episodeService.reorder(seasonId, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting("status")
+                .isEqualTo(HttpStatus.BAD_REQUEST);
         }
     }
 }
