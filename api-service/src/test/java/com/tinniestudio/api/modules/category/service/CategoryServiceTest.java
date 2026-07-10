@@ -14,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -100,7 +101,6 @@ class CategoryServiceTest {
                 "poster", "horror.jpg", "image/jpeg", new byte[]{1, 2, 3}
             );
 
-            when(categoryRepository.existsByName("Horror")).thenReturn(false);
             when(storageService.uploadFile(anyString(), any(), eq("image/jpeg")))
                 .thenReturn("http://localhost:9000/tinniestudio/posters/categories/horror.jpg");
             when(categoryRepository.save(any(Category.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -116,7 +116,6 @@ class CategoryServiceTest {
         @DisplayName("saves category without poster when poster is null")
         void savesWithoutPoster() {
             CreateCategoryRequest req = new CreateCategoryRequest("Drama", null, 2);
-            when(categoryRepository.existsByName("Drama")).thenReturn(false);
             when(categoryRepository.save(any(Category.class))).thenAnswer(inv -> inv.getArgument(0));
 
             CategoryResponse result = categoryService.create(req, null);
@@ -127,10 +126,11 @@ class CategoryServiceTest {
         }
 
         @Test
-        @DisplayName("throws 409 when name already exists")
+        @DisplayName("throws 409 when DB unique constraint is violated")
         void throwsConflictOnDuplicateName() {
             CreateCategoryRequest req = new CreateCategoryRequest("Action", null, 1);
-            when(categoryRepository.existsByName("Action")).thenReturn(true);
+            when(categoryRepository.save(any(Category.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
             assertThatThrownBy(() -> categoryService.create(req, null))
                 .isInstanceOf(ResponseStatusException.class);
@@ -152,6 +152,24 @@ class CategoryServiceTest {
 
             assertThat(result.name()).isEqualTo("Action"); // unchanged
             assertThat(result.description()).isEqualTo("Updated description");
+        }
+
+        @Test
+        @DisplayName("updates poster URL when poster provided")
+        void updatesPoster() throws Exception {
+            UpdateCategoryRequest req = new UpdateCategoryRequest(null, null, null, null);
+            MockMultipartFile poster = new MockMultipartFile(
+                "poster", "action-new.jpg", "image/jpeg", new byte[]{4, 5, 6}
+            );
+            when(categoryRepository.findById(category.getId())).thenReturn(Optional.of(category));
+            when(storageService.uploadFile(anyString(), any(), anyString()))
+                .thenReturn("http://localhost:9000/tinniestudio/posters/categories/action-new.jpg");
+            when(categoryRepository.save(any(Category.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            CategoryResponse result = categoryService.update(category.getId(), req, poster);
+
+            assertThat(result.posterUrl()).contains("action-new");
+            verify(storageService).uploadFile(anyString(), eq(new byte[]{4, 5, 6}), eq("image/jpeg"));
         }
     }
 

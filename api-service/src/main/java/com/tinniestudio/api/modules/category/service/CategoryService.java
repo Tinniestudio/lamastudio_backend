@@ -9,6 +9,7 @@ import com.tinniestudio.api.shared.storage.StorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,15 +28,18 @@ public class CategoryService {
     private final StorageService storageService;
 
     @Cacheable("categories")
+    @Transactional(readOnly = true)
     public List<CategoryResponse> listActive() {
         return categoryRepository.findByIsActiveTrueOrderByDisplayOrderAsc()
                 .stream().map(CategoryResponse::from).toList();
     }
 
+    @Transactional(readOnly = true)
     public List<CategoryResponse> listAll() {
         return categoryRepository.findAll().stream().map(CategoryResponse::from).toList();
     }
 
+    @Transactional(readOnly = true)
     public CategoryResponse getBySlug(String slug) {
         return categoryRepository.findBySlug(slug)
                 .map(CategoryResponse::from)
@@ -45,9 +49,6 @@ public class CategoryService {
     @Transactional
     @CacheEvict(value = "categories", allEntries = true)
     public CategoryResponse create(CreateCategoryRequest req, MultipartFile poster) {
-        if (categoryRepository.existsByName(req.name())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Category name already exists: " + req.name());
-        }
         Category category = new Category();
         category.setName(req.name());
         category.setDescription(req.description());
@@ -55,7 +56,11 @@ public class CategoryService {
         if (poster != null && !poster.isEmpty()) {
             category.setPosterUrl(uploadPoster(poster, req.name()));
         }
-        return CategoryResponse.from(categoryRepository.save(category));
+        try {
+            return CategoryResponse.from(categoryRepository.save(category));
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Category name already exists: " + req.name());
+        }
     }
 
     @Transactional
@@ -87,7 +92,8 @@ public class CategoryService {
             String sanitizedName = categoryName.toLowerCase().replaceAll("[^a-z0-9]", "-");
             String ext = getExtension(poster.getOriginalFilename());
             String key = "posters/categories/" + sanitizedName + "." + ext;
-            return storageService.uploadFile(key, poster.getBytes(), poster.getContentType());
+            String contentType = poster.getContentType() != null ? poster.getContentType() : "application/octet-stream";
+            return storageService.uploadFile(key, poster.getBytes(), contentType);
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to upload category poster");
         }

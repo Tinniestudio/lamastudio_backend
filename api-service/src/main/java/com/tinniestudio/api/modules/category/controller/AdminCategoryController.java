@@ -42,7 +42,7 @@ public class AdminCategoryController {
     }
 
     @Operation(summary = "Update category with optional new poster")
-    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PatchMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<CategoryResponse> update(
             @PathVariable UUID id,
             @RequestPart("request") @Valid UpdateCategoryRequest request,
