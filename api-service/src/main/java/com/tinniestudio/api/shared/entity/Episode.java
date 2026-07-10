@@ -11,7 +11,7 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "episodes", uniqueConstraints = {
-    @UniqueConstraint(columnNames = { "season_id", "episodeNumber" })
+    @UniqueConstraint(columnNames = { "season_id", "episode_number" })
 })
 @Getter
 @Setter
@@ -34,6 +34,8 @@ public class Episode extends BaseEntity {
   private LocalDate releaseDate;
 
   private String thumbnailUrl;
+
+  private Integer durationSeconds;
 
   @OneToMany(mappedBy = "episode", cascade = CascadeType.ALL)
   private List<VideoAsset> videoAssets = new ArrayList<>();
