@@ -2,14 +2,10 @@ package com.tinniestudio.api.modules.playback.dto;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.Data;
 import java.util.UUID;
 
-@Getter
-@Setter
-@NoArgsConstructor
+@Data
 public class ProgressRequest {
     private UUID contentId;
     private UUID episodeId;

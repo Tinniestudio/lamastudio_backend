@@ -1,8 +1,10 @@
 package com.tinniestudio.api.modules.playback.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 @Getter
 @AllArgsConstructor
 public class AccessCheckResponse {
