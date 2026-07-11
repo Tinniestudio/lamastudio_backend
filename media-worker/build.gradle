@@ -24,6 +24,9 @@ dependencies {
     // RabbitMQ
     implementation 'org.springframework.boot:spring-boot-starter-amqp'
 
+    // Jackson
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
     // Database
     runtimeOnly 'org.postgresql:postgresql'
 
