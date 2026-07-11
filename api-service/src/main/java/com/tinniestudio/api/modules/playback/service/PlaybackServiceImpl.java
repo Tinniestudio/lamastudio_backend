@@ -171,7 +171,7 @@ public class PlaybackServiceImpl implements PlaybackService {
             rabbitTemplate.convertAndSend("analytics.ingest", Map.of(
                 "type", "PROGRESS_TRACKED",
                 "userId", userId.toString(),
-                "contentId", req.getContentId() != null ? req.getContentId().toString() : "",
+                "contentId", progress.getContentId() != null ? progress.getContentId().toString() : "",
                 "episodeId", req.getEpisodeId() != null ? req.getEpisodeId().toString() : "",
                 "progressSeconds", req.getProgressSeconds(),
                 "durationSeconds", req.getDurationSeconds()
