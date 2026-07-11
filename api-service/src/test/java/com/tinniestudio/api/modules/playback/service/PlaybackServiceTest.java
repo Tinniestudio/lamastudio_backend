@@ -187,6 +187,17 @@ class PlaybackServiceTest {
         }
 
         @Test
+        void throwsWhenDurationSecondsIsZero() {
+            ProgressRequest req = new ProgressRequest();
+            req.setContentId(UUID.randomUUID());
+            req.setProgressSeconds(60);
+            req.setDurationSeconds(0);
+
+            assertThatThrownBy(() -> service.recordProgress(UUID.randomUUID(), req))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        }
+
+        @Test
         void upsertsNewMovieProgressRecord() {
             UUID userId = UUID.randomUUID();
             UUID contentId = UUID.randomUUID();
@@ -227,6 +238,32 @@ class PlaybackServiceTest {
             ArgumentCaptor<WatchProgress> captor = ArgumentCaptor.forClass(WatchProgress.class);
             verify(watchProgressRepo).save(captor.capture());
             assertThat(captor.getValue().getCompleted()).isTrue();
+        }
+
+        @Test
+        void updatesExistingMovieProgressRecord() {
+            UUID userId = UUID.randomUUID();
+            UUID contentId = UUID.randomUUID();
+
+            WatchProgress existing = new WatchProgress();
+            existing.setUserId(userId);
+            existing.setContentId(contentId);
+            existing.setProgressSeconds(100);
+            existing.setDurationSeconds(3600);
+
+            ProgressRequest req = new ProgressRequest();
+            req.setContentId(contentId);
+            req.setProgressSeconds(500);
+            req.setDurationSeconds(3600);
+
+            when(watchProgressRepo.findMovieProgress(userId, contentId)).thenReturn(Optional.of(existing));
+            when(watchProgressRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.recordProgress(userId, req);
+
+            ArgumentCaptor<WatchProgress> captor = ArgumentCaptor.forClass(WatchProgress.class);
+            verify(watchProgressRepo).save(captor.capture());
+            assertThat(captor.getValue().getProgressSeconds()).isEqualTo(500);
         }
     }
 
