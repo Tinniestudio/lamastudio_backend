@@ -49,7 +49,7 @@ class UserProfileIntegrationTest {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.jpa.hibernate.ddl-auto", () -> "update");
+        registry.add("spring.jpa.hibernate.ddl-auto", () -> "none");
         registry.add("spring.flyway.enabled", () -> true);
         registry.add("spring.data.redis.url", () -> "redis://localhost:6379");
         registry.add("stripe.secret-key", () -> "sk_test_stub");
