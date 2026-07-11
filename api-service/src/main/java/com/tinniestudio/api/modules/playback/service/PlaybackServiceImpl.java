@@ -17,9 +17,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.PageRequest;
 
 @Slf4j
 @Service
@@ -111,17 +117,109 @@ public class PlaybackServiceImpl implements PlaybackService {
     }
 
     // -------------------------------------------------------------------------
-    // Stubs — implemented in Task 4
+    // Record progress
     // -------------------------------------------------------------------------
 
     @Override
-    public void recordProgress(UUID userId, ProgressRequest request) {
-        throw new UnsupportedOperationException("implemented in Task 4");
+    @Transactional
+    public void recordProgress(UUID userId, ProgressRequest req) {
+        if (req.getContentId() == null && req.getEpisodeId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "contentId or episodeId required");
+        }
+
+        WatchProgress progress;
+        if (req.getEpisodeId() != null) {
+            progress = watchProgressRepo.findByUserIdAndEpisodeId(userId, req.getEpisodeId())
+                .orElseGet(() -> {
+                    WatchProgress w = new WatchProgress();
+                    w.setUserId(userId);
+                    w.setEpisodeId(req.getEpisodeId());
+                    return w;
+                });
+        } else {
+            progress = watchProgressRepo.findMovieProgress(userId, req.getContentId())
+                .orElseGet(() -> {
+                    WatchProgress w = new WatchProgress();
+                    w.setUserId(userId);
+                    w.setContentId(req.getContentId());
+                    return w;
+                });
+        }
+
+        progress.setProgressSeconds(req.getProgressSeconds());
+        progress.setDurationSeconds(req.getDurationSeconds());
+        progress.setDeviceType(req.getDeviceType());
+        progress.setLastWatchedAt(Instant.now());
+
+        BigDecimal percentage = BigDecimal.valueOf(req.getProgressSeconds())
+            .multiply(BigDecimal.valueOf(100))
+            .divide(BigDecimal.valueOf(req.getDurationSeconds()), 2, RoundingMode.HALF_UP);
+        progress.setCompletionPercentage(percentage);
+        progress.setCompleted(percentage.compareTo(BigDecimal.valueOf(90)) >= 0);
+
+        watchProgressRepo.save(progress);
+
+        // Best-effort analytics publish
+        try {
+            rabbitTemplate.convertAndSend("analytics.ingest", Map.of(
+                "type", "PROGRESS_TRACKED",
+                "userId", userId.toString(),
+                "contentId", req.getContentId() != null ? req.getContentId().toString() : "",
+                "episodeId", req.getEpisodeId() != null ? req.getEpisodeId().toString() : "",
+                "progressSeconds", req.getProgressSeconds(),
+                "durationSeconds", req.getDurationSeconds()
+            ));
+        } catch (Exception e) {
+            log.warn("Analytics publish failed (non-critical): {}", e.getMessage());
+        }
     }
+
+    // -------------------------------------------------------------------------
+    // Continue watching
+    // -------------------------------------------------------------------------
 
     @Override
     public List<ContinueWatchingItem> getContinueWatching(UUID userId) {
-        throw new UnsupportedOperationException("implemented in Task 4");
+        List<WatchProgress> progresses = watchProgressRepo
+            .findByUserIdAndCompletedFalseOrderByLastWatchedAtDesc(userId, PageRequest.of(0, 20));
+
+        Set<UUID> contentIds = progresses.stream()
+            .filter(p -> p.getContentId() != null && p.getEpisodeId() == null)
+            .map(WatchProgress::getContentId)
+            .collect(Collectors.toSet());
+
+        Set<UUID> episodeIds = progresses.stream()
+            .filter(p -> p.getEpisodeId() != null)
+            .map(WatchProgress::getEpisodeId)
+            .collect(Collectors.toSet());
+
+        Map<UUID, Content> contentMap = contentRepo.findAllById(contentIds).stream()
+            .collect(Collectors.toMap(Content::getId, c -> c));
+        Map<UUID, Episode> episodeMap = episodeRepo.findAllById(episodeIds).stream()
+            .collect(Collectors.toMap(Episode::getId, e -> e));
+
+        return progresses.stream()
+            .map(p -> {
+                String title;
+                if (p.getEpisodeId() != null) {
+                    Episode ep = episodeMap.get(p.getEpisodeId());
+                    title = ep != null ? ep.getTitle() : "Unknown Episode";
+                } else {
+                    Content c = contentMap.get(p.getContentId());
+                    title = c != null ? c.getTitle() : "Unknown Content";
+                }
+                return new ContinueWatchingItem(
+                    p.getContentId(),
+                    p.getEpisodeId(),
+                    title,
+                    null,  // thumbnailUrl — enriched in Batch 12
+                    p.getProgressSeconds() != null ? p.getProgressSeconds() : 0,
+                    p.getDurationSeconds() != null ? p.getDurationSeconds() : 0,
+                    p.getCompletionPercentage(),
+                    p.getLastWatchedAt()
+                );
+            })
+            .collect(Collectors.toList());
     }
 
     // -------------------------------------------------------------------------
