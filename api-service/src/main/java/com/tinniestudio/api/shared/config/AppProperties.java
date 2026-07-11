@@ -27,6 +27,7 @@ public class AppProperties {
     private Resend resend = new Resend();
     private String adminBootstrapToken;
     private int freeTierContentLimit = 2;
+    private Cdn cdn = new Cdn();
 
     @Getter
     @Setter
@@ -99,5 +100,11 @@ public class AppProperties {
         private String apiKey;
         private String baseUrl;
         private String fromEmail;
+    }
+
+    @Getter
+    @Setter
+    public static class Cdn {
+        private String baseUrl = "http://localhost:3000";
     }
 }
