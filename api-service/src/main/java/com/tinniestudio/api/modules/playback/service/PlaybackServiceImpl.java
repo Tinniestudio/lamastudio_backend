@@ -69,6 +69,7 @@ public class PlaybackServiceImpl implements PlaybackService {
     // -------------------------------------------------------------------------
 
     @Override
+    @Transactional(readOnly = true)
     public PlaybackManifestResponse getContentManifest(UUID userId, UUID contentId) {
         AccessCheckResponse access = checkAccess(userId, contentId);
         if (!access.isHasAccess()) {
@@ -126,14 +127,20 @@ public class PlaybackServiceImpl implements PlaybackService {
         if (req.getContentId() == null && req.getEpisodeId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "contentId or episodeId required");
         }
+        if (req.getDurationSeconds() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "durationSeconds must be positive");
+        }
 
         WatchProgress progress;
         if (req.getEpisodeId() != null) {
             progress = watchProgressRepo.findByUserIdAndEpisodeId(userId, req.getEpisodeId())
                 .orElseGet(() -> {
+                    Episode ep = episodeRepo.findById(req.getEpisodeId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found"));
                     WatchProgress w = new WatchProgress();
                     w.setUserId(userId);
                     w.setEpisodeId(req.getEpisodeId());
+                    w.setContentId(ep.getSeason().getContent().getId());  // safe: @Transactional
                     return w;
                 });
         } else {
@@ -179,6 +186,7 @@ public class PlaybackServiceImpl implements PlaybackService {
     // -------------------------------------------------------------------------
 
     @Override
+    @Transactional(readOnly = true)
     public List<ContinueWatchingItem> getContinueWatching(UUID userId) {
         List<WatchProgress> progresses = watchProgressRepo
             .findByUserIdAndCompletedFalseOrderByLastWatchedAtDesc(userId, PageRequest.of(0, 20));
