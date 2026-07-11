@@ -23,13 +23,26 @@
 - `MediaFile.java` entity does NOT exist yet — must be created
 - Next Flyway migration: **V25**
 
-**Upload type allowlists (per BATCH-PLAN spec):**
+**Upload type allowlists — indie/prosumer tier (strict MIME enforced at API layer):**
 | UploadType | Allowed MIME types | Max bytes |
 |------------|-------------------|-----------|
-| RAW_VIDEO | video/mp4, video/quicktime, video/x-matroska | 10 GB |
+| RAW_VIDEO | video/mp4, video/quicktime, video/x-matroska, video/mp2t, video/x-m2ts, video/x-msvideo, video/avi | 10 GB |
 | TRAILER | video/mp4, video/quicktime | 2 GB |
 | THUMBNAIL | image/jpeg, image/png, image/webp | 10 MB |
 | SUBTITLE | text/vtt, application/x-subrip | 5 MB |
+
+**RAW_VIDEO format breakdown:**
+| MIME type | Container | Cameras / use case |
+|-----------|-----------|-------------------|
+| `video/mp4` | MP4 | GoPro, DJI drones, Sony (XAVC-S), Canon, Panasonic, phones |
+| `video/quicktime` | MOV | Apple devices, Canon Cinema (older), Sony mirrorless |
+| `video/x-matroska` | MKV | Android phones, OBS recordings, some Panasonic modes |
+| `video/mp2t` | MPEG-TS / .mts | AVCHD cameras (Sony, Panasonic, Canon HF series) |
+| `video/x-m2ts` | M2TS / .m2ts | Sony XAVC (AVCHD on Blu-ray camcorders), AVCHD variant |
+| `video/x-msvideo` | AVI | Legacy prosumer cameras, older Canon/Nikon DSLR |
+| `video/avi` | AVI | AVI MIME variant (some clients send this instead of x-msvideo) |
+
+**Not supported (requires pro tier):** ProRes (`.mov` mezzanine), MXF, DNxHD, ARRIRAW, REDCODE — these are broadcast/cinema formats deferred to a future pro plan.
 
 **Storage key patterns:**
 - RAW_VIDEO: `raw/{newUUID}/original.{ext}`
@@ -276,8 +289,19 @@ import java.util.Set;
 @Component
 public class UploadConfig {
 
+    // Indie/prosumer tier — strict MIME check at API layer.
+    // RAW_VIDEO covers: MP4, MOV, MKV (universal), MPEG-TS/M2TS (AVCHD cameras), AVI (legacy).
+    // Professional formats (ProRes, MXF, ARRIRAW) are deferred to a future pro tier.
     private static final Map<UploadType, Set<String>> ALLOWED_MIME_TYPES = Map.of(
-        UploadType.RAW_VIDEO, Set.of("video/mp4", "video/quicktime", "video/x-matroska"),
+        UploadType.RAW_VIDEO, Set.of(
+            "video/mp4",          // MP4 — GoPro, DJI, Sony XAVC-S, Canon, Panasonic, phones
+            "video/quicktime",    // MOV — Apple, Canon mirrorless, Sony
+            "video/x-matroska",   // MKV — Android, OBS, Panasonic
+            "video/mp2t",         // MPEG-TS (.mts) — AVCHD Sony/Panasonic/Canon camcorders
+            "video/x-m2ts",       // M2TS (.m2ts) — Sony XAVC AVCHD variant
+            "video/x-msvideo",    // AVI — legacy prosumer DSLR/camcorders
+            "video/avi"           // AVI MIME variant
+        ),
         UploadType.TRAILER,   Set.of("video/mp4", "video/quicktime"),
         UploadType.THUMBNAIL, Set.of("image/jpeg", "image/png", "image/webp"),
         UploadType.SUBTITLE,  Set.of("text/vtt", "application/x-subrip")
