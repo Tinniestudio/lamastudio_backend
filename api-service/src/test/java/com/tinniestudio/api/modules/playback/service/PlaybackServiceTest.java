@@ -13,9 +13,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.http.HttpStatus;
 
 import java.util.List;
 import java.util.Optional;
@@ -106,7 +108,9 @@ class PlaybackServiceTest {
             when(contentRepo.findById(any())).thenReturn(Optional.of(content));
 
             assertThatThrownBy(() -> service.getContentManifest(UUID.randomUUID(), UUID.randomUUID()))
-                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting("statusCode")
+                .isEqualTo(HttpStatus.FORBIDDEN);
         }
 
         @Test
@@ -166,6 +170,106 @@ class PlaybackServiceTest {
             assertThat(resp.getResumeAt()).isEqualTo(120);
             assertThat(resp.getSubtitles()).hasSize(1);
             assertThat(resp.getSubtitles().get(0).getLanguageCode()).isEqualTo("en");
+        }
+    }
+
+    @Nested
+    class recordProgress {
+
+        @Test
+        void throwsWhenNeitherContentIdNorEpisodeIdProvided() {
+            ProgressRequest req = new ProgressRequest();
+            req.setProgressSeconds(60);
+            req.setDurationSeconds(3600);
+
+            assertThatThrownBy(() -> service.recordProgress(UUID.randomUUID(), req))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        }
+
+        @Test
+        void upsertsNewMovieProgressRecord() {
+            UUID userId = UUID.randomUUID();
+            UUID contentId = UUID.randomUUID();
+
+            ProgressRequest req = new ProgressRequest();
+            req.setContentId(contentId);
+            req.setProgressSeconds(900);
+            req.setDurationSeconds(3600);
+
+            when(watchProgressRepo.findMovieProgress(userId, contentId)).thenReturn(Optional.empty());
+            when(watchProgressRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.recordProgress(userId, req);
+
+            ArgumentCaptor<WatchProgress> captor = ArgumentCaptor.forClass(WatchProgress.class);
+            verify(watchProgressRepo).save(captor.capture());
+            WatchProgress saved = captor.getValue();
+            assertThat(saved.getProgressSeconds()).isEqualTo(900);
+            assertThat(saved.getCompletionPercentage()).isEqualByComparingTo("25.00");
+            assertThat(saved.getCompleted()).isFalse();
+        }
+
+        @Test
+        void setsCompletedTrueWhenProgressExceeds90Percent() {
+            UUID userId = UUID.randomUUID();
+            UUID contentId = UUID.randomUUID();
+
+            ProgressRequest req = new ProgressRequest();
+            req.setContentId(contentId);
+            req.setProgressSeconds(3300);
+            req.setDurationSeconds(3600);
+
+            when(watchProgressRepo.findMovieProgress(userId, contentId)).thenReturn(Optional.empty());
+            when(watchProgressRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.recordProgress(userId, req);
+
+            ArgumentCaptor<WatchProgress> captor = ArgumentCaptor.forClass(WatchProgress.class);
+            verify(watchProgressRepo).save(captor.capture());
+            assertThat(captor.getValue().getCompleted()).isTrue();
+        }
+    }
+
+    @Nested
+    class getContinueWatching {
+
+        @Test
+        void returnsEmptyListWhenNoProgress() {
+            UUID userId = UUID.randomUUID();
+            when(watchProgressRepo.findByUserIdAndCompletedFalseOrderByLastWatchedAtDesc(eq(userId), any()))
+                .thenReturn(List.of());
+
+            List<ContinueWatchingItem> result = service.getContinueWatching(userId);
+
+            assertThat(result).isEmpty();
+        }
+
+        @Test
+        void mapsMovieProgressToItem() {
+            UUID userId = UUID.randomUUID();
+            UUID contentId = UUID.randomUUID();
+
+            WatchProgress p = new WatchProgress();
+            p.setContentId(contentId);
+            p.setProgressSeconds(300);
+            p.setDurationSeconds(3600);
+            p.setCompletionPercentage(new java.math.BigDecimal("8.33"));
+            p.setLastWatchedAt(java.time.Instant.now());
+
+            Content content = new Content();
+            content.setTitle("My Movie");
+            content.setId(contentId);
+
+            when(watchProgressRepo.findByUserIdAndCompletedFalseOrderByLastWatchedAtDesc(eq(userId), any()))
+                .thenReturn(List.of(p));
+            when(contentRepo.findAllById(any())).thenReturn(List.of(content));
+            when(episodeRepo.findAllById(any())).thenReturn(List.of());
+
+            List<ContinueWatchingItem> result = service.getContinueWatching(userId);
+
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getProgressSeconds()).isEqualTo(300);
+            assertThat(result.get(0).getTitle()).isEqualTo("My Movie");
         }
     }
 }
