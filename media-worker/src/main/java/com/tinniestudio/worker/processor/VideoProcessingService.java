@@ -44,8 +44,9 @@ public class VideoProcessingService {
         String jobId = payload.getJobId();
         UUID videoAssetId = payload.getVideoAssetId();
 
-        if (processingJobRepo.existsByJobIdAndStatus(jobId, "DONE")) {
-            log.info("Job {} already DONE, skipping", jobId);
+        if (processingJobRepo.existsByJobIdAndStatus(jobId, "DONE")
+                || processingJobRepo.existsByJobIdAndStatus(jobId, "FAILED")) {
+            log.info("Job {} already terminal, skipping", jobId);
             return;
         }
 
@@ -69,6 +70,11 @@ public class VideoProcessingService {
             // 3. PROBING
             updateJobStatus(job, "PROBING");
             FFprobeRunner.VideoMetadata meta = ffprobeRunner.probe(inputFile.toString());
+            if (meta.durationSeconds() > workerProperties.getProcessing().getMaxDurationSeconds()) {
+                throw new FFprobeRunner.ValidationException(
+                    "Video duration " + meta.durationSeconds() + "s exceeds max allowed "
+                        + workerProperties.getProcessing().getMaxDurationSeconds() + "s");
+            }
             applyMetadataToAsset(asset, meta);
 
             // 4. RESOLUTION LADDER PLANNING

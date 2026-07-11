@@ -69,6 +69,20 @@ class FFprobeRunnerTest {
         }
 
         @Test
+        void throwsValidationExceptionWhenNoStreamsArray() throws Exception {
+            String json = """
+                {
+                  "format": {"duration":"30.0","size":"1000000"}
+                }
+                """;
+            when(processRunner.run(anyList())).thenReturn(json);
+
+            assertThatThrownBy(() -> runner.probe("/tmp/broken.bin"))
+                .isInstanceOf(FFprobeRunner.ValidationException.class)
+                .hasMessageContaining("no streams array");
+        }
+
+        @Test
         void throwsValidationExceptionWhenNoAudioStream() throws Exception {
             String json = """
                 {

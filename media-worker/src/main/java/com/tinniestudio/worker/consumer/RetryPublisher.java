@@ -1,6 +1,7 @@
 package com.tinniestudio.worker.consumer;
 
 import com.tinniestudio.worker.config.RabbitConfig;
+import com.tinniestudio.worker.dto.ProcessingJobEnvelope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -19,16 +20,13 @@ public class RetryPublisher {
 
     private final RabbitTemplate rabbitTemplate;
 
-    /**
-     * Publishes message to retry queue with TTL delay based on current attempt count.
-     * Throws MaxAttemptsExceededException when currentAttempt >= MAX_ATTEMPTS.
-     */
-    public void retryOrFail(Object envelope, int currentAttempt) {
+    public void retryOrFail(ProcessingJobEnvelope envelope, int currentAttempt) {
         if (currentAttempt >= MAX_ATTEMPTS) {
             throw new MaxAttemptsExceededException(
                 "Max attempts (" + MAX_ATTEMPTS + ") exceeded, routing to DLQ");
         }
         long delayMs = DELAY_MS[currentAttempt - 1];
+        envelope.setAttempt(currentAttempt + 1);
         log.info("Scheduling retry attempt {} in {}ms", currentAttempt + 1, delayMs);
         rabbitTemplate.convertAndSend(
             RabbitConfig.EXCHANGE,

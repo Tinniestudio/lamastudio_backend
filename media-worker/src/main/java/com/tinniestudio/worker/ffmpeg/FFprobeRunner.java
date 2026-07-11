@@ -38,6 +38,10 @@ public class FFprobeRunner {
         JsonNode streams = root.get("streams");
         JsonNode format = root.get("format");
 
+        if (streams == null || streams.isNull() || !streams.isArray()) {
+            throw new ValidationException("Probe failed: no streams array in ffprobe output");
+        }
+
         JsonNode videoStream = null;
         boolean hasAudio = false;
 

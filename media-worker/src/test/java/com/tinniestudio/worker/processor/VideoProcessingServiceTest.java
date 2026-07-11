@@ -134,6 +134,33 @@ class VideoProcessingServiceTest {
         }
 
         @Test
+        void setsFailedStatusWhenDurationExceedsMax() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            workerProperties.getProcessing().setMaxDurationSeconds(3600);
+
+            when(processingJobRepo.existsByJobIdAndStatus(anyString(), eq("DONE"))).thenReturn(false);
+            when(processingJobRepo.existsByJobIdAndStatus(anyString(), eq("FAILED"))).thenReturn(false);
+            when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            // 5-hour video exceeds the 1-hour max
+            FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
+                18000, 1920, 1080, "h264", 5_000_000L, true);
+            when(ffprobeRunner.probe(anyString())).thenReturn(meta);
+
+            service.process(payload);
+
+            ArgumentCaptor<VideoAsset> captor = ArgumentCaptor.forClass(VideoAsset.class);
+            verify(videoAssetRepo, atLeastOnce()).save(captor.capture());
+            VideoAsset last = captor.getAllValues().get(captor.getAllValues().size() - 1);
+            assertThat(last.getProcessingStatus()).isEqualTo("FAILED");
+            assertThat(last.getProcessingError()).contains("exceeds max allowed");
+        }
+
+        @Test
         void setsFailedStatusOnNonRetryableError() throws Exception {
             UUID assetId = UUID.randomUUID();
             VideoAsset asset = buildAsset(assetId);
