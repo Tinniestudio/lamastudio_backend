@@ -172,7 +172,7 @@ app:
 - `S3StorageService` for AWS prod — deferred to Batch 6
 - `R2StorageService` for Cloudflare R2 — deferred to Batch 18
 - Worker-side `StorageService` — media-worker will get its own impl in Batch 7
-- RabbitMQ consumers in api-service — deferred to Batch 15 (notifications) and Batch 16 (analytics)
+- RabbitMQ consumers in api-service — deferred to Batch 15 (notifications) an d Batch 16 (analytics)
 
 ---
 
