@@ -37,6 +37,14 @@ worker:
     ffprobe-path: /usr/bin/ffprobe
     hls-segment-duration: 6
 
+app:
+  storage:
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    bucket: ${STORAGE_BUCKET:tinniestudio}
+    region: ${STORAGE_REGION:us-east-1}
+    access-key: ${AWS_ACCESS_KEY_ID:minioadmin}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:minioadmin}
+
 logging:
   level:
     com.tinniestudio: INFO
