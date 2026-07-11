@@ -31,6 +31,9 @@ public class UploadSession extends BaseEntity {
     @Column(nullable = false)
     private String storageKey;
 
+    @Column(columnDefinition = "TEXT")
+    private String presignedUrl;
+
     private String originalFilename;
 
     private String mimeType;

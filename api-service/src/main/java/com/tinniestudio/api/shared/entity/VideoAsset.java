@@ -37,7 +37,7 @@ public class VideoAsset extends BaseEntity {
   @Enumerated(EnumType.STRING)
   private SourceFormat sourceFormat;
 
-  @Column(nullable = false)
+  @Column(name = "raw_storage_key", nullable = false)
   private String storageKey;
 
   private String manifestUrl;
@@ -59,6 +59,8 @@ public class VideoAsset extends BaseEntity {
 
   @Column(nullable = false)
   private UUID uploadedBy;
+
+  private UUID uploadSessionId;
 
   @OneToMany(mappedBy = "videoAsset", cascade = CascadeType.ALL)
   private List<VideoVariant> variants = new ArrayList<>();
