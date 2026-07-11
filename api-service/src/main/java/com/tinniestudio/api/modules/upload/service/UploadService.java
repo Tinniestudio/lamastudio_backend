@@ -34,6 +34,10 @@ public class UploadService {
 
     @Transactional
     public UploadSessionResponse createSession(UUID userId, CreateUploadSessionRequest req) {
+        if (req.uploadType() == UploadType.VIDEO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "UploadType VIDEO is not supported; use RAW_VIDEO for video uploads");
+        }
         if (!uploadConfig.isMimeTypeAllowed(req.uploadType(), req.mimeType())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "MIME type " + req.mimeType() + " is not allowed for upload type " + req.uploadType());
@@ -88,7 +92,14 @@ public class UploadService {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                 "Upload session has expired");
         }
-        if (!storageService.objectExists(session.getStorageKey())) {
+        boolean objectPresent;
+        try {
+            objectPresent = storageService.objectExists(session.getStorageKey());
+        } catch (RuntimeException ex) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Storage check failed — please retry", ex);
+        }
+        if (!objectPresent) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                 "Object not found in storage. Upload the file before calling complete.");
         }
@@ -122,7 +133,17 @@ public class UploadService {
             MediaProcessingJobPayload payload = new MediaProcessingJobPayload(
                 UUID.randomUUID().toString(), savedAsset.getId(),
                 session.getStorageKey(), sessionId);
-            queuePublisher.publish(UploadConfig.VIDEO_PROCESS_QUEUE, "VIDEO_PROCESSING_JOB", payload);
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            queuePublisher.publish(UploadConfig.VIDEO_PROCESS_QUEUE, "VIDEO_PROCESSING_JOB", payload);
+                        }
+                    });
+            } else {
+                queuePublisher.publish(UploadConfig.VIDEO_PROCESS_QUEUE, "VIDEO_PROCESSING_JOB", payload);
+            }
         }
 
         return new CompleteUploadResponse(savedFile.getId(), videoAssetId);

@@ -24,6 +24,8 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.mockito.ArgumentCaptor;
+
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -154,6 +156,32 @@ class UploadServiceTest {
             var result = uploadService.completeSession(userId, session.getId());
 
             assertThat(result.videoAssetId()).isNotNull();
+            verify(queuePublisher).publish(eq("media.video.process"), eq("VIDEO_PROCESSING_JOB"), any());
+        }
+
+        @Test @DisplayName("completes TRAILER session, sets VideoAssetType.TRAILER, publishes to queue")
+        void completesTrailerAndPublishesToQueue() {
+            UploadSession session = pendingSession(UploadType.TRAILER, "raw/trailers/uuid/original.mp4");
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+            when(storageService.objectExists("raw/trailers/uuid/original.mp4")).thenReturn(true);
+            when(mediaFileRepository.save(any())).thenAnswer(inv -> {
+                MediaFile f = inv.getArgument(0);
+                f.setId(UUID.randomUUID());
+                return f;
+            });
+            when(videoAssetRepository.save(any())).thenAnswer(inv -> {
+                VideoAsset a = inv.getArgument(0);
+                a.setId(UUID.randomUUID());
+                return a;
+            });
+            when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            var result = uploadService.completeSession(userId, session.getId());
+
+            assertThat(result.videoAssetId()).isNotNull();
+            ArgumentCaptor<VideoAsset> captor = ArgumentCaptor.forClass(VideoAsset.class);
+            verify(videoAssetRepository).save(captor.capture());
+            assertThat(captor.getValue().getAssetType()).isEqualTo(VideoAssetType.TRAILER);
             verify(queuePublisher).publish(eq("media.video.process"), eq("VIDEO_PROCESSING_JOB"), any());
         }
 

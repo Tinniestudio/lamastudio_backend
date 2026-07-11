@@ -46,4 +46,7 @@ public class UploadSession extends BaseEntity {
     private Instant expiresAt;
 
     private Instant completedAt;
+
+    @Version
+    private Long version;
 }
