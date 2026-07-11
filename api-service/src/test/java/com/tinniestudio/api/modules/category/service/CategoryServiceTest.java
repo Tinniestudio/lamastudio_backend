@@ -181,7 +181,7 @@ class CategoryServiceTest {
         @DisplayName("throws 404 when category not found")
         void throws404WhenNotFound() {
             UUID id = UUID.randomUUID();
-            when(categoryRepository.existsById(id)).thenReturn(false);
+            when(categoryRepository.findById(id)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> categoryService.delete(id))
                 .isInstanceOf(ResponseStatusException.class);
@@ -190,11 +190,12 @@ class CategoryServiceTest {
         @Test
         @DisplayName("deletes category when found")
         void deletesWhenFound() {
-            when(categoryRepository.existsById(category.getId())).thenReturn(true);
+            when(categoryRepository.findById(category.getId())).thenReturn(Optional.of(category));
 
             categoryService.delete(category.getId());
 
-            verify(categoryRepository).deleteById(category.getId());
+            verify(categoryRepository).delete(category);
+            verify(categoryRepository).flush();
         }
     }
 }
