@@ -307,6 +307,7 @@ class PlaybackServiceTest {
             assertThat(result).hasSize(1);
             assertThat(result.get(0).getProgressSeconds()).isEqualTo(300);
             assertThat(result.get(0).getTitle()).isEqualTo("My Movie");
+            assertThat(result.get(0).getContentId()).isEqualTo(contentId);
         }
     }
 }
