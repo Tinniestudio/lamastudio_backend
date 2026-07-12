@@ -1,6 +1,5 @@
 package com.tinniestudio.api.modules.library.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tinniestudio.api.modules.content.dto.ContentSummaryResponse;
 import com.tinniestudio.api.modules.library.dto.WatchHistoryResponse;
 import com.tinniestudio.api.modules.library.service.WatchHistoryService;
@@ -35,7 +34,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class HistoryControllerTest {
 
     @Autowired private MockMvc mockMvc;
-    @Autowired private ObjectMapper objectMapper;
 
     @MockBean private WatchHistoryService historyService;
     @MockBean private JwtTokenProvider jwtTokenProvider;
