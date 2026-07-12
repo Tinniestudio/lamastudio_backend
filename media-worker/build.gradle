@@ -51,3 +51,7 @@ test {
 springBoot {
     mainClass = 'com.tinniestudio.worker.MediaWorkerApplication'
 }
+
+jar {
+    archivesBaseName = 'tinniestudio-media-worker'
+}

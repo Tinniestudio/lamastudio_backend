@@ -133,6 +133,9 @@ app:
   password-reset:
     token-expiry-hours: 1
 
+  cdn:
+    base-url: ${CDN_BASE_URL:http://localhost:3000}
+
   storage:
     provider: ${STORAGE_PROVIDER:NOOP}
     bucket: ${STORAGE_BUCKET:tinniestudio}

@@ -3,7 +3,7 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: false
   flyway:
     enabled: true
@@ -37,6 +37,8 @@ app:
     token-expiry-hours: 1
   admin-password-reset:
     token-expiry-minutes: 15
+  cdn:
+    base-url: http://localhost:3000
   cookie:
     secure: false
     same-site: Lax

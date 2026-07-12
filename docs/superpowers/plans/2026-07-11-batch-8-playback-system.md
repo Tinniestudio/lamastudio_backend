@@ -85,7 +85,7 @@ private Cdn cdn = new Cdn();
 @Getter
 @Setter
 public static class Cdn {
-    private String baseUrl = "http://localhost:9000/tinniestudio";
+    private String baseUrl = "http://localhost:3000";
 }
 ```
 
@@ -96,7 +96,7 @@ Under the existing `app:` block in `src/main/resources/application.yml`:
 ```yaml
 app:
   cdn:
-    base-url: ${CDN_BASE_URL:http://localhost:9000/tinniestudio}
+    base-url: ${CDN_BASE_URL:http://localhost:3000}
 ```
 
 - [ ] **Step 3: Add config to application-test.yml**
@@ -106,7 +106,7 @@ Under the existing `app:` block in `src/test/resources/application-test.yml`:
 ```yaml
 app:
   cdn:
-    base-url: http://localhost:9000/tinniestudio
+    base-url: http://localhost:3000
 ```
 
 - [ ] **Step 4: Extend VideoAssetRepository**

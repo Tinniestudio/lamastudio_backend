@@ -85,3 +85,7 @@ bootRun {
 springBoot {
     mainClass = 'com.tinniestudio.api.ApiServiceApplication'
 }
+
+jar {
+    archivesBaseName = 'tinniestudio-api-service'
+}
