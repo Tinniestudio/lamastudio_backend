@@ -57,4 +57,22 @@ public class ContentSpecifications {
             cb.notEqual(root.get("status"), ContentStatus.REJECTED)
         );
     }
+
+    public static Specification<Content> hasAnyCategory(java.util.Collection<java.util.UUID> categoryIds) {
+        return (root, query, cb) -> {
+            if (categoryIds == null || categoryIds.isEmpty()) return cb.conjunction();
+            if (query != null && !Long.class.equals(query.getResultType())) {
+                query.distinct(true);
+            }
+            var categories = root.join("categories", JoinType.INNER);
+            return categories.get("id").in(categoryIds);
+        };
+    }
+
+    public static Specification<Content> notInIds(java.util.Collection<java.util.UUID> ids) {
+        return (root, query, cb) -> {
+            if (ids == null || ids.isEmpty()) return cb.conjunction();
+            return cb.not(root.get("id").in(ids));
+        };
+    }
 }
