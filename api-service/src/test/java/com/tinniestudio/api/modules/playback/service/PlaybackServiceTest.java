@@ -3,6 +3,7 @@ package com.tinniestudio.api.modules.playback.service;
 import com.tinniestudio.api.modules.billing.repository.UserSubscriptionRepository;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.episode.repository.EpisodeRepository;
+import com.tinniestudio.api.modules.library.repository.WatchHistoryRepository;
 import com.tinniestudio.api.modules.playback.dto.*;
 import com.tinniestudio.api.modules.playback.repository.WatchProgressRepository;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
@@ -37,6 +38,7 @@ class PlaybackServiceTest {
     @Mock WatchProgressRepository watchProgressRepo;
     @Mock EpisodeRepository episodeRepo;
     @Mock RabbitTemplate rabbitTemplate;
+    @Mock WatchHistoryRepository watchHistoryRepo;
 
     private PlaybackServiceImpl service;
 
@@ -46,7 +48,7 @@ class PlaybackServiceTest {
         props.getCdn().setBaseUrl("http://cdn.test");
         service = new PlaybackServiceImpl(
             contentRepo, subscriptionRepo, videoAssetRepo,
-            watchProgressRepo, episodeRepo, rabbitTemplate, props
+            watchProgressRepo, episodeRepo, rabbitTemplate, props, watchHistoryRepo
         );
     }
 

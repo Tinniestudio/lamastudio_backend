@@ -3,6 +3,7 @@ package com.tinniestudio.api.modules.playback.service;
 import com.tinniestudio.api.modules.billing.repository.UserSubscriptionRepository;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.episode.repository.EpisodeRepository;
+import com.tinniestudio.api.modules.library.repository.WatchHistoryRepository;
 import com.tinniestudio.api.modules.playback.dto.*;
 import com.tinniestudio.api.modules.playback.repository.WatchProgressRepository;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
@@ -39,6 +40,7 @@ public class PlaybackServiceImpl implements PlaybackService {
     private final EpisodeRepository episodeRepo;
     private final RabbitTemplate rabbitTemplate;
     private final AppProperties appProperties;
+    private final WatchHistoryRepository watchHistoryRepo;
 
     // -------------------------------------------------------------------------
     // Access check
@@ -165,6 +167,16 @@ public class PlaybackServiceImpl implements PlaybackService {
         progress.setCompleted(percentage.compareTo(BigDecimal.valueOf(90)) >= 0);
 
         watchProgressRepo.save(progress);
+
+        // Write watch history entry
+        WatchHistory historyEntry = new WatchHistory();
+        historyEntry.setUserId(userId);
+        historyEntry.setContentId(progress.getContentId());
+        historyEntry.setEpisodeId(req.getEpisodeId());
+        historyEntry.setProgressSeconds(req.getProgressSeconds());
+        historyEntry.setDurationSeconds(req.getDurationSeconds());
+        historyEntry.setDeviceType(req.getDeviceType());
+        watchHistoryRepo.save(historyEntry);
 
         // Best-effort analytics publish
         try {
