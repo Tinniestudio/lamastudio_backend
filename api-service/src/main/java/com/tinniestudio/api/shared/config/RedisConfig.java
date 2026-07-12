@@ -93,6 +93,8 @@ public class RedisConfig {
         cacheConfigs.put("content-list",      config.entryTtl(Duration.ofMinutes(2)));
         cacheConfigs.put("content-detail",    config.entryTtl(Duration.ofMinutes(5)));
         cacheConfigs.put("discover",          config.entryTtl(Duration.ofMinutes(2)));
+        cacheConfigs.put("search",            config.entryTtl(Duration.ofSeconds(60)));
+        cacheConfigs.put("recommendations",   config.entryTtl(Duration.ofMinutes(10)));
 
         log.info("CacheManager configured with default TTL: {} minutes + per-cache overrides",
                 DEFAULT_CACHE_TTL_MINUTES);

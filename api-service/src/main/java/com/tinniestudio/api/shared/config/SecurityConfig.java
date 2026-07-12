@@ -153,6 +153,8 @@ public class SecurityConfig {
         "/discover/**",
         "/api/v1/discover",
         "/api/v1/discover/**",
+        "/search",
+        "/api/v1/search",
         "/subscriptions/plans",
         "/api/v1/subscriptions/plans",
         "/webhooks/stripe",

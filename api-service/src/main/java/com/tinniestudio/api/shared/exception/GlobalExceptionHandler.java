@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -46,6 +47,25 @@ public class GlobalExceptionHandler {
 
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
         }
+
+    // ── @ModelAttribute binding / query-param validation ─────────────────────
+
+    @ExceptionHandler(BindException.class)
+    public ResponseEntity<Object> handleBindException(
+            BindException ex,
+            HttpServletRequest request
+    ) {
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
+        for (FieldError fe : ex.getBindingResult().getFieldErrors()) {
+            fieldErrors.putIfAbsent(fe.getField(), fe.getDefaultMessage());
+        }
+        Map<String, Object> body = buildStandardError("VALIDATION_FAILED",
+                "One or more fields failed validation",
+                HttpStatus.BAD_REQUEST.value(),
+                request.getServletPath());
+        body.put("fieldErrors", fieldErrors);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
 
     // ── Domain exceptions ─────────────────────────────────────────────────────
 
