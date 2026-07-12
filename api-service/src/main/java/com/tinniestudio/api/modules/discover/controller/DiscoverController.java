@@ -8,9 +8,12 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @Tag(name = "Discover", description = "Discovery and curated content feeds")
 @RestController
@@ -60,5 +63,16 @@ public class DiscoverController {
             @PathVariable String slug,
             @RequestParam(defaultValue = "20") int limit) {
         return ResponseEntity.ok(discoverService.byCategory(slug, Math.max(1, Math.min(limit, 50))));
+    }
+
+    @Operation(summary = "Recommended content based on the authenticated user's watch history")
+    @GetMapping("/recommended")
+    public ResponseEntity<List<ContentSummaryResponse>> recommended(
+            @AuthenticationPrincipal UserDetails principal) {
+        UUID userId = principal != null ? UUID.fromString(principal.getUsername()) : null;
+        if (userId == null) {
+            return ResponseEntity.ok(discoverService.trending(20));
+        }
+        return ResponseEntity.ok(discoverService.recommended(userId));
     }
 }

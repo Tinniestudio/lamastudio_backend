@@ -20,4 +20,10 @@ public interface WatchProgressRepository extends JpaRepository<WatchProgress, UU
     Optional<WatchProgress> findByUserIdAndEpisodeId(UUID userId, UUID episodeId);
 
     List<WatchProgress> findByUserIdAndCompletedFalseOrderByLastWatchedAtDesc(UUID userId, Pageable pageable);
+
+    @Query("SELECT w.contentId FROM WatchProgress w " +
+           "WHERE w.userId = :userId AND w.contentId IS NOT NULL " +
+           "GROUP BY w.contentId " +
+           "ORDER BY MAX(w.lastWatchedAt) DESC")
+    List<UUID> findRecentlyWatchedContentIds(@Param("userId") UUID userId, Pageable pageable);
 }
