@@ -22,7 +22,7 @@ public class SearchServiceImpl implements SearchService {
     private final ContentRepository contentRepository;
 
     @Override
-    @Cacheable(value = "search", key = "#request.q.trim().toLowerCase() + '::' "
+    @Cacheable(value = "search", key = "(#request.q != null ? #request.q.trim().toLowerCase() : '') + '::' "
         + "+ (#request.type != null ? #request.type.name() : '') + '::' "
         + "+ (#request.categorySlug != null ? #request.categorySlug : '') + '::' "
         + "+ (#request.language != null ? #request.language : '') + '::' "
