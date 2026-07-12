@@ -33,6 +33,7 @@ public class WatchHistoryServiceImpl implements WatchHistoryService {
 
         List<UUID> contentIds = historyPage.getContent().stream()
                 .map(WatchHistory::getContentId)
+                .distinct()
                 .toList();
 
         Map<UUID, ContentSummaryResponse> contentMap = contentRepo.findAllById(contentIds).stream()

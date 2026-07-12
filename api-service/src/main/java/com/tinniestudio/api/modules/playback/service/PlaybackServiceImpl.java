@@ -168,14 +168,19 @@ public class PlaybackServiceImpl implements PlaybackService {
 
         watchProgressRepo.save(progress);
 
-        // Write watch history entry
-        WatchHistory historyEntry = new WatchHistory();
+        // Upsert watch history (one row per content/episode per user)
+        WatchHistory historyEntry = (req.getEpisodeId() != null
+            ? watchHistoryRepo.findByUserIdAndEpisodeId(userId, req.getEpisodeId())
+            : watchHistoryRepo.findByUserIdAndContentIdAndEpisodeIdIsNull(userId, progress.getContentId()))
+            .orElseGet(WatchHistory::new);
+
         historyEntry.setUserId(userId);
         historyEntry.setContentId(progress.getContentId());
         historyEntry.setEpisodeId(req.getEpisodeId());
         historyEntry.setProgressSeconds(req.getProgressSeconds());
         historyEntry.setDurationSeconds(req.getDurationSeconds());
         historyEntry.setDeviceType(req.getDeviceType());
+        historyEntry.setWatchedAt(Instant.now());
         watchHistoryRepo.save(historyEntry);
 
         // Best-effort analytics publish
@@ -239,7 +244,7 @@ public class PlaybackServiceImpl implements PlaybackService {
                     p.getLastWatchedAt()
                 );
             })
-            .collect(Collectors.toList());
+            .toList();
     }
 
     // -------------------------------------------------------------------------
@@ -256,7 +261,7 @@ public class PlaybackServiceImpl implements PlaybackService {
                 s.getFileUrl(),
                 Boolean.TRUE.equals(s.getIsDefault())   // Boolean field: getIsDefault()
             ))
-            .collect(Collectors.toList());
+            .toList();
 
         return new PlaybackManifestResponse(manifestUrl, subtitles, resumeAt, asset.getDurationSeconds());
     }

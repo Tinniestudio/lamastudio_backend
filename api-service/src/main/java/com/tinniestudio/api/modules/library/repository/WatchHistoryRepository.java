@@ -17,6 +17,8 @@ import java.util.UUID;
 public interface WatchHistoryRepository extends JpaRepository<WatchHistory, UUID> {
     Page<WatchHistory> findByUserIdOrderByWatchedAtDesc(UUID userId, Pageable pageable);
     Optional<WatchHistory> findByIdAndUserId(UUID id, UUID userId);
+    Optional<WatchHistory> findByUserIdAndContentIdAndEpisodeIdIsNull(UUID userId, UUID contentId);
+    Optional<WatchHistory> findByUserIdAndEpisodeId(UUID userId, UUID episodeId);
 
     @Modifying
     @Transactional
