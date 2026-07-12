@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
@@ -65,6 +66,7 @@ public class PlaybackController {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private UUID userId(UserDetails principal) {
+        if (principal == null) throw new AuthenticationCredentialsNotFoundException("No credentials");
         return UUID.fromString(principal.getUsername());
     }
 }
