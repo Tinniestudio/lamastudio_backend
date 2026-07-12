@@ -40,8 +40,9 @@ public class FavoriteServiceImpl implements FavoriteService {
                     "Favorites limit of " + MAX_FAVORITES + " reached");
         }
 
-        contentRepo.findById(contentId).orElseThrow(
-                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found"));
+        if (!contentRepo.existsById(contentId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found");
+        }
 
         Favorite favorite = new Favorite();
         favorite.setUserId(userId);
@@ -64,7 +65,7 @@ public class FavoriteServiceImpl implements FavoriteService {
 
         List<UUID> contentIds = favoritePage.getContent().stream()
                 .map(Favorite::getContentId)
-                .collect(Collectors.toList());
+                .toList();
 
         Map<UUID, ContentSummaryResponse> contentMap = contentRepo.findAllById(contentIds).stream()
                 .collect(Collectors.toMap(Content::getId, ContentSummaryResponse::from));

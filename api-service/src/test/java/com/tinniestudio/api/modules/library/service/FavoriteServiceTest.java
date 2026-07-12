@@ -75,7 +75,7 @@ class FavoriteServiceTest {
     void add_savesWhenValid() {
         when(favoriteRepo.existsByUserIdAndContentId(userId, contentId)).thenReturn(false);
         when(favoriteRepo.countByUserId(userId)).thenReturn(0L);
-        when(contentRepo.findById(contentId)).thenReturn(Optional.of(content));
+        when(contentRepo.existsById(contentId)).thenReturn(true);
 
         favoriteService.add(userId, contentId);
 
@@ -118,7 +118,7 @@ class FavoriteServiceTest {
     void add_throwsNotFoundWhenContentMissing() {
         when(favoriteRepo.existsByUserIdAndContentId(userId, contentId)).thenReturn(false);
         when(favoriteRepo.countByUserId(userId)).thenReturn(0L);
-        when(contentRepo.findById(contentId)).thenReturn(Optional.empty());
+        when(contentRepo.existsById(contentId)).thenReturn(false);
 
         assertThatThrownBy(() -> favoriteService.add(userId, contentId))
                 .isInstanceOf(ResponseStatusException.class)
