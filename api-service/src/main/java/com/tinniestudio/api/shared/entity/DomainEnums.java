@@ -138,4 +138,10 @@ public final class DomainEnums {
         REFUNDED
     }
 
+    public enum ReviewStatus {
+        PENDING,
+        APPROVED,
+        REJECTED
+    }
+
 }

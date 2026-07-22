@@ -73,6 +73,12 @@ public class Content extends BaseEntity {
     @Column(nullable = false)
     private MaturityRating maturityRating = MaturityRating.NOT_RATED;
 
+    @Column(nullable = false, precision = 3, scale = 2)
+    private java.math.BigDecimal averageRating = java.math.BigDecimal.ZERO;
+
+    @Column(nullable = false)
+    private Integer reviewCount = 0;
+
     private Integer durationSeconds;
 
     @ManyToMany
