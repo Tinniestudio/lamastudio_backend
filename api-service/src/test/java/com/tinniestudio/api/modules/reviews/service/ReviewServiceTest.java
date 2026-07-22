@@ -159,6 +159,7 @@ class ReviewServiceTest {
 
         assertThat(existing.getRating()).isEqualTo((short) 4);
         assertThat(existing.getBody()).isEqualTo("Better than expected");
+        assertThat(existing.getStatus()).isEqualTo(ReviewStatus.PENDING);
         verify(reviewRepo).save(existing);
         assertThat(result).isNotNull();
     }
@@ -185,6 +186,7 @@ class ReviewServiceTest {
 
         assertThat(existing.getRating()).isEqualTo((short) 5);
         assertThat(existing.getBody()).isEqualTo("Original body");
+        assertThat(existing.getStatus()).isEqualTo(ReviewStatus.PENDING);
     }
 
     @Test

@@ -62,6 +62,7 @@ public class ReviewServiceImpl implements ReviewService {
         if (request.getBody() != null) {
             review.setBody(request.getBody());
         }
+        review.setStatus(ReviewStatus.PENDING);
 
         return ReviewResponse.from(reviewRepo.save(review));
     }
