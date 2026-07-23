@@ -17,7 +17,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/admin/reviews")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN') or hasRole('PARTNER')")
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminReviewController {
 
     private final ReviewService reviewService;
