@@ -17,6 +17,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -60,7 +61,7 @@ class HistoryControllerTest {
             contentId, "Test Movie", "test-movie", "A test movie",
             "MOVIE", "PUBLISHED", "PG",
             LocalDate.of(2024, 1, 1), false, false,
-            100L, "http://cdn.test/poster.jpg", "http://cdn.test/thumbnail.jpg"
+            100L, BigDecimal.ZERO, 0, "http://cdn.test/poster.jpg", "http://cdn.test/thumbnail.jpg"
         );
         WatchHistoryResponse histResponse = new WatchHistoryResponse(
             UUID.randomUUID(), contentId, null, Instant.now(),

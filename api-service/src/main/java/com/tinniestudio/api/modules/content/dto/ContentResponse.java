@@ -1,6 +1,7 @@
 package com.tinniestudio.api.modules.content.dto;
 
 import com.tinniestudio.api.shared.entity.Content;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -12,6 +13,7 @@ public record ContentResponse(
     LocalDate releaseDate, String language, String country,
     Boolean featured, Boolean comingSoon, Long viewCount,
     Integer durationSeconds, String posterUrl, String thumbnailUrl,
+    BigDecimal averageRating, Integer reviewCount,
     List<String> categoryNames, Instant publishedAt
 ) {
     public static ContentResponse from(Content c) {
@@ -22,6 +24,7 @@ public record ContentResponse(
             c.getReleaseDate(), c.getLanguage(), c.getCountry(),
             c.getFeatured(), c.getComingSoon(), c.getViewCount(),
             c.getDurationSeconds(), c.getPosterUrl(), c.getThumbnailUrl(),
+            c.getAverageRating(), c.getReviewCount(),
             c.getCategories().stream().map(cat -> cat.getName()).toList(),
             c.getPublishedAt()
         );

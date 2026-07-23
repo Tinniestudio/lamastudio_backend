@@ -16,6 +16,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -38,7 +39,7 @@ class SearchControllerTest {
     private static final ContentSummaryResponse MOVIE = new ContentSummaryResponse(
         UUID.randomUUID(), "Interstellar", "interstellar", "Space odyssey",
         "MOVIE", "PUBLISHED", "PG", LocalDate.of(2014, 11, 7),
-        false, false, 1500L, null, null
+        false, false, 1500L, BigDecimal.ZERO, 0, null, null
     );
 
     @Test
