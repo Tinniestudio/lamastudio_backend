@@ -19,6 +19,13 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
 
     long countByStatus(ContentStatus status);
 
+    long countByCreatedByAndStatus(UUID createdBy, ContentStatus status);
+
+    @Query("SELECT COALESCE(SUM(c.viewCount), 0) FROM Content c WHERE c.createdBy = :createdBy")
+    Long sumViewCountByCreatedBy(@Param("createdBy") UUID createdBy);
+
+    Page<Content> findByCreatedByOrderByCreatedAtDesc(UUID createdBy, Pageable pageable);
+
     @Modifying
     @Transactional
     @Query("UPDATE Content c SET c.viewCount = c.viewCount + 1 WHERE c.id = :id")
