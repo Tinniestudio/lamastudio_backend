@@ -123,6 +123,7 @@ public final class DomainEnums {
     public enum AccountStatus {
         ACTIVE,
         SUSPENDED,
+        BAN,
         DELETED
     }
 
@@ -142,6 +143,10 @@ public final class DomainEnums {
         PENDING,
         APPROVED,
         REJECTED
+    }
+
+    public enum PartnerApplicationStatus {
+        PENDING, APPROVED, REJECTED
     }
 
 }
