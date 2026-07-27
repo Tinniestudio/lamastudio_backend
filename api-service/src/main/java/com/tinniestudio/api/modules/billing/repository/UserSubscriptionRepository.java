@@ -18,4 +18,6 @@ public interface UserSubscriptionRepository extends JpaRepository<UserSubscripti
     java.util.List<UserSubscription> findByStatusAndEndDateBefore(SubscriptionStatus status, java.time.Instant date);
 
     java.util.List<UserSubscription> findByStatusAndAutoRenewFalseAndEndDateBetween(SubscriptionStatus status, java.time.Instant from, java.time.Instant to);
+
+    long countByStatus(SubscriptionStatus status);
 }

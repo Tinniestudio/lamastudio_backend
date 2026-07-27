@@ -47,6 +47,9 @@ public class UploadSession extends BaseEntity {
 
     private Instant completedAt;
 
+    @Column(name = "file_size_bytes")
+    private Long fileSizeBytes;
+
     @Version
     private Long version;
 }

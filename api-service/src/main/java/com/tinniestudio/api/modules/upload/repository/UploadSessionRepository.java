@@ -2,6 +2,14 @@ package com.tinniestudio.api.modules.upload.repository;
 
 import com.tinniestudio.api.shared.entity.UploadSession;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.stereotype.Repository;
+
 import java.util.UUID;
 
-public interface UploadSessionRepository extends JpaRepository<UploadSession, UUID> {}
+@Repository
+public interface UploadSessionRepository extends JpaRepository<UploadSession, UUID> {
+
+    @Query("SELECT COALESCE(SUM(u.fileSizeBytes), 0) FROM UploadSession u")
+    Long sumFileSizeBytes();
+}

@@ -1,6 +1,7 @@
 package com.tinniestudio.api.modules.content.repository;
 
 import com.tinniestudio.api.shared.entity.Content;
+import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,6 +16,8 @@ import java.util.UUID;
 
 public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpecificationExecutor<Content> {
     Optional<Content> findBySlug(String slug);
+
+    long countByStatus(ContentStatus status);
 
     @Modifying
     @Transactional

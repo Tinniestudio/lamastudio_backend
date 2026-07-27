@@ -17,4 +17,6 @@ public interface VideoAssetRepository extends JpaRepository<VideoAsset, UUID> {
 
     Optional<VideoAsset> findTopByEpisode_IdAndAssetTypeAndProcessingStatus(
             UUID episodeId, VideoAssetType assetType, ProcessingStatus processingStatus);
+
+    long countByProcessingStatus(ProcessingStatus status);
 }
