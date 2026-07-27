@@ -114,6 +114,8 @@ public class UploadService {
         MediaFile savedFile = mediaFileRepository.save(mediaFile);
 
         session.setUploadStatus(UploadStatus.COMPLETED);
+        session.setFileSizeBytes(session.getExpectedMaxSizeBytes() != null
+            ? session.getExpectedMaxSizeBytes() : 0L);
         session.setCompletedAt(Instant.now());
         uploadSessionRepository.save(session);
 
