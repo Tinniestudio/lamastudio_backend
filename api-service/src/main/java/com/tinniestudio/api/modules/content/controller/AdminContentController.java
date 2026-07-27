@@ -3,12 +3,17 @@ package com.tinniestudio.api.modules.content.controller;
 import com.tinniestudio.api.modules.content.dto.ContentResponse;
 import com.tinniestudio.api.modules.content.dto.CreateContentRequest;
 import com.tinniestudio.api.modules.content.dto.UpdateContentRequest;
+import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.content.service.ContentService;
+import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,6 +31,19 @@ import java.util.UUID;
 public class AdminContentController {
 
     private final ContentService contentService;
+    private final ContentRepository contentRepository;
+
+    @Operation(summary = "List all content across all statuses (admin view)")
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Page<ContentResponse>> listAll(
+            @RequestParam(required = false) ContentStatus status,
+            @PageableDefault(size = 20) Pageable pageable) {
+        Page<Content> page = (status != null)
+            ? contentRepository.findByStatusOrderByCreatedAtDesc(status, pageable)
+            : contentRepository.findAllByOrderByCreatedAtDesc(pageable);
+        return ResponseEntity.ok(page.map(ContentResponse::from));
+    }
 
     @Operation(summary = "Create new content (starts in DRAFT)")
     @PostMapping

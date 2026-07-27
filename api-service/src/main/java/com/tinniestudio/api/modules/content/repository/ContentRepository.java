@@ -26,6 +26,10 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
 
     Page<Content> findByCreatedByOrderByCreatedAtDesc(UUID createdBy, Pageable pageable);
 
+    Page<Content> findByStatusOrderByCreatedAtDesc(ContentStatus status, Pageable pageable);
+
+    Page<Content> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
     @Modifying
     @Transactional
     @Query("UPDATE Content c SET c.viewCount = c.viewCount + 1 WHERE c.id = :id")
