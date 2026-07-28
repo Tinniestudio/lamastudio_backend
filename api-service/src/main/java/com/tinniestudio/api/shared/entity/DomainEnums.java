@@ -149,4 +149,18 @@ public final class DomainEnums {
         PENDING, APPROVED, REJECTED
     }
 
+    public enum NotificationEventType {
+        CONTENT_PROCESSED,
+        CONTENT_APPROVED,
+        CONTENT_REJECTED,
+        APPLICATION_APPROVED,
+        APPLICATION_REJECTED,
+        ACCOUNT_SUSPENDED,
+        ACCOUNT_BANNED
+    }
+
+    public enum NotificationChannel {
+        IN_APP, EMAIL
+    }
+
 }
