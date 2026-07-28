@@ -84,6 +84,9 @@ app:
     allowed-origins:
       - ${FRONTEND_URL}
       - ${APP_BASE_URL}
+    allowed-origin-patterns:
+      - https://*.tinniestudio.com
+      - https://tinniestudio.com
     allowed-methods:
       - GET
       - POST

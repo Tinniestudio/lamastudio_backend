@@ -88,8 +88,11 @@ app:
 
   cors:
     allowed-origins:
-      - ${FRONTEND_URL}
-      - ${APP_BASE_URL}
+      - ${FRONTEND_URL:http://localhost:3000}
+      - ${APP_BASE_URL:http://localhost:8080}
+    allowed-origin-patterns:
+      - https://*.tinniestudio.com
+      - https://tinniestudio.com
     allowed-methods:
       - GET
       - POST

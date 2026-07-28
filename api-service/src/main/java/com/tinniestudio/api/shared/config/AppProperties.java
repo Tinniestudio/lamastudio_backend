@@ -33,6 +33,7 @@ public class AppProperties {
     @Setter
     public static class Cors {
         private List<String> allowedOrigins = new ArrayList<>();
+        private List<String> allowedOriginPatterns = new ArrayList<>();
         private List<String> allowedMethods = List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
         private List<String> allowedHeaders = List.of("*");
         private boolean allowCredentials = true;

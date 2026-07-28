@@ -228,6 +228,9 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         var cors = appProperties.getCors();
         configuration.setAllowedOrigins(cors.getAllowedOrigins());
+        if (cors.getAllowedOriginPatterns() != null && !cors.getAllowedOriginPatterns().isEmpty()) {
+            configuration.setAllowedOriginPatterns(cors.getAllowedOriginPatterns());
+        }
         configuration.setAllowedMethods(cors.getAllowedMethods());
         configuration.setAllowedHeaders(cors.getAllowedHeaders());
         configuration.setAllowCredentials(cors.isAllowCredentials());
