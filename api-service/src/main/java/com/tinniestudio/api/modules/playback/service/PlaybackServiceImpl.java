@@ -10,6 +10,7 @@ import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
 import com.tinniestudio.api.shared.config.AppProperties;
 import com.tinniestudio.api.shared.entity.*;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
+import com.tinniestudio.api.shared.queue.RabbitConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -87,6 +88,17 @@ public class PlaybackServiceImpl implements PlaybackService {
             .map(WatchProgress::getProgressSeconds)
             .orElse(null);
 
+        // Best-effort: publish VIEW_EVENT so the analytics consumer can increment counters
+        try {
+            rabbitTemplate.convertAndSend(RabbitConfig.QUEUE_ANALYTICS_INGEST, Map.of(
+                "type", "VIEW_EVENT",
+                "userId", userId != null ? userId.toString() : "",
+                "contentId", contentId.toString()
+            ));
+        } catch (Exception e) {
+            log.warn("Analytics VIEW_EVENT publish failed (non-critical): {}", e.getMessage());
+        }
+
         return buildManifestResponse(asset, resumeAt);
     }
 
@@ -115,6 +127,17 @@ public class PlaybackServiceImpl implements PlaybackService {
         Integer resumeAt = watchProgressRepo.findByUserIdAndEpisodeId(userId, episodeId)
             .map(WatchProgress::getProgressSeconds)
             .orElse(null);
+
+        // Best-effort: publish VIEW_EVENT for the parent content
+        try {
+            rabbitTemplate.convertAndSend(RabbitConfig.QUEUE_ANALYTICS_INGEST, Map.of(
+                "type", "VIEW_EVENT",
+                "userId", userId != null ? userId.toString() : "",
+                "contentId", contentId.toString()
+            ));
+        } catch (Exception e) {
+            log.warn("Analytics VIEW_EVENT publish failed (non-critical): {}", e.getMessage());
+        }
 
         return buildManifestResponse(asset, resumeAt);
     }
