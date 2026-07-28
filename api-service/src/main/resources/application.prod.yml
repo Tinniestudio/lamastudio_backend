@@ -150,7 +150,12 @@ springdoc:
   default-produces-media-type: application/json
 
 management:
+  server:
+    port: 8081
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
