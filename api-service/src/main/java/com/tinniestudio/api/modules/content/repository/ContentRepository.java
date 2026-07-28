@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -23,6 +24,8 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
 
     @Query("SELECT COALESCE(SUM(c.viewCount), 0) FROM Content c WHERE c.createdBy = :createdBy")
     Long sumViewCountByCreatedBy(@Param("createdBy") UUID createdBy);
+
+    List<Content> findByCreatedBy(UUID createdBy);
 
     Page<Content> findByCreatedByOrderByCreatedAtDesc(UUID createdBy, Pageable pageable);
 
