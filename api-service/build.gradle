@@ -61,6 +61,10 @@ dependencies {
     implementation platform('software.amazon.awssdk:bom:2.25.0')
     implementation 'software.amazon.awssdk:s3'
 
+    // ShedLock — distributed scheduler locking via JDBC
+    implementation 'net.javacrumbs.shedlock:shedlock-spring:6.0.1'
+    implementation 'net.javacrumbs.shedlock:shedlock-provider-jdbc-template:6.0.1'
+
     // Dev tools (excluded from production JAR automatically)
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
