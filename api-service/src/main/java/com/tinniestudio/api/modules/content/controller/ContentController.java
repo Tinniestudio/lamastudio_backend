@@ -5,6 +5,7 @@ import com.tinniestudio.api.modules.content.dto.ContentSummaryResponse;
 import com.tinniestudio.api.modules.content.service.ContentService;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
+import com.tinniestudio.api.shared.ratelimit.RateLimit;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class ContentController {
     private final ContentService contentService;
 
     @Operation(summary = "List published content with optional filters")
+    @RateLimit(maxRequests = 60, windowMinutes = 1, keyStrategy = "IP_ONLY")
     @GetMapping
     public ResponseEntity<Page<ContentSummaryResponse>> list(
             @RequestParam(required = false) ContentType type,

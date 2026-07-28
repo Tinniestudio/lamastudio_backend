@@ -5,6 +5,7 @@ import com.tinniestudio.api.modules.upload.dto.CreateUploadSessionRequest;
 import com.tinniestudio.api.modules.upload.dto.UploadSessionResponse;
 import com.tinniestudio.api.modules.upload.dto.UploadStatusResponse;
 import com.tinniestudio.api.modules.upload.service.UploadService;
+import com.tinniestudio.api.shared.ratelimit.RateLimit;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -26,6 +27,8 @@ public class UploadController {
     private final UploadService uploadService;
 
     @Operation(summary = "Create a presigned upload session — returns a URL for direct-to-bucket upload")
+    @RateLimit(maxRequests = 10, windowMinutes = 15, keyStrategy = "USER_OR_IP",
+               errorMessage = "Too many upload requests. Please wait before trying again.")
     @PostMapping("/sessions")
     public ResponseEntity<UploadSessionResponse> createSession(
             @AuthenticationPrincipal UserDetails principal,

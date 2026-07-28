@@ -6,6 +6,7 @@ import com.tinniestudio.api.modules.content.dto.ContentResponse;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.partner.dto.*;
 import com.tinniestudio.api.modules.partner.service.PartnerService;
+import com.tinniestudio.api.shared.ratelimit.RateLimit;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -37,6 +38,8 @@ public class PartnerController {
 
     @Operation(summary = "Apply to become a partner")
     @PreAuthorize("isAuthenticated()")
+    @RateLimit(maxRequests = 3, windowMinutes = 60, keyStrategy = "USER_OR_IP",
+               errorMessage = "Too many applications. Please try again later.")
     @PostMapping("/applications")
     public ResponseEntity<PartnerApplicationResponse> apply(
             @AuthenticationPrincipal UserDetails principal,
