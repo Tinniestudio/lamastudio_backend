@@ -8,7 +8,7 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     env_file: .env
     environment:
       DB_HOST: db
@@ -123,7 +123,7 @@ services:
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     networks:
       - tinniestudio-network
     depends_on:
@@ -137,7 +137,7 @@ services:
       - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
