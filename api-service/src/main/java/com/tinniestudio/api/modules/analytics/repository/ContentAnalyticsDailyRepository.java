@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -21,6 +22,7 @@ public interface ContentAnalyticsDailyRepository
      * Atomically inserts a new row for (content_id, analytics_date) or increments
      * the views counter if a row already exists (PostgreSQL ON CONFLICT upsert).
      */
+    @Transactional
     @Modifying
     @Query(nativeQuery = true, value = """
             INSERT INTO content_analytics_daily
@@ -36,6 +38,7 @@ public interface ContentAnalyticsDailyRepository
      * Atomically inserts a new row or increments the completions counter if the
      * user reached >= 90 % of the content.
      */
+    @Transactional
     @Modifying
     @Query(nativeQuery = true, value = """
             INSERT INTO content_analytics_daily

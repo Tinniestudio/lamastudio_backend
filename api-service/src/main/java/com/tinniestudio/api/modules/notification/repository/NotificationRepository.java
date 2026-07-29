@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -23,6 +24,7 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     @Query("UPDATE Notification n SET n.isRead = true, n.readAt = :now WHERE n.userId = :userId AND n.isRead = false")
     int markAllReadForUser(@Param("userId") UUID userId, @Param("now") Instant now);
 
+    @Transactional
     @Modifying
     @Query("DELETE FROM Notification n WHERE n.createdAt < :cutoff")
     int deleteOlderThan(@Param("cutoff") Instant cutoff);

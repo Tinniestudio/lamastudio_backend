@@ -208,7 +208,7 @@ public class PlaybackServiceImpl implements PlaybackService {
 
         // Best-effort analytics publish
         try {
-            rabbitTemplate.convertAndSend("analytics.ingest", Map.of(
+            rabbitTemplate.convertAndSend(RabbitConfig.QUEUE_ANALYTICS_INGEST, Map.of(
                 "type", "PROGRESS_TRACKED",
                 "userId", userId.toString(),
                 "contentId", progress.getContentId() != null ? progress.getContentId().toString() : "",
