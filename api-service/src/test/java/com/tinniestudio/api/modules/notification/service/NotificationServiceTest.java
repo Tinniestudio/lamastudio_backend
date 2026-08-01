@@ -57,6 +57,83 @@ class NotificationServiceTest {
     }
 
     @Test
+    void sendNotification_suppressed_whenPreferenceDisabled() {
+        UUID userId = UUID.randomUUID();
+        NotificationTemplate template = new NotificationTemplate();
+        template.setEventType(NotificationEventType.CONTENT_PROCESSED);
+        template.setTitleTemplate("Ready");
+        template.setBodyTemplate("Your content is ready");
+        template.setChannel(NotificationChannel.IN_APP);
+        template.setIsActive(true);
+
+        NotificationPreference pref = new NotificationPreference();
+        pref.setUserId(userId);
+        pref.setChannel(NotificationChannel.IN_APP);
+        pref.setEventType(NotificationEventType.CONTENT_PROCESSED);
+        pref.setIsEnabled(false);
+
+        when(templateRepo.findByEventTypeAndIsActiveTrue(NotificationEventType.CONTENT_PROCESSED))
+            .thenReturn(Optional.of(template));
+        when(preferenceRepo.findByUserIdAndChannelAndEventType(userId,
+            NotificationChannel.IN_APP, NotificationEventType.CONTENT_PROCESSED))
+            .thenReturn(Optional.of(pref));
+
+        service.sendNotification(userId, NotificationEventType.CONTENT_PROCESSED, "CONTENT", UUID.randomUUID());
+
+        verify(notificationRepo, never()).save(any());
+    }
+
+    @Test
+    void sendNotification_creates_whenNoPreferenceRow() {
+        UUID userId = UUID.randomUUID();
+        NotificationTemplate template = new NotificationTemplate();
+        template.setEventType(NotificationEventType.CONTENT_PROCESSED);
+        template.setTitleTemplate("Ready");
+        template.setBodyTemplate("Your content is ready");
+        template.setChannel(NotificationChannel.IN_APP);
+        template.setIsActive(true);
+
+        when(templateRepo.findByEventTypeAndIsActiveTrue(NotificationEventType.CONTENT_PROCESSED))
+            .thenReturn(Optional.of(template));
+        when(preferenceRepo.findByUserIdAndChannelAndEventType(userId,
+            NotificationChannel.IN_APP, NotificationEventType.CONTENT_PROCESSED))
+            .thenReturn(Optional.empty());
+        when(notificationRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.sendNotification(userId, NotificationEventType.CONTENT_PROCESSED, "CONTENT", UUID.randomUUID());
+
+        verify(notificationRepo).save(any());
+    }
+
+    @Test
+    void sendNotification_creates_whenPreferenceExplicitlyEnabled() {
+        UUID userId = UUID.randomUUID();
+        NotificationTemplate template = new NotificationTemplate();
+        template.setEventType(NotificationEventType.CONTENT_PROCESSED);
+        template.setTitleTemplate("Ready");
+        template.setBodyTemplate("Your content is ready");
+        template.setChannel(NotificationChannel.IN_APP);
+        template.setIsActive(true);
+
+        NotificationPreference pref = new NotificationPreference();
+        pref.setUserId(userId);
+        pref.setChannel(NotificationChannel.IN_APP);
+        pref.setEventType(NotificationEventType.CONTENT_PROCESSED);
+        pref.setIsEnabled(true);
+
+        when(templateRepo.findByEventTypeAndIsActiveTrue(NotificationEventType.CONTENT_PROCESSED))
+            .thenReturn(Optional.of(template));
+        when(preferenceRepo.findByUserIdAndChannelAndEventType(userId,
+            NotificationChannel.IN_APP, NotificationEventType.CONTENT_PROCESSED))
+            .thenReturn(Optional.of(pref));
+        when(notificationRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.sendNotification(userId, NotificationEventType.CONTENT_PROCESSED, "CONTENT", UUID.randomUUID());
+
+        verify(notificationRepo).save(any());
+    }
+
+    @Test
     void getUnreadCount_returnsCount() {
         UUID userId = UUID.randomUUID();
         when(notificationRepo.countByUserIdAndIsReadFalse(userId)).thenReturn(5L);

@@ -37,6 +37,17 @@ public class NotificationServiceImpl implements NotificationService {
             return;
         }
         NotificationTemplate template = templateOpt.get();
+
+        boolean suppressed = preferenceRepo
+            .findByUserIdAndChannelAndEventType(userId, template.getChannel(), eventType)
+            .map(pref -> !pref.getIsEnabled())
+            .orElse(false);
+        if (suppressed) {
+            log.debug("User {} has disabled event type {} on channel {}. Skipping.",
+                userId, eventType, template.getChannel());
+            return;
+        }
+
         Notification n = new Notification();
         n.setUserId(userId);
         n.setEventType(eventType);
