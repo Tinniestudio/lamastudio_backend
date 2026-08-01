@@ -1,15 +1,12 @@
 package com.tinniestudio.api.modules.analytics.consumer;
 
-import com.tinniestudio.api.modules.analytics.repository.ContentAnalyticsDailyRepository;
-import com.tinniestudio.api.modules.content.repository.ContentRepository;
+import com.tinniestudio.api.modules.analytics.service.AnalyticsEventProcessor;
 import com.tinniestudio.api.shared.queue.RabbitConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
 
@@ -18,8 +15,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AnalyticsConsumer {
 
-    private final ContentRepository contentRepo;
-    private final ContentAnalyticsDailyRepository dailyRepo;
+    // The actual transactional writes live in AnalyticsEventProcessor, a separate Spring
+    // bean. Calling out to it (rather than to @Transactional methods on `this`) ensures the
+    // call goes through a real Spring-managed transactional proxy — see the Javadoc on
+    // AnalyticsEventProcessor for why plain self-invocation would silently defeat @Transactional.
+    private final AnalyticsEventProcessor eventProcessor;
 
     @RabbitListener(queues = RabbitConfig.QUEUE_ANALYTICS_INGEST)
     public void handleAnalyticsEvent(Map<String, Object> message) {
@@ -39,21 +39,18 @@ public class AnalyticsConsumer {
     // Handlers
     // -------------------------------------------------------------------------
 
-    @Transactional
-    protected void handleViewEvent(Map<String, Object> message) {
+    private void handleViewEvent(Map<String, Object> message) {
         String contentIdStr = (String) message.get("contentId");
         if (contentIdStr == null || contentIdStr.isBlank()) {
             log.warn("VIEW_EVENT missing contentId — skipping");
             return;
         }
         UUID contentId = UUID.fromString(contentIdStr);
-        contentRepo.incrementViewCount(contentId);
-        dailyRepo.upsertViewEvent(contentId, LocalDate.now());
+        eventProcessor.processViewEvent(contentId);
         log.debug("VIEW_EVENT processed for content {}", contentId);
     }
 
-    @Transactional
-    protected void handleProgressTracked(Map<String, Object> message) {
+    private void handleProgressTracked(Map<String, Object> message) {
         String contentIdStr = (String) message.get("contentId");
         if (contentIdStr == null || contentIdStr.isBlank()) {
             log.warn("PROGRESS_TRACKED missing contentId — skipping");
@@ -73,7 +70,7 @@ public class AnalyticsConsumer {
 
         if (progress / duration >= 0.90) {
             UUID contentId = UUID.fromString(contentIdStr);
-            dailyRepo.upsertCompletionEvent(contentId, LocalDate.now());
+            eventProcessor.processCompletionEvent(contentId);
             log.debug("PROGRESS_TRACKED completion upserted for content {}", contentId);
         }
     }

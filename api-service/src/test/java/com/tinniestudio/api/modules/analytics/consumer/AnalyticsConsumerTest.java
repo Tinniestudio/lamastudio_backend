@@ -1,14 +1,12 @@
 package com.tinniestudio.api.modules.analytics.consumer;
 
-import com.tinniestudio.api.modules.analytics.repository.ContentAnalyticsDailyRepository;
-import com.tinniestudio.api.modules.content.repository.ContentRepository;
+import com.tinniestudio.api.modules.analytics.service.AnalyticsEventProcessor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -19,12 +17,11 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AnalyticsConsumerTest {
 
-    @Mock ContentRepository contentRepo;
-    @Mock ContentAnalyticsDailyRepository dailyRepo;
+    @Mock AnalyticsEventProcessor eventProcessor;
     @InjectMocks AnalyticsConsumer consumer;
 
     @Test
-    void handleViewEvent_incrementsViewCountAndUpsertsDailyRow() {
+    void handleViewEvent_delegatesToEventProcessor() {
         UUID contentId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
 
@@ -34,12 +31,11 @@ class AnalyticsConsumerTest {
             "userId", userId.toString()
         ));
 
-        verify(contentRepo).incrementViewCount(contentId);
-        verify(dailyRepo).upsertViewEvent(eq(contentId), any(LocalDate.class));
+        verify(eventProcessor).processViewEvent(contentId);
     }
 
     @Test
-    void handleViewEvent_withNullUserId_stillIncrements() {
+    void handleViewEvent_withNullUserId_stillDelegates() {
         UUID contentId = UUID.randomUUID();
         Map<String, Object> msg = new HashMap<>();
         msg.put("type", "VIEW_EVENT");
@@ -48,12 +44,11 @@ class AnalyticsConsumerTest {
 
         consumer.handleAnalyticsEvent(msg);
 
-        verify(contentRepo).incrementViewCount(contentId);
-        verify(dailyRepo).upsertViewEvent(eq(contentId), any(LocalDate.class));
+        verify(eventProcessor).processViewEvent(contentId);
     }
 
     @Test
-    void handleProgressTracked_upsertsCompletionWhen90PercentReached() {
+    void handleProgressTracked_delegatesCompletionWhen90PercentReached() {
         UUID contentId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
 
@@ -66,11 +61,11 @@ class AnalyticsConsumerTest {
             "durationSeconds", "100"
         ));
 
-        verify(dailyRepo).upsertCompletionEvent(eq(contentId), any(LocalDate.class));
+        verify(eventProcessor).processCompletionEvent(contentId);
     }
 
     @Test
-    void handleProgressTracked_upsertsCompletionWhenProgressIsNumeric() {
+    void handleProgressTracked_delegatesCompletionWhenProgressIsNumeric() {
         UUID contentId = UUID.randomUUID();
 
         // Integer values (as sent from PlaybackServiceImpl via RabbitMQ)
@@ -82,7 +77,7 @@ class AnalyticsConsumerTest {
             "durationSeconds", 100
         ));
 
-        verify(dailyRepo).upsertCompletionEvent(eq(contentId), any(LocalDate.class));
+        verify(eventProcessor).processCompletionEvent(contentId);
     }
 
     @Test
@@ -98,12 +93,12 @@ class AnalyticsConsumerTest {
             "durationSeconds", "100"
         ));
 
-        verifyNoInteractions(dailyRepo);
+        verifyNoInteractions(eventProcessor);
     }
 
     @Test
     void unknownEventType_isIgnored() {
         consumer.handleAnalyticsEvent(Map.of("type", "UNKNOWN"));
-        verifyNoInteractions(contentRepo, dailyRepo);
+        verifyNoInteractions(eventProcessor);
     }
 }
