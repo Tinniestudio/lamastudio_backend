@@ -75,7 +75,7 @@ specs/002-user-profile-billing/
 ### Source Code
 
 ```text
-src/main/java/com/lamastudio/backend/
+src/main/java/com/tinniestudio/backend/
 ├── modules/
 │   ├── user/
 │   │   ├── controller/
@@ -132,7 +132,7 @@ src/main/resources/
     ├── V10__add_payments.sql                       # NEW
     └── V11__add_subscription_cancelled_at.sql      # NEW
 
-src/test/java/com/lamastudio/backend/
+src/test/java/com/tinniestudio/backend/
 ├── user/
 │   ├── service/UserProfileServiceTest.java         # NEW — unit tests
 │   └── UserProfileIntegrationTest.java            # NEW — integration tests

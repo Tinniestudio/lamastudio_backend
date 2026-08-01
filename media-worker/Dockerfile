@@ -1,41 +1,21 @@
-# ========================
-# Build Stage
-# ========================
-FROM eclipse-temurin:21-jdk-jammy AS builder
+# Build JAR locally first: ./gradlew :media-worker:bootJar -x test
+# This host blocks GitHub and Ubuntu apt mirrors, so we avoid both:
+#   - Gradle build is done locally and JAR is copied in
+#   - FFmpeg is pulled from Docker Hub (mwader/static-ffmpeg) as static binaries
 
-WORKDIR /workspace
+FROM mwader/static-ffmpeg:latest AS ffmpeg
 
-# Copy Gradle wrapper and root build files first (layer caching)
-COPY gradlew .
-COPY gradle/ gradle/
-COPY settings.gradle .
-COPY build.gradle .
-
-# Copy worker build file
-COPY media-worker/build.gradle media-worker/build.gradle
-
-# Download dependencies (cached layer if build files unchanged)
-RUN ./gradlew :media-worker:dependencies --no-daemon
-
-# Copy source and build
-COPY media-worker/src media-worker/src
-RUN ./gradlew :media-worker:bootJar --no-daemon -x test
-
-# ========================
-# Runtime Stage
-# ========================
 FROM eclipse-temurin:21-jre-jammy
-
-# Install FFmpeg and FFprobe
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
-    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+# Static binaries have zero shared-lib dependencies — works on any Linux image
+COPY --from=ffmpeg /ffmpeg  /usr/local/bin/ffmpeg
+COPY --from=ffmpeg /ffprobe /usr/local/bin/ffprobe
+
 RUN useradd -m workeruser
 
-COPY --from=builder /workspace/media-worker/build/libs/*.jar app.jar
+COPY media-worker/build/libs/tinniestudio-media-worker-*.jar app.jar
 
 RUN mkdir -p /tmp/tinniestudio && chown workeruser /tmp/tinniestudio
 

@@ -35,7 +35,7 @@ public class OpenApiConfig {
     private String frontendUrl;
 
     @Bean
-    public OpenAPI lamaStudioOpenAPI() {
+    public OpenAPI tinnieStudioOpenAPI() {
         return new OpenAPI()
                 .info(apiInfo())
                 .externalDocs(externalDocs())

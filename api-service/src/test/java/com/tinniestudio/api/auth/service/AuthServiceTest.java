@@ -228,7 +228,7 @@ class AuthServiceTest {
         refresh.setExpirationMs(604_800_000L);
         jwt.setAccessToken(access);
         jwt.setRefreshToken(refresh);
-        jwt.setIssuer("lamastudio-test");
+        jwt.setIssuer("tinniestudio-test");
         props.setJwt(jwt);
         AppProperties.Cookie cookie = new AppProperties.Cookie();
         cookie.setSecure(false);

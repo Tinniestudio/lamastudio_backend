@@ -4,26 +4,35 @@ services:
     build:
       context: .
       dockerfile: api-service/Dockerfile
+      network: host
     container_name: tinniestudio-api
     restart: unless-stopped
     ports:
       - "8080:8080"
       - "127.0.0.1:8081:8081"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file: .env
     environment:
-      DB_HOST: db
+      # Postgres: uses canotices_postgres (0.0.0.0:5432 on host)
+      DB_HOST: host.docker.internal
       DB_PORT: 5432
       DB_NAME: tinniestudio_db
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ultimate
+      # Redis: internal Docker service (system redis is loopback-only)
       REDIS_URL: redis://redis:6379
+      # RabbitMQ: internal Docker service
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USER: guest
       RABBITMQ_PASSWORD: guest
+      # MinIO: uses canotices_minio (0.0.0.0:9000 on host)
+      STORAGE_ENDPOINT: http://host.docker.internal:9000
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_started
       rabbitmq:
@@ -35,53 +44,41 @@ services:
     build:
       context: .
       dockerfile: media-worker/Dockerfile
+      network: host
     container_name: tinniestudio-worker
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file: .env
     environment:
-      DB_HOST: db
+      # Postgres: uses canotices_postgres (0.0.0.0:5432 on host)
+      DB_HOST: host.docker.internal
       DB_PORT: 5432
       DB_NAME: tinniestudio_db
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ultimate
+      # RabbitMQ: internal Docker service
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USER: guest
       RABBITMQ_PASSWORD: guest
+      # MinIO: uses canotices_minio (0.0.0.0:9000 on host)
+      STORAGE_ENDPOINT: http://host.docker.internal:9000
     depends_on:
-      db:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     networks:
       - tinniestudio-network
 
-  db:
-    image: postgis/postgis:16-3.4
-    container_name: tinniestudio-db
-    restart: always
-    environment:
-      POSTGRES_DB: tinniestudio_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d tinniestudio_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - tinniestudio-network
-
+  # Redis runs in Docker — system redis is loopback-only and unreachable from bridge networks.
+  # No host port binding avoids conflict with system redis on 127.0.0.1:6379.
   redis:
     image: redis:7-alpine
     container_name: tinniestudio-redis
     restart: always
-    ports:
-      - "6379:6379"
     networks:
       - tinniestudio-network
 
@@ -100,22 +97,6 @@ services:
     networks:
       - tinniestudio-network
 
-  minio:
-    image: minio/minio:latest
-    container_name: tinniestudio-minio
-    restart: always
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    networks:
-      - tinniestudio-network
-
   prometheus:
     image: prom/prometheus:latest
     container_name: tinniestudio-prometheus
@@ -126,8 +107,6 @@ services:
       - "127.0.0.1:9090:9090"
     networks:
       - tinniestudio-network
-    depends_on:
-      - api-service
 
   grafana:
     image: grafana/grafana:latest
@@ -152,6 +131,4 @@ networks:
     driver: bridge
 
 volumes:
-  db_data:
-  minio_data:
   grafana_data:

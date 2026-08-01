@@ -1,114 +1,74 @@
-I  have a clear picture of the landscape. Before proceeding, I have several questions that will shape the Batch 3 implementation significantly.
+## Batch 13 — Partner Portal
 
-What exists already:
-
-Category entity in shared/entity/ — but missing poster_url and display_order fields from the spec
-Content entity with @ManyToMany categories already wired
-No CategoryRepository, CategoryService, CategoryController, or any category/ or discover/ module
-No homepage_sections table
-Next available migration: V15
-Here are the questions I need answered before writing a line of code:
-
-1. Category entity gaps
-The existing Category.java is missing poster_url and display_order from the BATCH-PLAN spec. Should both be added in the V15 migration, or is poster_url deferred until the upload system (Batch 6) exists?
-
-2. Trending algorithm — no view data exists yet
-The plan says TRENDING = "most-viewed content last 7 days", but there's no view count column and no analytics events table until Batch 16. For Batch 3, what should trending sort by?
-
-published_at DESC (newest = trending proxy)
-Add a view_count column to contents now
-Return empty results with the correct schema (Batch 4/16 will populate it)
-3. Homepage sections — hardcoded or DB-driven?
-The homepage_sections table lets admins configure section order and types. But there are no admin endpoints for managing it in the Batch 3 spec. Should we:
-
-Create the homepage_sections table and seed it with default sections (no admin CRUD)
-Hardcode section types in the service (simpler, no migration for sections table)
-Build the full admin section management now (even though it's not in the spec)
-4. CONTINUE_WATCHING section
-The watch_progress table doesn't exist until Batch 8. For GET /discover/home, should the CONTINUE_WATCHING section:
-
-Be included in the response with an empty array in Batch 3 (correct schema now, real data in Batch 8)
-Be excluded entirely from Batch 3 (added when Batch 8 adds watch_progress)
-5. Discover endpoints with no content
-/discover/featured, /discover/trending, /discover/new-releases all need content data that won't exist until Batch 4. Should we build these endpoints now (returning empty arrays with correct structure), or defer them to Batch 4?
-
-6. Category poster_url — upload or URL string?
-When an admin sets a category image, should they:
-
-Paste a direct URL (simple string field, no upload system dependency)
-Use the presigned upload flow (not available until Batch 6)
-7. Admin homepage section management
-The BATCH-PLAN doesn't define endpoints to manage homepage_sections. Should we add them to Batch 3 scope (POST/PATCH/DELETE /admin/homepage-sections), or is section config purely seeded via migration?
-
-8. Slug collision handling
-Auto-generate slug from name. For collisions ("action" already exists → "action-2", "action-3"), should this logic live in the service layer or database trigger?
-
-1. both should be added 
-2. included trending algorithm, and content should have vast filter, simliar to nextflx, e.g (coming soon, tredning, action, scific, kids, sermons, tvshows, action, movies, and many more)
-3. create homepage section
-4. cretae watch progress table
-5. included batch 4 together with this bacth
-6. use the presigned upload flow
-7. add it to the bacth
-8. slug should be handle in database for efficency and reduce query time
-note: task.md still remiain source of truth
-
-
-Good. I have a clear picture of what exists. The entities are all pre-built, but no DB migrations exist yet for content/categories/seasons/episodes/watch_progress. Last migration is V14. Let me ask the critical follow-ups before writing the spec:
-
-A. ContentStatus enum — needs expansion
-The existing DomainEnums.ContentStatus has: DRAFT, PROCESSING, PUBLISHED, ARCHIVED. The plan defines a DRAFT → REVIEW → PUBLISHED/REJECTED → ARCHIVED workflow. You also want "coming soon". Which statuses should exist?
-
-Should COMING_SOON be a separate status, or a boolean is_coming_soon flag on content (so it can be PUBLISHED but flagged as coming soon)?
-Should I add REVIEW and REJECTED to the enum now, or does the current workflow skip the review step?
-B. Category poster_url — Batch 6 isn't built yet
-You said use the presigned upload flow, but the upload session system (Batch 6) doesn't exist in this combined batch. Two options:
-
-Store poster_url as a direct URL string in this batch (admin pastes a CDN/storage URL) — wire to presigned upload when Batch 6 is built
-Build a minimal single-purpose image upload endpoint for categories now (simplifies things, no upload session tracking)
-C. Trending algorithm — what's the source data?
-"Most viewed in last 7 days" requires view tracking. Options:
-
-Add a view_count BIGINT DEFAULT 0 column to contents (incremented by the playback system in Batch 8) — trending = highest view_count DESC
-Just sort by published_at DESC as a proxy for trending in MVP (real trending recalculated when analytics is live in Batch 16)
-D. Netflix-style filters — how many categories should be seeded?
-You mentioned: action, sci-fi, kids, sermons, TV shows, movies, coming soon, trending + more. Should I seed a default set of categories via a Flyway migration, or leave it to admin to create via the admin API?
-
-E. "Sermons" as content type?
-ContentType currently has MOVIE and SERIES. "Sermons" sounds like a category (tag applied to content), not a type. Should the content type remain MOVIE | SERIES, with sermons just being a category name? Or do you want a third type like SPECIAL?
-
-F. Combined batch — Batch 5 (Episodes + Series) inclusion?
-You said combine Batch 3 + 4. Batch 4 includes Series content type which directly requires Season and Episode entities (Batch 5). Should I include Batch 5's season/episode controllers as well, so SERIES content is fully usable in this batch? Or stop at Batch 4 (content CRUD) and add season/episode controllers in a follow-up?
-
-
-A. make the comming soon boolean, and added Review and reject
-B. build a single purposer imgae upload for category poster or make use for formdata, that send the image together witht the other data and pass the image upload to storage, and get the url from storage and save the url together with the data
-C. use view count for trending
-D. seed categorires and also allow admin to create categoey via endpoint with CRUD operation
-E. content type remain sermon is just a category and it content type will be select by admin/partner to eaith movie or series (but what better name can we user for movies that are not series)
-F. combine
+1. admin promote user oto partner, and they can use same credetaail to login to there portal by checking if parner role is included
+2. yeah, partner can update there profile, 
+3. partner upload logon follow same presign upload
+4. verification automatic when admin proote the user, and admin can still update using the endpoint, for partner that voilate regulation
+5. remove gross revenue for now, only admin own that
+6. depend on question 5
+7. use partners/contents for scalability
+8. merge both into a big and flexible endpoint
+9. remove payment event, audit_log
+10. seperate field
 
 
 
+## Batch 14 — Admin Moderation
+1. content moderation is completed, and add dashboard, user and partners
+2. add BAN to it, suspended account can be recover with appeal, delete make use of soft-delete, and BAN, block user from total access
+3. i1/status is basically use to uupdate users status, no other operation or update will be allow, while user/id can be user to perform account update
+4. admin promote user to partner, but there will be an endpoint for user to user to apply for becoming a partner and when admin approve the will be prompt to complete partner profile
+5. when user is suspended all token are revoke
+6. audit_log can be query by admin on dashboard
+7. use rabbitMQ and update proxy that have been created to use it
+8. minoO will be replce with s3 bucket in production, so avoid hard coding, and keep track od the bytes in db on upload completion
+9. user delete should make use of softdelete
+10. yes, good, seperated admin endpoint for getting content 
+
+## Batch 15 — Notification System
+1. add full migration
+2. replace with semantic event types
+3. notification_template eed crud, for admin management
+4. preference per channel
+5. create seperate endpoint for unread message count
+6. it should be in notification preference
+7. yes, it live on api-service
+8. build and abstract for now
+9. notification greatr then 90days should be clean up
+10. worker, update videoassest and also send notification
 
 
-On your question about MOVIE naming — keep MOVIE. Netflix uses it, users understand it universally. Standalone films = MOVIE, ongoing shows = SERIES. Sermon content just uses the MOVIE type with the "Sermons" category. Clean and simple.
+## Batch 16 — Analytics
+1. contents.views_count get increment asyncly
+2. payback/progress should publish PROGRESS_UPDATE to queue directly
+3. check batch 13 8
+4. it make use of existing payment table
+6. granularity will make use of one point per calender (mon-sun)
+7. yes, it can be track as user null, for better analysis
+8. yes, partner can be able to
+9. Should analytics API responses always read from content_analytics_daily (up to 1 hour stale), 
+10. should suppport CSV export
 
-Now confirming the full combined scope before writing the spec:
+## Batch 17 — Background Jobs
+1. the distributd lock machanism is ok
+2. When an expired UploadSession is cleaned up, only the db row should be deleted, so user can continue
+3. add the column to notification table for easy tracking
+4. stalejob recovery a VideoAsset in PROCESSING status where updatedAt < now() - 60 min
+5. failed assets just be deleted after 7 days
+6. write to audit_log and notify admin
+7. if expired_at is not included add it and setup job for cleaning expired token
+8. create job_execution_log for all job execution process
 
-Combined Batch 3 + 4 + 5 — Full Scope
+## Batch 18 — Observability
+1. the cloud collect the JSOnlog
+2. health actuator should be public why metrics and prometheus can only be access by admin
+3. tinniestudio.com that the domian name and application should allow reqest from *.tinnieStudio.com
+4. ensure ratelimit are inlcuded where need to avoid user overwheelming the system and prevent bot spamming 
+5. audit index that are missing and added it for query optimization
+6. use the best and simple load testing tools
+7. yes, include prometheus + Grafana stck for docker
 
-Area	What's included
-DB	V15–V24 migrations: categories update, homepage_sections, contents, content_categories, content_cast, seasons, episodes, watch_progress, category seeds, section seeds
-Enums	Add REVIEW, REJECTED to ContentStatus; add MaturityRating; add SectionType; add coming_soon boolean + view_count to Content
-StorageService	Add uploadFile(key, bytes, contentType) for multipart category poster upload
-Category module	CRUD (admin) + public list/detail, multipart image upload to MinIO, Redis cache (10 min), slug via DB trigger
-Homepage Sections	homepage_sections table, admin CRUD, Redis cache (5 min)
-Content module	Full CRUD (MOVIE/SERIES), status workflow (DRAFT→REVIEW→PUBLISHED/REJECTED/ARCHIVED), view_count, coming_soon, maturity_rating, content_cast, Netflix-style filter query params, partner + admin + public endpoints
-Discovery module	/discover/home, /discover/trending, /discover/featured, /discover/new-releases, /discover/coming-soon + category-based rows, Redis caching per section
-Season module	Full partner CRUD for seasons
-Episode module	Full partner CRUD + auto-numbering + reorder
-Watch progress	Migration + entity (endpoints wired in Batch 8)
-Now writing the spec doc.
+## Cross-cutting
 
-superpowers:writing-plans skill
+CX-1. Batch combining
+Should any remaining batches be combined to reduce context-switching? Strong candidates: 13+14 (both are portal/dashboard views with similar patterns), or 15+17 (notification consumer + cleanup jobs are tightly coupled).

@@ -7,7 +7,7 @@ spring:
     import: optional:file:.env[.properties]
 
   application:
-    name: lamastudio-backend
+    name: tinniestudio-backend
 
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
@@ -106,7 +106,7 @@ app:
     refresh-token:
       secret: ${JWT_REFRESH_SECRET}
       expiration-ms: ${JWT_REFRESH_EXPIRATION_MS}    # 7 days
-    issuer: lamastudio
+    issuer: tinniestudio
 
   cookie:
     secure: ${COOKIE_SECURE}    # true in production (HTTPS)
@@ -130,7 +130,7 @@ server:
 
 logging:
   level:
-    com.lamastudio: DEBUG
+    com.tinniestudio: DEBUG
     org.springframework.security: INFO
 
 springdoc:

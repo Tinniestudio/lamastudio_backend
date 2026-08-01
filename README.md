@@ -33,10 +33,10 @@ RESTful API backend for LamaStudio streaming platform built with Spring Boot. Ha
 - **Containerization**: Docker
 
 ## 📁 Project Structure
-lamastudio-backend/
+tinniestudio-backend/
 ├── src/
 │ ├── main/
-│ │ ├── java/com/lamastudio/
+│ │ ├── java/com/tinniestudio/
 │ │ │ ├── config/ # Configuration classes
 │ │ │ ├── controller/ # REST controllers
 │ │ │ ├── dto/ # Data Transfer Objects
@@ -71,21 +71,21 @@ text
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Tinniestudio/lamastudio_backend.git
-   cd lamastudio_backend
+   git clone https://github.com/Tinniestudio/tinniestudio_backend.git
+   cd tinniestudio_backend
 Configure the database:
 
 sql
-CREATE DATABASE lamastudio;
-CREATE USER lamastudio_user WITH PASSWORD 'your_password';
-GRANT ALL PRIVILEGES ON DATABASE lamastudio TO lamastudio_user;
+CREATE DATABASE tinniestudio;
+CREATE USER tinniestudio_user WITH PASSWORD 'your_password';
+GRANT ALL PRIVILEGES ON DATABASE tinniestudio TO tinniestudio_user;
 Update application.yml:
 
 yaml
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/lamastudio
-    username: lamastudio_user
+    url: jdbc:postgresql://localhost:5432/tinniestudio
+    username: tinniestudio_user
     password: your_password
   jpa:
     hibernate:
@@ -136,8 +136,8 @@ services:
   postgres:
     image: postgres:14
     environment:
-      POSTGRES_DB: lamastudio
-      POSTGRES_USER: lamastudio_user
+      POSTGRES_DB: tinniestudio
+      POSTGRES_USER: tinniestudio_user
       POSTGRES_PASSWORD: your_password
     ports:
       - "5432:5432"
@@ -157,8 +157,8 @@ services:
       - postgres
       - redis
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/lamastudio
-      SPRING_DATASOURCE_USERNAME: lamastudio_user
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tinniestudio
+      SPRING_DATASOURCE_USERNAME: tinniestudio_user
       SPRING_DATASOURCE_PASSWORD: your_password
 
 volumes:
@@ -274,7 +274,7 @@ JWT_EXPIRATION
 Deploy the JAR:
 
 bash
-java -jar target/lamastudio-backend-*.jar
+java -jar target/tinniestudio-backend-*.jar
 📊 Monitoring
 Actuator endpoints available at /actuator:
 
@@ -371,10 +371,10 @@ psq
 
 ## DB MIgrateion and Backup
 ** Dump
-docker exec -t lamastudio-db pg_dump -U postgres lamastudio_db > backup.sql
+docker exec -t tinniestudio-db pg_dump -U postgres tinniestudio_db > backup.sql
 
 **Restore
-psql -U postgres -d lamastudio_db < backup.sql
+psql -U postgres -d tinniestudio_db < backup.sql
 
 psql -U db_user -h host -d db_name
 

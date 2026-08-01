@@ -72,7 +72,7 @@ specs/001-auth-architecture-refactor/
 ### Source Code (repository root)
 
 ```text
-src/main/java/com/lamastudio/backend/
+src/main/java/com/tinniestudio/backend/
 ├── modules/
 │   └── auth/
 │       ├── admin/                          # NEW — admin auth module
@@ -139,7 +139,7 @@ src/main/resources/db/migration/
 ├── V7__add_subscription_fields.sql         # NEW
 └── V8__remove_admin_roles_from_users.sql   # NEW
 
-src/test/java/com/lamastudio/backend/
+src/test/java/com/tinniestudio/backend/
 ├── admin/
 │   ├── controller/AdminAuthControllerTest.java
 │   └── service/AdminAuthServiceTest.java

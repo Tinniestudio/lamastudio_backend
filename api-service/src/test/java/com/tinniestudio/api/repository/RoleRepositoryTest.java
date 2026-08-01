@@ -26,7 +26,7 @@ class RoleRepositoryTest {
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
-            .withDatabaseName("lamastudio_role_test")
+            .withDatabaseName("tinniestudio_role_test")
             .withUsername("test")
             .withPassword("test");
 

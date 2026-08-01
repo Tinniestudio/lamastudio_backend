@@ -4,7 +4,7 @@
 
 **Goal:** Convert the single Maven project into a Gradle multi-project build with two independently deployable subprojects — `api-service` (existing code, renamed package) and `media-worker` (new scaffold).
 
-**Architecture:** Root Gradle project at `/server` contains two subprojects. All existing source moves into `api-service/src/`, package renamed from `com.lamastudio.backend` to `com.tinniestudio.api`. `media-worker/` is a new, compilable-but-empty Spring Boot app with stub classes. Each subproject has its own `Dockerfile`. `docker-compose.yml` at repo root manages the full stack.
+**Architecture:** Root Gradle project at `/server` contains two subprojects. All existing source moves into `api-service/src/`, package renamed from `com.tinniestudio.backend` to `com.tinniestudio.api`. `media-worker/` is a new, compilable-but-empty Spring Boot app with stub classes. Each subproject has its own `Dockerfile`. `docker-compose.yml` at repo root manages the full stack.
 
 **Tech Stack:** Java 21, Gradle 8.8, Spring Boot 3.3.5, Spring AMQP (worker), PostgreSQL, Redis, RabbitMQ, MinIO.
 
@@ -255,7 +255,7 @@ springBoot {
 ./gradlew :api-service:compileJava 2>&1 | tail -20
 ```
 
-Expected: compilation errors about `com.lamastudio.backend` package not matching directory structure. This is expected — we fix it in the next task.
+Expected: compilation errors about `com.tinniestudio.backend` package not matching directory structure. This is expected — we fix it in the next task.
 
 ---
 
@@ -264,9 +264,9 @@ Expected: compilation errors about `com.lamastudio.backend` package not matching
 **Files:** All `.java` files under `api-service/src/`
 
 This task renames:
-- Package declarations: `com.lamastudio.backend` → `com.tinniestudio.api`
-- Import statements: `import com.lamastudio.backend` → `import com.tinniestudio.api`
-- Physical directory tree: `com/lamastudio/backend/` → `com/tinniestudio/api/`
+- Package declarations: `com.tinniestudio.backend` → `com.tinniestudio.api`
+- Import statements: `import com.tinniestudio.backend` → `import com.tinniestudio.api`
+- Physical directory tree: `com/tinniestudio/backend/` → `com/tinniestudio/api/`
 - Main class file: `LamaStudioApplication.java` → `ApiServiceApplication.java`
 
 - [ ] **Step 1: Create new package directory structure**
@@ -279,22 +279,22 @@ mkdir -p api-service/src/test/java/com/tinniestudio/api
 - [ ] **Step 2: Move all Java source files to new package directory**
 
 ```bash
-cp -r api-service/src/main/java/com/lamastudio/backend/. api-service/src/main/java/com/tinniestudio/api/
-cp -r api-service/src/test/java/com/lamastudio/backend/. api-service/src/test/java/com/tinniestudio/api/
+cp -r api-service/src/main/java/com/tinniestudio/backend/. api-service/src/main/java/com/tinniestudio/api/
+cp -r api-service/src/test/java/com/tinniestudio/backend/. api-service/src/test/java/com/tinniestudio/api/
 ```
 
 - [ ] **Step 3: Replace all package declarations and imports in main sources**
 
 ```bash
 find api-service/src/main/java/com/tinniestudio -name "*.java" \
-  -exec sed -i 's/com\.lamastudio\.backend/com.tinniestudio.api/g' {} +
+  -exec sed -i 's/com\.tinniestudio\.backend/com.tinniestudio.api/g' {} +
 ```
 
 - [ ] **Step 4: Replace all package declarations and imports in test sources**
 
 ```bash
 find api-service/src/test/java/com/tinniestudio -name "*.java" \
-  -exec sed -i 's/com\.lamastudio\.backend/com.tinniestudio.api/g' {} +
+  -exec sed -i 's/com\.tinniestudio\.backend/com.tinniestudio.api/g' {} +
 ```
 
 - [ ] **Step 5: Rename main application class file**
@@ -326,11 +326,11 @@ public class ApiServiceApplication {
 }
 ```
 
-- [ ] **Step 7: Delete the old `com.lamastudio` directory trees**
+- [ ] **Step 7: Delete the old `com.tinniestudio` directory trees**
 
 ```bash
-rm -rf api-service/src/main/java/com/lamastudio
-rm -rf api-service/src/test/java/com/lamastudio
+rm -rf api-service/src/main/java/com/tinniestudio
+rm -rf api-service/src/test/java/com/tinniestudio
 ```
 
 - [ ] **Step 8: Update `application.yml` — app name, logging, JWT issuer**
@@ -351,7 +351,7 @@ logging:
     org.springframework.security: INFO
 ```
 
-Change JWT issuer (search for `issuer: lamastudio`):
+Change JWT issuer (search for `issuer: tinniestudio`):
 ```yaml
     issuer: tinniestudio
 ```
@@ -362,10 +362,10 @@ Change JWT issuer (search for `issuer: lamastudio`):
 ./gradlew :api-service:compileJava
 ```
 
-Expected: `BUILD SUCCESSFUL`. If there are remaining `com.lamastudio` references, find them:
+Expected: `BUILD SUCCESSFUL`. If there are remaining `com.tinniestudio` references, find them:
 
 ```bash
-grep -r "com\.lamastudio" api-service/src --include="*.java" -l
+grep -r "com\.tinniestudio" api-service/src --include="*.java" -l
 ```
 
 Fix any remaining occurrences with the same `sed` command from Step 3.
@@ -1070,7 +1070,7 @@ git commit -m "docs: mark Gradle migration complete in task.md"
 - ✅ Root `settings.gradle` + `build.gradle` (Task 2)
 - ✅ All existing source moved to `api-service/` (Task 3)
 - ✅ All pom.xml deps translated to Gradle (Task 4)
-- ✅ Package rename `com.lamastudio.backend` → `com.tinniestudio.api` (Task 5)
+- ✅ Package rename `com.tinniestudio.backend` → `com.tinniestudio.api` (Task 5)
 - ✅ Main class renamed `LamaStudioApplication` → `ApiServiceApplication` (Task 5)
 - ✅ `application.yml` updated (app name, logging, JWT issuer) (Task 5)
 - ✅ `api-service/Dockerfile` (multi-stage, Gradle build) (Task 6)

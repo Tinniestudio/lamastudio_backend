@@ -5,18 +5,18 @@ docker service update \
   --label-add "traefik.http.routers.tinniestudio.tls.certresolver=letsencrypt" \
   --label-add "traefik.http.services.tinniestudio.loadbalancer.server.port=8080" \
   --label-add "traefik.docker.network=dokploy-network" \
-  lamastudio-tinniestudioapp-epwuxq
+  tinniestudio-tinniestudioapp-epwuxq
   
 ## Backup
   docker run --rm \
-  -v lamastudio-tinniestudiodb-wtctsc-data:/var/lib/postgresql/data:ro \
+  -v tinniestudio-tinniestudiodb-wtctsc-data:/var/lib/postgresql/data:ro \
   -v $(pwd):/backup \
   alpine \
   tar czf /backup/tinniestudiodb-backup-$(date +%Y%m%d%H%M%S).tar.gz -C / var/lib/postgresql/data
 
  ## into
   docker run --rm -it \
-  -v lamastudio-tinniestudiodb-wtctsc-data:/var/lib/postgresql/data \
+  -v tinniestudio-tinniestudiodb-wtctsc-data:/var/lib/postgresql/data \
   --entrypoint bash \
   postgres:18
 

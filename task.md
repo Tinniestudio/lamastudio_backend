@@ -22,7 +22,7 @@ Both deploy independently via Docker. Both share the same PostgreSQL database.
 |----------|--------|-------|
 | Build system | Gradle multi-project | Migrating from Maven |
 | Services | api-service + media-worker | Same repo, separate JARs |
-| Root package (API) | `com.tinniestudio.api` | Renaming from `com.lamastudio.backend` |
+| Root package (API) | `com.tinniestudio.api` | Renaming from `com.tinniestudio.backend` |
 | Root package (Worker) | `com.tinniestudio.worker` | New |
 | Repo layout | Monorepo | `api-service/`, `media-worker/`, `docker-compose.yml` at root |
 | Dockerfiles | One per service | `api-service/Dockerfile`, `media-worker/Dockerfile` |
@@ -204,7 +204,7 @@ Convert the single Maven project into a Gradle multi-project build with two depl
 
 ### Decision
 - Option A: In-place migration on a feature branch
-- Package rename: `com.lamastudio.backend` → `com.tinniestudio.api`
+- Package rename: `com.tinniestudio.backend` → `com.tinniestudio.api`
 
 ### Step-by-Step Checklist
 
@@ -223,11 +223,11 @@ Convert the single Maven project into a Gradle multi-project build with two depl
   - Create `api-service/build.gradle` — all current `pom.xml` dependencies translated to Gradle syntax
 
 - [ ] **Step 4 — Package rename (api-service)**
-  - Rename all `.java` files: `com.lamastudio.backend` → `com.tinniestudio.api`
+  - Rename all `.java` files: `com.tinniestudio.backend` → `com.tinniestudio.api`
   - Rename package directories accordingly
   - Update `LamaStudioApplication.java` → `ApiServiceApplication.java`
   - Update `application.yml`: `spring.application.name: tinniestudio-api`
-  - Update logging config: `com.tinniestudio` instead of `com.lamastudio`
+  - Update logging config: `com.tinniestudio` instead of `com.tinniestudio`
   - Update `@SpringBootApplication` scan annotation if needed
 
 - [ ] **Step 5 — api-service Dockerfile**

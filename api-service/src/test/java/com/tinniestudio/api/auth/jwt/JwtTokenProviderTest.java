@@ -91,7 +91,7 @@ class JwtTokenProviderTest {
         refresh.setExpirationMs(refreshExpiry);
 
         AppProperties.Jwt jwt = new AppProperties.Jwt();
-        jwt.setIssuer("lamastudio-test");
+        jwt.setIssuer("tinniestudio-test");
         jwt.setAccessToken(access);
         jwt.setRefreshToken(refresh);
         props.setJwt(jwt);

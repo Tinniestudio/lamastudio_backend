@@ -45,7 +45,7 @@ public class AppProperties {
     public static class Jwt {
         private TokenConfig accessToken = new TokenConfig();
         private TokenConfig refreshToken = new TokenConfig();
-        private String issuer = "lamastudio";
+        private String issuer = "tinniestudio";
 
         @Getter
         @Setter

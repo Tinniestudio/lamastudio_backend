@@ -40,7 +40,7 @@ Three interconnected features were implemented:
 ## 📁 Project Structure
 
 ```
-src/main/java/com/lamastudio/backend/
+src/main/java/com/tinniestudio/backend/
 ├── config/
 │   ├── ratelimit/                          [NEW]
 │   │   ├── RateLimit.java                  - Annotation
@@ -311,8 +311,8 @@ spring:
 ### Enable Debug Logging
 ```properties
 # application-dev.properties
-logging.level.com.lamastudio.backend.config.ratelimit=DEBUG
-logging.level.com.lamastudio.backend.auth=DEBUG
+logging.level.com.tinniestudio.backend.config.ratelimit=DEBUG
+logging.level.com.tinniestudio.backend.auth=DEBUG
 ```
 
 ### Check Redis Connection

@@ -21,6 +21,8 @@ spring:
       minimum-idle: 5
       idle-timeout: 600000
       max-lifetime: 1800000
+      connection-test-query: SELECT 1
+      keepalive-time: 30000
 
   flyway:
     enabled: true
@@ -29,7 +31,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: false
     properties:
       hibernate:
@@ -88,8 +90,11 @@ app:
 
   cors:
     allowed-origins:
-      - ${FRONTEND_URL}
-      - ${APP_BASE_URL}
+      - ${FRONTEND_URL:http://localhost:3000}
+      - ${APP_BASE_URL:http://localhost:8080}
+    allowed-origin-patterns:
+      - https://*.tinniestudio.com
+      - https://tinniestudio.com
     allowed-methods:
       - GET
       - POST
@@ -186,7 +191,23 @@ springdoc:
   default-produces-media-type: application/json
 
 management:
+  server:
+    port: 8081
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: tinniestudio-api

@@ -31,7 +31,7 @@ class UserRepositoryTest {
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
-            .withDatabaseName("lamastudio_repo_test")
+            .withDatabaseName("tinniestudio_repo_test")
             .withUsername("test")
             .withPassword("test");
 

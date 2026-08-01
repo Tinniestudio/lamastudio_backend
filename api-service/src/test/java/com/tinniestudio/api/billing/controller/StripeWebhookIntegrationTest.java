@@ -40,7 +40,7 @@ class StripeWebhookIntegrationTest {
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
-            .withDatabaseName("lamastudio_test")
+            .withDatabaseName("tinniestudio_test")
             .withUsername("test")
             .withPassword("test");
 

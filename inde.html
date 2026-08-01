@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gradle × Spring Boot — TinnieStudio Deep Dive</title>
+</head>
+<body>
+<style>
+/* ─── DESIGN TOKENS ──────────────────────────────────────────── */
+:root {
+  --bg:       #0B1120;
+  --surface:  #131D2E;
+  --raised:   #1A2740;
+  --border:   #1F3050;
+  --text-1:   #E8EDF5;
+  --text-2:   #8B9AB5;
+  --text-3:   #4F6280;
+  --accent:   #F5A623;
+  --accent-d: #C47D0E;
+  --accent-bg:#271E0A;
+  --green:    #3DD68C;
+  --red:      #FF6B6B;
+  --blue:     #79C0FF;
+  --teal:     #56D3C8;
+  --purple:   #B98EFF;
+  --sidebar-w: 240px;
+  --r: 8px;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg:       #F4F7FC;
+    --surface:  #FFFFFF;
+    --raised:   #EBF0F8;
+    --border:   #D0DBE8;
+    --text-1:   #0B1120;
+    --text-2:   #3D5070;
+    --text-3:   #7A90A8;
+    --accent:   #C47D0E;
+    --accent-d: #9B6008;
+    --accent-bg:#FFF6E6;
+    --green:    #1A7A4A;
+    --red:      #C0392B;
+    --blue:     #1A6EB5;
+    --teal:     #0D7870;
+    --purple:   #6B3FBF;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:#0B1120;--surface:#131D2E;--raised:#1A2740;--border:#1F3050;
+  --text-1:#E8EDF5;--text-2:#8B9AB5;--text-3:#4F6280;
+  --accent:#F5A623;--accent-d:#C47D0E;--accent-bg:#271E0A;
+  --green:#3DD68C;--red:#FF6B6B;--blue:#79C0FF;--teal:#56D3C8;--purple:#B98EFF;
+}
+:root[data-theme="light"] {
+  --bg:#F4F7FC;--surface:#FFFFFF;--raised:#EBF0F8;--border:#D0DBE8;
+  --text-1:#0B1120;--text-2:#3D5070;--text-3:#7A90A8;
+  --accent:#C47D0E;--accent-d:#9B6008;--accent-bg:#FFF6E6;
+  --green:#1A7A4A;--red:#C0392B;--blue:#1A6EB5;--teal:#0D7870;--purple:#6B3FBF;
+}
+
+/* ─── RESET ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; font-size: 15px; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg); color: var(--text-1);
+  line-height: 1.7; min-height: 100vh;
+  display: flex;
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ─── SIDEBAR ────────────────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w); flex-shrink: 0;
+  position: fixed; top: 0; left: 0; height: 100vh;
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow-y: auto;
+  z-index: 100;
+}
+.sidebar-logo {
+  padding: 20px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-logo .logo-mark {
+  font-size: 11px; font-weight: 700; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 4px;
+}
+.sidebar-logo h2 {
+  font-size: 13px; font-weight: 600; color: var(--text-1); line-height: 1.3;
+}
+nav { padding: 12px 0 24px; }
+.nav-group-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-3);
+  padding: 10px 20px 4px;
+}
+.nav-link {
+  display: block; padding: 6px 20px;
+  font-size: 13px; color: var(--text-2); text-decoration: none;
+  border-left: 2px solid transparent;
+  transition: color .15s, border-color .15s, background .15s;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.nav-link:hover { color: var(--text-1); background: var(--raised); }
+.nav-link.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-bg); }
+.theme-toggle {
+  margin-top: auto; padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+.theme-btn {
+  background: var(--raised); border: 1px solid var(--border);
+  color: var(--text-2); border-radius: 6px;
+  padding: 6px 12px; font-size: 12px; cursor: pointer; width: 100%;
+  transition: background .15s, color .15s;
+}
+.theme-btn:hover { color: var(--text-1); }
+
+/* ─── MAIN CONTENT ───────────────────────────────────────────── */
+.main { margin-left: var(--sidebar-w); flex: 1; min-width: 0; }
+
+/* ─── HERO ───────────────────────────────────────────────────── */
+.hero {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 56px 64px 48px;
+}
+.hero-eyebrow {
+  font-size: 11px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 16px;
+}
+.hero h1 {
+  font-size: clamp(26px, 4vw, 40px); font-weight: 800;
+  line-height: 1.15; color: var(--text-1);
+  text-wrap: balance; margin-bottom: 16px;
+  letter-spacing: -.02em;
+}
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero-sub {
+  font-size: 16px; color: var(--text-2); max-width: 600px;
+  margin-bottom: 36px; line-height: 1.6;
+}
+
+/* ─── PIPELINE ANIMATION ─────────────────────────────────────── */
+.pipeline {
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: var(--r); overflow: hidden;
+  padding: 28px 24px;
+}
+.pipeline-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-3); margin-bottom: 20px;
+}
+.pipeline-track {
+  display: flex; align-items: center; gap: 0;
+  overflow-x: auto; padding-bottom: 8px;
+}
+.pipeline-stage {
+  display: flex; flex-direction: column; align-items: center;
+  flex-shrink: 0;
+}
+.stage-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 14px; text-align: center;
+  position: relative; overflow: hidden; min-width: 100px;
+}
+.stage-box::after {
+  content: '';
+  position: absolute; top: 0; left: -100%; width: 60%;  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(245,166,35,.12), transparent);
+  animation: shimmer 2.4s ease-in-out infinite;
+}
+.pipeline-stage:nth-child(3) .stage-box::after { animation-delay: .4s; }
+.pipeline-stage:nth-child(5) .stage-box::after { animation-delay: .8s; }
+.pipeline-stage:nth-child(7) .stage-box::after { animation-delay: 1.2s; }
+.pipeline-stage:nth-child(9) .stage-box::after { animation-delay: 1.6s; }
+.pipeline-stage:nth-child(11) .stage-box::after { animation-delay: 2.0s; }
+@keyframes shimmer { 0%{left:-100%} 50%,100%{left:160%} }
+.stage-icon { font-size: 20px; margin-bottom: 6px; }
+.stage-name { font-size: 11px; font-weight: 700; color: var(--text-1); }
+.stage-sub  { font-size: 10px; color: var(--text-3); margin-top: 2px; font-family: monospace; }
+.pipe-arrow {
+  display: flex; align-items: center; padding: 0 4px; flex-shrink: 0;
+}
+.pipe-line {
+  width: 32px; height: 2px; background: var(--border);
+  position: relative; overflow: hidden;
+}
+.pipe-dot {
+  position: absolute; top: -3px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--accent);
+  animation: flow 2.4s ease-in-out infinite;
+  box-shadow: 0 0 6px var(--accent);
+}
+.pipe-arrow:nth-child(2) .pipe-dot  { animation-delay: .2s; }
+.pipe-arrow:nth-child(4) .pipe-dot  { animation-delay: .6s; }
+.pipe-arrow:nth-child(6) .pipe-dot  { animation-delay: 1.0s; }
+.pipe-arrow:nth-child(8) .pipe-dot  { animation-delay: 1.4s; }
+.pipe-arrow:nth-child(10) .pipe-dot { animation-delay: 1.8s; }
+@keyframes flow { 0%{left:-10px;opacity:0} 20%{opacity:1} 80%{opacity:1} 100%{left:36px;opacity:0} }
+.pipe-chevron { color: var(--text-3); font-size: 12px; margin-left: 2px; }
+
+/* ─── CONTENT AREA ───────────────────────────────────────────── */
+.content { max-width: 860px; padding: 48px 64px 96px; }
+
+/* ─── SECTION ────────────────────────────────────────────────── */
+.section { margin-bottom: 72px; }
+.section-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 700; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--accent);
+  background: var(--accent-bg); border: 1px solid var(--accent-d);
+  border-radius: 4px; padding: 3px 8px; margin-bottom: 16px;
+}
+h2.section-title {
+  font-size: 26px; font-weight: 800; letter-spacing: -.02em;
+  color: var(--text-1); margin-bottom: 12px; text-wrap: balance;
+}
+h3.sub-title {
+  font-size: 17px; font-weight: 700; color: var(--text-1);
+  margin: 32px 0 10px; letter-spacing: -.01em;
+}
+h4.mini-title {
+  font-size: 13px; font-weight: 700; color: var(--text-2);
+  margin: 20px 0 8px; text-transform: uppercase; letter-spacing: .06em;
+}
+p { color: var(--text-2); margin-bottom: 14px; max-width: 70ch; }
+p:last-child { margin-bottom: 0; }
+
+/* ─── CODE ───────────────────────────────────────────────────── */
+pre {
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 20px 24px;
+  overflow-x: auto; margin: 16px 0;
+  font-family: 'JetBrains Mono','Cascadia Code','Fira Code',Consolas,monospace;
+  font-size: 13px; line-height: 1.65;
+}
+code {
+  font-family: 'JetBrains Mono','Cascadia Code','Fira Code',Consolas,monospace;
+  font-size: .88em;
+}
+p code, li code {
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 6px; color: var(--accent);
+}
+.pre-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-3);
+  margin-bottom: -8px; padding: 0 4px;
+}
+/* syntax tokens */
+.kw   { color: var(--purple); }
+.ann  { color: var(--accent); }
+.str  { color: var(--green); }
+.cmt  { color: var(--text-3); font-style: italic; }
+.typ  { color: var(--teal); }
+.num  { color: #F78166; }
+.fn   { color: var(--blue); }
+.sym  { color: var(--text-2); }
+
+/* ─── CALLOUT ────────────────────────────────────────────────── */
+.callout {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-bg); border-radius: 0 var(--r) var(--r) 0;
+  padding: 14px 18px; margin: 20px 0;
+}
+.callout.info  { border-color: var(--blue);   background: rgba(121,192,255,.07); }
+.callout.tip   { border-color: var(--green);  background: rgba(61,214,140,.07); }
+.callout.warn  { border-color: var(--red);    background: rgba(255,107,107,.07); }
+.callout-head { font-size: 11px; font-weight: 800; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+.callout.info .callout-head  { color: var(--blue); }
+.callout.tip  .callout-head  { color: var(--green); }
+.callout.warn .callout-head  { color: var(--red); }
+.callout p { margin: 0; }
+
+/* ─── DIAGRAM / FLOW ─────────────────────────────────────────── */
+.flow-grid {
+  display: grid; gap: 1px; background: var(--border);
+  border: 1px solid var(--border); border-radius: var(--r);
+  overflow: hidden; margin: 16px 0;
+}
+.flow-row {
+  display: grid; gap: 1px; background: var(--border);
+}
+.flow-cell {
+  background: var(--surface); padding: 14px 18px;
+}
+.flow-cell.head {
+  background: var(--raised); font-size: 11px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--text-3);
+}
+.flow-cell h4 { font-size: 13px; font-weight: 700; color: var(--text-1); margin-bottom: 4px; }
+.flow-cell p  { font-size: 12px; color: var(--text-2); margin: 0; max-width: none; }
+.flow-cell code { font-size: .82em; }
+
+/* ─── LAYERS DIAGRAM ─────────────────────────────────────────── */
+.layers { display: flex; flex-direction: column; gap: 2px; margin: 16px 0; }
+.layer {
+  display: flex; align-items: center; gap: 16px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 12px 18px;
+  position: relative;
+}
+.layer::before {
+  content: attr(data-num);
+  font-size: 10px; font-weight: 800; color: var(--accent);
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent-bg); border: 1px solid var(--accent-d);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.layer-name { font-size: 13px; font-weight: 700; color: var(--text-1); min-width: 140px; }
+.layer-desc { font-size: 12px; color: var(--text-2); }
+.layer.highlight { border-color: var(--accent); background: var(--accent-bg); }
+
+/* ─── TABLE ──────────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; margin: 16px 0; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  background: var(--raised); color: var(--text-2);
+  font-weight: 700; font-size: 11px; letter-spacing: .06em;
+  text-transform: uppercase; padding: 10px 14px; text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text-2); }
+tr:last-child td { border-bottom: none; }
+td:first-child { color: var(--text-1); font-weight: 500; }
+td code { color: var(--accent); }
+
+/* ─── BADGE ROW ──────────────────────────────────────────────── */
+.badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.badge {
+  font-size: 11px; font-weight: 700; padding: 4px 10px;
+  border-radius: 100px; border: 1px solid;
+}
+.badge-amber  { color: var(--accent); border-color: var(--accent-d); background: var(--accent-bg); }
+.badge-blue   { color: var(--blue);   border-color: #2D5080; background: rgba(121,192,255,.07); }
+.badge-green  { color: var(--green);  border-color: #1A5038; background: rgba(61,214,140,.07); }
+.badge-purple { color: var(--purple); border-color: #4A2D80; background: rgba(185,142,255,.07); }
+.badge-teal   { color: var(--teal);   border-color: #1A5050; background: rgba(86,211,200,.07); }
+
+/* ─── STEP LIST ──────────────────────────────────────────────── */
+ol.steps { list-style: none; counter-reset: steps; padding: 0; margin: 16px 0; }
+ol.steps li {
+  counter-increment: steps; display: flex; gap: 16px;
+  margin-bottom: 16px; padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+ol.steps li:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+ol.steps li::before {
+  content: counter(steps);
+  font-size: 11px; font-weight: 800; color: var(--accent);
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent-bg); border: 1px solid var(--accent-d);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 2px;
+}
+ol.steps li .step-body {}
+ol.steps li .step-title { font-size: 14px; font-weight: 700; color: var(--text-1); margin-bottom: 4px; }
+ol.steps li .step-desc  { font-size: 13px; color: var(--text-2); }
+
+/* ─── DIVIDER ────────────────────────────────────────────────── */
+.divider { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+/* ─── RESPONSIVE ─────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .sidebar { transform: translateX(-100%); }
+  .main { margin-left: 0; }
+  .hero, .content { padding-left: 24px; padding-right: 24px; }
+}
+</style>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">TinnieStudio</div>
+    <h2>Gradle × Spring Boot Guide</h2>
+  </div>
+  <nav>
+    <div class="nav-group-label">Overview</div>
+    <a class="nav-link" href="#big-picture">The Big Picture</a>
+    <a class="nav-link" href="#project-structure">Project Structure</a>
+
+    <div class="nav-group-label">Gradle</div>
+    <a class="nav-link" href="#gradle-what">What is Gradle?</a>
+    <a class="nav-link" href="#gradle-tasks">Task Graph</a>
+    <a class="nav-link" href="#gradle-deps">Dependencies</a>
+    <a class="nav-link" href="#gradle-plugins">Spring Boot Plugin</a>
+
+    <div class="nav-group-label">Java Compilation</div>
+    <a class="nav-link" href="#java-source">Source → Bytecode</a>
+    <a class="nav-link" href="#java-jvm">JVM & ClassLoading</a>
+    <a class="nav-link" href="#java-jit">JIT Compilation</a>
+
+    <div class="nav-group-label">Spring Boot</div>
+    <a class="nav-link" href="#spring-boot">Boot Process</a>
+    <a class="nav-link" href="#spring-autoconfig">Auto-Configuration</a>
+    <a class="nav-link" href="#spring-beans">Bean Lifecycle</a>
+    <a class="nav-link" href="#spring-web">Web Layer</a>
+
+    <div class="nav-group-label">TinnieStudio Layers</div>
+    <a class="nav-link" href="#layer-security">Security</a>
+    <a class="nav-link" href="#layer-db">JPA + Flyway</a>
+    <a class="nav-link" href="#layer-rabbit">RabbitMQ</a>
+    <a class="nav-link" href="#layer-redis">Redis Cache</a>
+    <a class="nav-link" href="#layer-jobs">Scheduled Jobs</a>
+
+    <div class="nav-group-label">Testing</div>
+    <a class="nav-link" href="#testing">WebMvcTest & Mockito</a>
+
+    <div class="nav-group-label">Reference</div>
+    <a class="nav-link" href="#commands">Gradle Commands</a>
+  </nav>
+  <div class="theme-toggle">
+    <button class="theme-btn" onclick="toggleTheme()">Toggle Light / Dark</button>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-eyebrow">Developer Education · TinnieStudio Project</div>
+  <h1>Gradle × Spring Boot<br><em>How It All Actually Works</em></h1>
+  <p class="hero-sub">From source file to running API — every stage explained, anchored in the real code you're building.</p>
+
+  <div class="pipeline">
+    <div class="pipeline-title">Full build & runtime pipeline</div>
+    <div class="pipeline-track">
+      <div class="pipeline-stage">
+        <div class="stage-box">
+          <div class="stage-icon">📝</div>
+          <div class="stage-name">Source</div>
+          <div class="stage-sub">.java files</div>
+        </div>
+      </div>
+      <div class="pipe-arrow"><div class="pipe-line"><div class="pipe-dot"></div></div><span class="pipe-chevron">›</span></div>
+      <div class="pipeline-stage">
+        <div class="stage-box">
+          <div class="stage-icon">⚙️</div>
+          <div class="stage-name">javac</div>
+          <div class="stage-sub">compiler</div>
+        </div>
+      </div>
+      <div class="pipe-arrow"><div class="pipe-line"><div class="pipe-dot"></div></div><span class="pipe-chevron">›</span></div>
+      <div class="pipeline-stage">
+        <div class="stage-box">
+          <div class="stage-icon">🔢</div>
+          <div class="stage-name">Bytecode</div>
+          <div class="stage-sub">.class files</div>
+        </div>
+      </div>
+      <div class="pipe-arrow"><div class="pipe-line"><div class="pipe-dot"></div></div><span class="pipe-chevron">›</span></div>
+      <div class="pipeline-stage">
+        <div class="stage-box">
+          <div class="stage-icon">📦</div>
+          <div class="stage-name">bootJar</div>
+          <div class="stage-sub">fat JAR</div>
+        </div>
+      </div>
+      <div class="pipe-arrow"><div class="pipe-line"><div class="pipe-dot"></div></div><span class="pipe-chevron">›</span></div>
+      <div class="pipeline-stage">
+        <div class="stage-box">
+          <div class="stage-icon">☕</div>
+          <div class="stage-name">JVM</div>
+          <div class="stage-sub">ClassLoader</div>
+        </div>
+      </div>
+      <div class="pipe-arrow"><div class="pipe-line"><div class="pipe-dot"></div></div><span class="pipe-chevron">›</span></div>
+      <div class="pipeline-stage">
+        <div class="stage-box">
+          <div class="stage-icon">🌱</div>
+          <div class="stage-name">Spring</div>
+          <div class="stage-sub">ApplicationContext</div>
+        </div>
+      </div>
+      <div class="pipe-arrow"><div class="pipe-line"><div class="pipe-dot"></div></div><span class="pipe-chevron">›</span></div>
+      <div class="pipeline-stage">
+        <div class="stage-box">
+          <div class="stage-icon">🚀</div>
+          <div class="stage-name">Running</div>
+          <div class="stage-sub">port 8080</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content">
+
+<!-- ─── BIG PICTURE ─────────────────────────────────────────── -->
+<div class="section" id="big-picture">
+  <div class="section-badge">Foundation</div>
+  <h2 class="section-title">The Big Picture</h2>
+  <p>Three separate tools are working together every time you run your app. Understanding which one is responsible for what prevents 90% of confusing errors.</p>
+
+  <div class="layers">
+    <div class="layer" data-num="1">
+      <div class="layer-name">🔨 Gradle</div>
+      <div class="layer-desc">Build tool — manages dependencies, compiles code, runs tests, packages the JAR. Knows nothing about Spring.</div>
+    </div>
+    <div class="layer" data-num="2">
+      <div class="layer-name">☕ JVM</div>
+      <div class="layer-desc">Runtime — loads `.class` bytecode, manages memory (heap/GC), runs threads. Knows nothing about Gradle or Spring.</div>
+    </div>
+    <div class="layer" data-num="3" class="highlight">
+      <div class="layer-name">🌱 Spring Boot</div>
+      <div class="layer-desc">Application framework — scans your code for annotations, wires beans together, starts an embedded web server. Runs inside the JVM.</div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-head">Key insight</div>
+    <p>Gradle runs <em>before</em> your application. It produces a JAR file, then exits. Spring Boot runs <em>inside</em> the JVM, started by the JVM reading that JAR. They never run at the same time.</p>
+  </div>
+</div>
+
+<!-- ─── PROJECT STRUCTURE ───────────────────────────────────── -->
+<div class="section" id="project-structure">
+  <div class="section-badge">TinnieStudio</div>
+  <h2 class="section-title">Project Structure</h2>
+  <p>TinnieStudio is a <strong>multi-module Gradle project</strong>. One root build coordinates two independent Spring Boot applications.</p>
+
+  <div class="pre-label">Directory tree</div>
+  <pre><span class="cmt"># Root</span>
+tinniestudio/
+├── build.gradle          <span class="cmt"># Root build — shared config for ALL modules</span>
+├── settings.gradle       <span class="cmt"># Declares which modules exist</span>
+├── gradle/wrapper/       <span class="cmt"># Pinned Gradle version (8.8)</span>
+│
+├── api-service/          <span class="cmt"># Module 1 — REST API on port 8080</span>
+│   ├── build.gradle      <span class="cmt"># api-service specific deps (JPA, RabbitMQ, etc)</span>
+│   └── src/main/
+│       ├── java/         <span class="cmt"># All .java source files</span>
+│       └── resources/
+│           ├── application.yml   <span class="cmt"># Spring config</span>
+│           └── db/migration/     <span class="cmt"># Flyway SQL scripts</span>
+│
+└── media-worker/         <span class="cmt"># Module 2 — Video processing worker</span>
+    ├── build.gradle
+    └── src/main/java/</pre>
+
+  <div class="pre-label">settings.gradle — root module registry</div>
+  <pre><span class="fn">rootProject</span>.name = <span class="str">'tinniestudio'</span>
+<span class="fn">include</span>(<span class="str">'api-service'</span>, <span class="str">'media-worker'</span>)</pre>
+
+  <p>This single line tells Gradle that <code>:api-service</code> and <code>:media-worker</code> are sibling modules. That's why you prefix commands with the module name: <code>./gradlew :api-service:bootRun</code>.</p>
+</div>
+
+<hr class="divider">
+
+<!-- ─── GRADLE WHAT ─────────────────────────────────────────── -->
+<div class="section" id="gradle-what">
+  <div class="section-badge">Gradle</div>
+  <h2 class="section-title">What is Gradle?</h2>
+  <p>Gradle is a <strong>build automation tool</strong>. It's a program that runs <em>on your machine</em> (not in production) and performs the steps needed to turn your source code into a running program.</p>
+
+  <h3 class="sub-title">build.gradle — the build script</h3>
+  <p>This is a Groovy (or Kotlin) script that Gradle executes to understand your project.</p>
+
+  <div class="pre-label">api-service/build.gradle — annotated</div>
+  <pre><span class="ann">plugins</span> {
+    <span class="cmt">// Adds Spring Boot tasks: bootRun, bootJar, bootBuildImage</span>
+    id <span class="str">'org.springframework.boot'</span> version <span class="str">'3.3.5'</span>
+    <span class="cmt">// Imports Spring's BOM — pins all dep versions so you don't specify them</span>
+    id <span class="str">'io.spring.dependency-management'</span> version <span class="str">'1.1.4'</span>
+    id <span class="str">'java'</span>           <span class="cmt">// Adds: compileJava, test, jar tasks</span>
+}
+
+java {
+    sourceCompatibility = <span class="typ">JavaVersion</span>.VERSION_21   <span class="cmt">// Must compile to Java 21 bytecode</span>
+}
+
+<span class="ann">dependencies</span> {
+    <span class="cmt">// "implementation" = needed at compile + runtime, not exposed to modules that depend on us</span>
+    implementation <span class="str">'org.springframework.boot:spring-boot-starter-web'</span>
+    implementation <span class="str">'org.springframework.boot:spring-boot-starter-data-jpa'</span>
+    implementation <span class="str">'org.springframework.boot:spring-boot-starter-amqp'</span>  <span class="cmt">// RabbitMQ</span>
+
+    <span class="cmt">// "runtimeOnly" = only needed at runtime, not during compilation</span>
+    runtimeOnly <span class="str">'org.postgresql:postgresql'</span>
+
+    <span class="cmt">// "testImplementation" = only on the test classpath</span>
+    testImplementation <span class="str">'org.springframework.boot:spring-boot-starter-test'</span>
+}</pre>
+
+  <div class="callout">
+    <div class="callout-head">Why no version numbers?</div>
+    <p>The <code>io.spring.dependency-management</code> plugin imports Spring Boot's <strong>Bill of Materials (BOM)</strong>. This is a curated list of thousands of library versions that are guaranteed to work together. Omitting the version means "use whatever Spring Boot says is compatible."</p>
+  </div>
+</div>
+
+<!-- ─── TASK GRAPH ──────────────────────────────────────────── -->
+<div class="section" id="gradle-tasks">
+  <div class="section-badge">Gradle</div>
+  <h2 class="section-title">Task Graph — How Builds Actually Run</h2>
+  <p>Gradle doesn't run steps linearly — it builds a <strong>directed acyclic graph (DAG)</strong> of tasks and runs them in dependency order. When you run <code>bootRun</code>, Gradle figures out everything that must happen first.</p>
+
+  <h3 class="sub-title">The bootRun dependency chain</h3>
+
+  <div class="flow-grid">
+    <div class="flow-row" style="grid-template-columns: 1fr 1fr 1fr">
+      <div class="flow-cell head">Task</div>
+      <div class="flow-cell head">What it does</div>
+      <div class="flow-cell head">Output</div>
+    </div>
+    <div class="flow-row" style="grid-template-columns: 1fr 1fr 1fr">
+      <div class="flow-cell"><h4>compileJava</h4></div>
+      <div class="flow-cell"><p>Invokes <code>javac</code> on all <code>.java</code> files in <code>src/main/java/</code></p></div>
+      <div class="flow-cell"><p><code>build/classes/java/main/**/*.class</code></p></div>
+    </div>
+    <div class="flow-row" style="grid-template-columns: 1fr 1fr 1fr">
+      <div class="flow-cell"><h4>processResources</h4></div>
+      <div class="flow-cell"><p>Copies <code>src/main/resources/</code> files, substituting any <code>${property}</code> placeholders</p></div>
+      <div class="flow-cell"><p><code>build/resources/main/</code></p></div>
+    </div>
+    <div class="flow-row" style="grid-template-columns: 1fr 1fr 1fr">
+      <div class="flow-cell"><h4>classes</h4></div>
+      <div class="flow-cell"><p>Lifecycle task — depends on both above. Running it guarantees both are done.</p></div>
+      <div class="flow-cell"><p>(no new files)</p></div>
+    </div>
+    <div class="flow-row" style="grid-template-columns: 1fr 1fr 1fr" style="background:var(--accent-bg)">
+      <div class="flow-cell"><h4 style="color:var(--accent)">bootRun</h4></div>
+      <div class="flow-cell"><p>Starts the JVM with the compiled classes + resources + all dependency JARs on the classpath. No JAR is built — runs directly from the build folder.</p></div>
+      <div class="flow-cell"><p>Running process on port 8080</p></div>
+    </div>
+  </div>
+
+  <h3 class="sub-title">Incremental compilation — why rebuilds are fast</h3>
+  <p>Gradle tracks the <em>inputs and outputs</em> of every task. If <code>AuthController.java</code> hasn't changed since last run, <code>compileJava</code> shows <code>UP-TO-DATE</code> and is skipped entirely. This is why a second <code>./gradlew test</code> runs in 3 seconds when the first took 2 minutes.</p>
+
+  <div class="pre-label">UP-TO-DATE output you saw earlier</div>
+  <pre><span class="green">> Task :api-service:compileJava UP-TO-DATE</span>
+<span class="green">> Task :api-service:processResources UP-TO-DATE</span>
+<span class="green">> Task :api-service:test UP-TO-DATE</span>
+BUILD SUCCESSFUL in <span class="num">3s</span>    <span class="cmt"># vs 2m 7s on first run</span></pre>
+
+  <p>Force a full rerun with <code>--rerun</code>, which clears Gradle's task-output cache for that task.</p>
+</div>
+
+<!-- ─── DEPENDENCIES ───────────────────────────────────────── -->
+<div class="section" id="gradle-deps">
+  <div class="section-badge">Gradle</div>
+  <h2 class="section-title">Dependency Resolution</h2>
+  <p>When you declare <code>implementation 'org.springframework.boot:spring-boot-starter-web'</code>, Gradle needs to download that JAR — plus every JAR <em>it</em> depends on, recursively. This is the <strong>dependency graph</strong>.</p>
+
+  <div class="pre-label">What spring-boot-starter-web actually pulls in</div>
+  <pre>spring-boot-starter-web
+  ├── spring-boot-starter                <span class="cmt"># Core Spring Boot</span>
+  │   ├── spring-core
+  │   ├── spring-context
+  │   └── spring-boot-autoconfigure      <span class="cmt"># Auto-config magic (more below)</span>
+  ├── spring-boot-starter-tomcat         <span class="cmt"># Embedded Tomcat HTTP server</span>
+  │   ├── tomcat-embed-core
+  │   └── tomcat-embed-websocket
+  ├── spring-webmvc                      <span class="cmt"># DispatcherServlet, @RestController</span>
+  └── jackson-databind                   <span class="cmt"># JSON ↔ Java object conversion</span></pre>
+
+  <p>One line in your build file pulls in ~80 JARs. They're cached in <code>~/.gradle/caches/</code> after first download, so subsequent builds don't re-download.</p>
+
+  <div class="callout tip">
+    <div class="callout-head">Debug dependency conflicts</div>
+    <p>Run <code>./gradlew :api-service:dependencies --configuration runtimeClasspath</code> to see the full resolved tree. Conflicts show as a version being overridden: <code>1.5.2 -> 1.6.0</code>.</p>
+  </div>
+</div>
+
+<!-- ─── PLUGINS ────────────────────────────────────────────── -->
+<div class="section" id="gradle-plugins">
+  <div class="section-badge">Gradle</div>
+  <h2 class="section-title">Spring Boot Gradle Plugin</h2>
+  <p>The plugin <code>org.springframework.boot</code> adds Spring-specific tasks to Gradle:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Task</th><th>What it does</th><th>Typical use</th></tr></thead>
+      <tbody>
+        <tr><td><code>bootRun</code></td><td>Runs app directly from build output. No JAR produced.</td><td>Local development</td></tr>
+        <tr><td><code>bootJar</code></td><td>Packages everything into one <em>executable</em> fat JAR with all dependencies inside.</td><td>Deploying to a server</td></tr>
+        <tr><td><code>bootBuildImage</code></td><td>Uses Cloud Native Buildpacks to create a Docker image without a Dockerfile.</td><td>Container deployments</td></tr>
+        <tr><td><code>bootTestRun</code></td><td>Like <code>bootRun</code> but with test-scope classpath — includes test utilities.</td><td>Integration testing</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">The fat JAR — how it works</h3>
+  <p>A standard JAR only contains your code. A Spring Boot fat JAR (built by <code>bootJar</code>) contains:</p>
+
+  <div class="pre-label">Inside api-service.jar</div>
+  <pre>api-service.jar
+├── BOOT-INF/
+│   ├── classes/          <span class="cmt"># YOUR compiled .class files</span>
+│   └── lib/              <span class="cmt"># ALL dependency JARs bundled inside</span>
+│       ├── spring-boot-3.3.5.jar
+│       ├── tomcat-embed-core-10.1.31.jar
+│       └── ... (~200 JARs)</span>
+├── META-INF/
+│   └── MANIFEST.MF       <span class="cmt"># Main-Class: org.springframework.boot.loader.JarLauncher</span>
+└── org/springframework/boot/loader/
+    └── JarLauncher.class  <span class="cmt"># Spring's custom ClassLoader entry point</span></pre>
+
+  <p>When you run <code>java -jar api-service.jar</code>, the JVM starts <code>JarLauncher</code> which sets up a special ClassLoader that can read JARs-inside-JARs, then launches your <code>ApiServiceApplication.main()</code>.</p>
+</div>
+
+<hr class="divider">
+
+<!-- ─── JAVA SOURCE → BYTECODE ─────────────────────────────── -->
+<div class="section" id="java-source">
+  <div class="section-badge">Java Compilation</div>
+  <h2 class="section-title">Source → Bytecode</h2>
+  <p>Java is a <strong>compiled language</strong>. Your <code>.java</code> source files are not executed directly — they're translated into an intermediate form called <strong>bytecode</strong> first.</p>
+
+  <ol class="steps">
+    <li>
+      <div class="step-body">
+        <div class="step-title">You write NotificationController.java</div>
+        <div class="step-desc">Human-readable Java source with annotations, generics, and method bodies.</div>
+      </div>
+    </li>
+    <li>
+      <div class="step-body">
+        <div class="step-title">Gradle invokes javac (the Java compiler)</div>
+        <div class="step-desc"><code>javac</code> parses the source, resolves types against the classpath JARs, performs type checking, and generates bytecode.</div>
+      </div>
+    </li>
+    <li>
+      <div class="step-body">
+        <div class="step-title">Output: NotificationController.class</div>
+        <div class="step-desc">A binary file containing JVM instructions — not machine code, but a portable intermediate format. One <code>.java</code> file → one or more <code>.class</code> files (inner classes get their own files).</div>
+      </div>
+    </li>
+    <li>
+      <div class="step-body">
+        <div class="step-title">Annotation processing happens during compilation</div>
+        <div class="step-desc">Lombok's <code>@Getter</code>, <code>@RequiredArgsConstructor</code> etc. are processed by the Java annotation processor <em>before</em> javac compiles the class. Lombok generates the boilerplate Java source, then javac compiles it.</div>
+      </div>
+    </li>
+  </ol>
+
+  <div class="pre-label">Annotation processing — what Lombok actually generates</div>
+  <pre><span class="cmt">// What you write:</span>
+<span class="ann">@Getter</span> <span class="ann">@RequiredArgsConstructor</span>
+<span class="kw">public class</span> <span class="typ">NotificationService</span> {
+    <span class="kw">private final</span> <span class="typ">NotificationRepository</span> repo;
+}
+
+<span class="cmt">// What javac actually compiles (Lombok generated this):</span>
+<span class="kw">public class</span> <span class="typ">NotificationService</span> {
+    <span class="kw">private final</span> <span class="typ">NotificationRepository</span> repo;
+
+    <span class="kw">public</span> <span class="typ">NotificationRepository</span> <span class="fn">getRepo</span>() { <span class="kw">return this</span>.repo; }
+
+    <span class="kw">public</span> <span class="fn">NotificationService</span>(<span class="typ">NotificationRepository</span> repo) {
+        <span class="kw">this</span>.repo = repo;
+    }
+}</pre>
+</div>
+
+<!-- ─── JVM & CLASSLOADING ────────────────────────────────── -->
+<div class="section" id="java-jvm">
+  <div class="section-badge">Java Compilation</div>
+  <h2 class="section-title">JVM & Class Loading</h2>
+  <p>The JVM is a virtual machine — it executes bytecode the same way regardless of the underlying OS or hardware. Class loading is how bytecode gets from the JAR file into executable memory.</p>
+
+  <h3 class="sub-title">The ClassLoader hierarchy</h3>
+  <div class="layers">
+    <div class="layer" data-num="1">
+      <div class="layer-name">Bootstrap ClassLoader</div>
+      <div class="layer-desc">Loads Java's core classes (<code>java.lang.*</code>, <code>java.util.*</code>). Part of the JVM itself, written in native code.</div>
+    </div>
+    <div class="layer" data-num="2">
+      <div class="layer-name">Platform ClassLoader</div>
+      <div class="layer-desc">Loads Java SE platform APIs (Java 9+ module system). Previously called Extension ClassLoader.</div>
+    </div>
+    <div class="layer" data-num="3">
+      <div class="layer-name">Application ClassLoader</div>
+      <div class="layer-desc">Loads your application's classes from the classpath. Normally the last stop.</div>
+    </div>
+    <div class="layer highlight" data-num="4">
+      <div class="layer-name">Spring's LaunchedURLClassLoader</div>
+      <div class="layer-desc">Spring Boot's custom ClassLoader. Knows how to read classes from JARs nested inside your fat JAR. This is why <code>java -jar</code> works without unpacking.</div>
+    </div>
+  </div>
+
+  <h3 class="sub-title">Lazy loading</h3>
+  <p>Classes are not loaded at startup — they're loaded the <em>first time</em> they're referenced. This is why Spring's context initialization log shows classes being scanned: Spring forces each bean class to load so it can inspect its annotations.</p>
+</div>
+
+<!-- ─── JIT ───────────────────────────────────────────────── -->
+<div class="section" id="java-jit">
+  <div class="section-badge">Java Compilation</div>
+  <h2 class="section-title">JIT — Why Java Gets Faster Over Time</h2>
+  <p>The JVM starts by <em>interpreting</em> bytecode (slow), but watches which methods are called most often. Hot methods get <strong>Just-in-Time compiled</strong> by the JIT compiler to native machine code (fast). This is why Java apps sometimes feel slow for the first few requests.</p>
+
+  <div class="flow-grid">
+    <div class="flow-row" style="grid-template-columns: 1fr 1fr 1fr 1fr">
+      <div class="flow-cell head">Phase</div>
+      <div class="flow-cell head">How it runs</div>
+      <div class="flow-cell head">Speed</div>
+      <div class="flow-cell head">When</div>
+    </div>
+    <div class="flow-row" style="grid-template-columns: 1fr 1fr 1fr 1fr">
+      <div class="flow-cell"><h4>Interpreted</h4></div>
+      <div class="flow-cell"><p>JVM reads bytecode instruction by instruction</p></div>
+      <div class="flow-cell"><p>~10× slower than native</p></div>
+      <div class="flow-cell"><p>Cold start</p></div>
+    </div>
+    <div class="flow-row" style="grid-template-columns: 1fr 1fr 1fr 1fr">
+      <div class="flow-cell"><h4>C1 (client) JIT</h4></div>
+      <div class="flow-cell"><p>Quick compilation, basic optimisations. Triggered after ~1,500 calls.</p></div>
+      <div class="flow-cell"><p>~3× slower than native</p></div>
+      <div class="flow-cell"><p>After warmup</p></div>
+    </div>
+    <div class="flow-row" style="grid-template-columns: 1fr 1fr 1fr 1fr">
+      <div class="flow-cell"><h4>C2 (server) JIT</h4></div>
+      <div class="flow-cell"><p>Aggressive optimisation: inlining, loop unrolling, dead code elimination. Triggered after ~10,000 calls.</p></div>
+      <div class="flow-cell"><p>Near-native</p></div>
+      <div class="flow-cell"><p>Production steady state</p></div>
+    </div>
+  </div>
+
+  <div class="callout tip">
+    <div class="callout-head">For TinnieStudio</div>
+    <p>Your endpoints like <code>GET /contents</code> that receive many requests will JIT-compile quickly. Rarely-called admin endpoints like <code>DELETE /admin/notification-templates/{id}</code> may stay interpreted — and that's fine, since they're not in the hot path.</p>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ─── SPRING BOOT ────────────────────────────────────────── -->
+<div class="section" id="spring-boot">
+  <div class="section-badge">Spring Boot</div>
+  <h2 class="section-title">The Boot Process — What Happens in 12 Seconds</h2>
+  <p>When <code>./gradlew :api-service:bootRun</code> starts, Spring Boot runs through a fixed startup sequence before your first request can be served.</p>
+
+  <ol class="steps">
+    <li>
+      <div class="step-body">
+        <div class="step-title">JVM starts — main() called</div>
+        <div class="step-desc"><code>ApiServiceApplication.main()</code> calls <code>SpringApplication.run()</code>. This is the single entry point into Spring.</div>
+      </div>
+    </li>
+    <li>
+      <div class="step-body">
+        <div class="step-title">ApplicationContext created</div>
+        <div class="step-desc">Spring creates a <code>AnnotationConfigServletWebServerApplicationContext</code> — the container that will hold every bean. Think of it as a giant Map of name → bean instance.</div>
+      </div>
+    </li>
+    <li>
+      <div class="step-body">
+        <div class="step-title">Auto-configuration loads</div>
+        <div class="step-desc">Spring reads <code>META-INF/spring/AutoConfiguration.imports</code> from every JAR on the classpath and evaluates which auto-configs apply based on what's present (see next section).</div>
+      </div>
+    </li>
+    <li>
+      <div class="step-body">
+        <div class="step-title">Component scan</div>
+        <div class="step-desc">Spring scans the package <code>com.tinniestudio.api</code> and finds every class annotated with <code>@Component</code>, <code>@Service</code>, <code>@Repository</code>, <code>@Controller</code>, <code>@RestController</code>, <code>@Configuration</code>.</div>
+      </div>
+    </li>
+    <li>
+      <div class="step-body">
+        <div class="step-title">Beans instantiated and wired</div>
+        <div class="step-desc">Spring creates one instance of each bean. Constructor arguments are resolved by type — this is dependency injection. <code>@RequiredArgsConstructor</code> + Lombok = Spring injects via the generated constructor.</div>
+      </div>
+    </li>
+    <li>
+      <div class="step-body">
+        <div class="step-title">Flyway runs</div>
+        <div class="step-desc">The Flyway bean runs all pending migrations (<code>V1</code> through <code>V42</code>) in order before any request can be served. The DB schema is guaranteed correct before the app accepts traffic.</div>
+      </div>
+    </li>
+    <li>
+      <div class="step-body">
+        <div class="step-title">Embedded Tomcat starts on port 8080</div>
+        <div class="step-desc">Spring starts Tomcat, registers the <code>DispatcherServlet</code>, and the app is ready. Also starts management server on port 8081.</div>
+      </div>
+    </li>
+  </ol>
+
+  <div class="pre-label">ApiServiceApplication.java</div>
+  <pre><span class="ann">@SpringBootApplication</span>   <span class="cmt">// This one annotation does 3 things:</span>
+<span class="kw">public class</span> <span class="typ">ApiServiceApplication</span> {
+    <span class="kw">public static void</span> <span class="fn">main</span>(<span class="typ">String</span>[] args) {
+        <span class="typ">SpringApplication</span>.<span class="fn">run</span>(<span class="typ">ApiServiceApplication</span>.<span class="kw">class</span>, args);
+    }
+}
+
+<span class="cmt">// @SpringBootApplication expands to:</span>
+<span class="ann">@Configuration</span>        <span class="cmt">// This class can define @Bean methods</span>
+<span class="ann">@ComponentScan</span>        <span class="cmt">// Scan this package + sub-packages for components</span>
+<span class="ann">@EnableAutoConfiguration</span>  <span class="cmt">// Load matching auto-configurations from JARs</span></pre>
+</div>
+
+<!-- ─── AUTO-CONFIG ───────────────────────────────────────── -->
+<div class="section" id="spring-autoconfig">
+  <div class="section-badge">Spring Boot</div>
+  <h2 class="section-title">Auto-Configuration — The "Magic"</h2>
+  <p>Auto-configuration is how Spring Boot avoids pages of XML config. It's based on a simple idea: <em>if a class exists on the classpath, configure a bean for it automatically.</em></p>
+
+  <p>The mechanism is <code>@ConditionalOn*</code> annotations on auto-config classes:</p>
+
+  <div class="pre-label">How DataSource auto-config works (simplified)</div>
+  <pre><span class="ann">@Configuration</span>
+<span class="ann">@ConditionalOnClass</span>(<span class="typ">DataSource</span>.<span class="kw">class</span>)    <span class="cmt">// Only if DataSource is on classpath</span>
+<span class="ann">@ConditionalOnMissingBean</span>(<span class="typ">DataSource</span>.<span class="kw">class</span>) <span class="cmt">// Only if YOU haven't already defined one</span>
+<span class="kw">public class</span> <span class="typ">DataSourceAutoConfiguration</span> {
+
+    <span class="ann">@Bean</span>
+    <span class="ann">@ConfigurationProperties</span>(<span class="str">"spring.datasource"</span>)  <span class="cmt">// Reads from application.yml</span>
+    <span class="kw">public</span> <span class="typ">HikariDataSource</span> <span class="fn">dataSource</span>() {
+        <span class="kw">return</span> <span class="typ">DataSourceBuilder</span>.<span class="fn">create</span>()
+            .<span class="fn">type</span>(<span class="typ">HikariDataSource</span>.<span class="kw">class</span>).<span class="fn">build</span>();
+    }
+}</pre>
+
+  <p>You added <code>spring-boot-starter-data-jpa</code> → it brings <code>DataSource.class</code> onto the classpath → <code>DataSourceAutoConfiguration</code> fires → a connection pool to Postgres is created automatically, configured by your <code>application.yml</code>.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>You added</th><th>Spring auto-configured</th></tr></thead>
+      <tbody>
+        <tr><td><code>spring-boot-starter-web</code></td><td>DispatcherServlet, Jackson JSON mapper, embedded Tomcat</td></tr>
+        <tr><td><code>spring-boot-starter-data-jpa</code></td><td>DataSource, EntityManagerFactory, JPA repositories</td></tr>
+        <tr><td><code>spring-boot-starter-amqp</code></td><td>RabbitTemplate, SimpleMessageListenerContainer</td></tr>
+        <tr><td><code>spring-boot-starter-data-redis</code></td><td>RedisTemplate, StringRedisTemplate, CacheManager</td></tr>
+        <tr><td><code>spring-boot-starter-security</code></td><td>SecurityFilterChain (all-deny by default)</td></tr>
+        <tr><td><code>micrometer-registry-prometheus</code></td><td>PrometheusMeterRegistry, /actuator/prometheus endpoint</td></tr>
+        <tr><td><code>flyway-core</code></td><td>Flyway bean that runs migrations on startup</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ─── BEAN LIFECYCLE ───────────────────────────────────── -->
+<div class="section" id="spring-beans">
+  <div class="section-badge">Spring Boot</div>
+  <h2 class="section-title">Bean Lifecycle — Dependency Injection</h2>
+  <p>A <strong>bean</strong> is an object whose lifecycle is managed by Spring. Spring creates it, injects its dependencies, and (if needed) destroys it on shutdown.</p>
+
+  <div class="pre-label">How NotificationServiceImpl gets wired — traced end to end</div>
+  <pre><span class="cmt">// 1. You declare the class as a @Service component</span>
+<span class="ann">@Service</span>
+<span class="ann">@RequiredArgsConstructor</span>
+<span class="kw">public class</span> <span class="typ">NotificationServiceImpl</span> <span class="kw">implements</span> <span class="typ">NotificationService</span> {
+
+    <span class="cmt">// 2. Spring sees these final fields — it needs to provide them</span>
+    <span class="kw">private final</span> <span class="typ">NotificationRepository</span>       notifRepo;
+    <span class="kw">private final</span> <span class="typ">NotificationTemplateRepository</span> templateRepo;
+    <span class="kw">private final</span> <span class="typ">NotificationPreferenceRepository</span> prefRepo;
+}
+
+<span class="cmt">// 3. Spring finds NotificationRepository (a JPA repo interface)</span>
+<span class="kw">public interface</span> <span class="typ">NotificationRepository</span>
+    <span class="kw">extends</span> <span class="typ">JpaRepository</span>&lt;<span class="typ">Notification</span>, <span class="typ">UUID</span>&gt; { }
+<span class="cmt">// Spring Data JPA auto-generates a proxy class implementing this interface
+// and registers it as a bean — no @Repository annotation needed</span>
+
+<span class="cmt">// 4. When Spring creates NotificationServiceImpl, Lombok's generated
+//    constructor is called with the resolved beans:</span>
+<span class="kw">new</span> <span class="typ">NotificationServiceImpl</span>(notifRepoBean, templateRepoBean, prefRepoBean);
+
+<span class="cmt">// 5. NotificationController declares it needs the service:</span>
+<span class="ann">@RestController</span>
+<span class="ann">@RequiredArgsConstructor</span>
+<span class="kw">public class</span> <span class="typ">NotificationController</span> {
+    <span class="kw">private final</span> <span class="typ">NotificationService</span> notificationService;
+    <span class="cmt">// Spring injects the NotificationServiceImpl bean here</span>
+}</pre>
+
+  <div class="callout info">
+    <div class="callout-head">Interface, not implementation</div>
+    <p><code>NotificationController</code> depends on <code>NotificationService</code> (the interface), not <code>NotificationServiceImpl</code>. Spring looks for a bean that implements that interface and injects it. This is why tests can inject a <code>@MockBean NotificationService</code> — the mock also implements the interface.</p>
+  </div>
+</div>
+
+<!-- ─── WEB LAYER ─────────────────────────────────────────── -->
+<div class="section" id="spring-web">
+  <div class="section-badge">Spring Boot</div>
+  <h2 class="section-title">Web Layer — From HTTP Request to Response</h2>
+  <p>Every HTTP request passes through a chain of components before reaching your controller method.</p>
+
+  <div class="layers">
+    <div class="layer" data-num="1">
+      <div class="layer-name">Tomcat / HTTP</div>
+      <div class="layer-desc">Accepts TCP connection, parses raw HTTP bytes into a <code>HttpServletRequest</code> object.</div>
+    </div>
+    <div class="layer" data-num="2">
+      <div class="layer-name">SecurityFilterChain</div>
+      <div class="layer-desc">Your <code>JwtAuthenticationFilter</code> runs here — extracts JWT from header, validates it, sets <code>SecurityContextHolder</code> with the user's identity. If invalid: returns 401 before hitting any controller.</div>
+    </div>
+    <div class="layer" data-num="3">
+      <div class="layer-name">RateLimitAspect</div>
+      <div class="layer-desc"><code>@RateLimit</code> annotations are enforced here via AOP (Aspect-Oriented Programming). Checks Redis for the request count for this IP/user in the current window.</div>
+    </div>
+    <div class="layer" data-num="4">
+      <div class="layer-name">DispatcherServlet</div>
+      <div class="layer-desc">Spring's front controller. Looks up which <code>@RequestMapping</code> method matches the URL and HTTP method. Routes to the correct controller.</div>
+    </div>
+    <div class="layer highlight" data-num="5">
+      <div class="layer-name">Your @RestController method</div>
+      <div class="layer-desc">Your actual code runs here. Arguments are resolved (<code>@PathVariable</code>, <code>@RequestBody</code> → deserialized via Jackson, <code>@AuthenticationPrincipal</code> → from SecurityContext).</div>
+    </div>
+    <div class="layer" data-num="6">
+      <div class="layer-name">SuccessResponseWrapper</div>
+      <div class="layer-desc">Your <code>ResponseBodyAdvice</code> intercepts the return value and wraps it: <code>{ success: true, message: "...", data: &lt;your object&gt; }</code>. Jackson then serializes this to JSON.</div>
+    </div>
+    <div class="layer" data-num="7">
+      <div class="layer-name">Tomcat writes response</div>
+      <div class="layer-desc">JSON bytes written to the TCP socket. Request complete.</div>
+    </div>
+  </div>
+
+  <div class="pre-label">Tracing GET /notifications through the chain</div>
+  <pre><span class="cmt">// 1. JWT filter extracts userId from token → sets principal</span>
+<span class="cmt">// 2. Dispatcher finds this method:</span>
+<span class="ann">@GetMapping</span>  <span class="cmt">// → matches GET /notifications</span>
+<span class="kw">public</span> <span class="typ">ResponseEntity</span>&lt;<span class="typ">Page</span>&lt;<span class="typ">NotificationResponse</span>&gt;&gt; <span class="fn">list</span>(
+    <span class="ann">@AuthenticationPrincipal</span> <span class="typ">UserDetails</span> principal,   <span class="cmt">// from SecurityContext</span>
+    <span class="ann">@PageableDefault</span>(size = <span class="num">20</span>) <span class="typ">Pageable</span> pageable       <span class="cmt">// from ?page=0&size=10</span>
+) {
+    <span class="kw">return</span> <span class="typ">ResponseEntity</span>.<span class="fn">ok</span>(
+        notificationService.<span class="fn">listForUser</span>(
+            <span class="typ">UUID</span>.<span class="fn">fromString</span>(principal.<span class="fn">getUsername</span>()), pageable
+        )
+    );
+}
+<span class="cmt">// 3. Return value → SuccessResponseWrapper wraps it
+// 4. Jackson serializes → {"success":true,"data":{"content":[...],"totalElements":5}}</span></pre>
+</div>
+
+<hr class="divider">
+
+<!-- ─── SECURITY ──────────────────────────────────────────── -->
+<div class="section" id="layer-security">
+  <div class="section-badge">TinnieStudio Layer</div>
+  <h2 class="section-title">Security — How Auth Works</h2>
+
+  <div class="badge-row">
+    <span class="badge badge-amber">JWT</span>
+    <span class="badge badge-blue">Spring Security</span>
+    <span class="badge badge-purple">UserDetails</span>
+    <span class="badge badge-green">@PreAuthorize</span>
+  </div>
+
+  <p>Authentication uses stateless JWTs. The server issues a signed token at login; every subsequent request must present it. The server never stores session state in memory.</p>
+
+  <div class="pre-label">Token validation flow in JwtAuthenticationFilter</div>
+  <pre><span class="cmt">// Runs on EVERY request (it's a OncePerRequestFilter)</span>
+<span class="kw">protected void</span> <span class="fn">doFilterInternal</span>(<span class="typ">HttpServletRequest</span> request, ...) {
+    <span class="typ">String</span> token = <span class="fn">extractBearerToken</span>(request);  <span class="cmt">// from Authorization header</span>
+    <span class="kw">if</span> (token != <span class="kw">null</span> &amp;&amp; jwtProvider.<span class="fn">isValid</span>(token)) {
+        <span class="typ">UUID</span> userId = jwtProvider.<span class="fn">getUserId</span>(token);
+        <span class="typ">UserDetails</span> user = userDetailsService.<span class="fn">loadUserById</span>(userId);
+        <span class="cmt">// Puts identity into SecurityContext — available for the whole request</span>
+        <span class="typ">SecurityContextHolder</span>.<span class="fn">getContext</span>().<span class="fn">setAuthentication</span>(
+            <span class="kw">new</span> <span class="typ">UsernamePasswordAuthenticationToken</span>(user, <span class="kw">null</span>, user.<span class="fn">getAuthorities</span>())
+        );
+    }
+    <span class="fn">filterChain</span>.<span class="fn">doFilter</span>(request, response);  <span class="cmt">// continue to next filter/controller</span>
+}</pre>
+
+  <p>The <code>@PreAuthorize</code> annotation on controllers checks the <code>SecurityContext</code> after the filter runs. <code>hasRole('ADMIN')</code> checks whether the user's <code>GrantedAuthority</code> list contains <code>ROLE_ADMIN</code>.</p>
+</div>
+
+<!-- ─── JPA + FLYWAY ──────────────────────────────────────── -->
+<div class="section" id="layer-db">
+  <div class="section-badge">TinnieStudio Layer</div>
+  <h2 class="section-title">JPA + Flyway — Database Layer</h2>
+
+  <div class="badge-row">
+    <span class="badge badge-blue">Flyway</span>
+    <span class="badge badge-teal">Hibernate ORM</span>
+    <span class="badge badge-amber">HikariCP</span>
+    <span class="badge badge-purple">Spring Data JPA</span>
+  </div>
+
+  <p>Three distinct tools handle database access, each with a different responsibility:</p>
+
+  <div class="flow-grid">
+    <div class="flow-row" style="grid-template-columns: 1fr 2fr">
+      <div class="flow-cell"><h4>HikariCP</h4></div>
+      <div class="flow-cell"><p>Connection pool. Opens N physical connections to PostgreSQL and reuses them. Configured via <code>spring.datasource.*</code> in <code>application.yml</code>. Prevents the overhead of creating a new TCP connection for every query.</p></div>
+    </div>
+    <div class="flow-row" style="grid-template-columns: 1fr 2fr">
+      <div class="flow-cell"><h4>Flyway</h4></div>
+      <div class="flow-cell"><p>Schema versioning. Runs <code>V1__*.sql</code> through <code>V42__*.sql</code> in order, tracking which have run in <code>flyway_schema_history</code>. Only runs pending migrations. Guarantees your schema is always in a known state before the app serves requests.</p></div>
+    </div>
+    <div class="flow-row" style="grid-template-columns: 1fr 2fr">
+      <div class="flow-cell"><h4>Hibernate/JPA</h4></div>
+      <div class="flow-cell"><p>Object-Relational Mapper. Translates between your <code>@Entity</code> Java objects and SQL rows. Generates <code>SELECT</code>/<code>INSERT</code>/<code>UPDATE</code> statements from JPQL or method names like <code>findByUserId</code>. <code>ddl-auto: none</code> means Hibernate does <em>not</em> touch the schema — Flyway owns it.</p></div>
+    </div>
+    <div class="flow-row" style="grid-template-columns: 1fr 2fr">
+      <div class="flow-cell"><h4>Spring Data JPA</h4></div>
+      <div class="flow-cell"><p>Interface magic. You write <code>interface NotificationRepository extends JpaRepository&lt;Notification, UUID&gt;</code>. Spring Data generates a proxy class at startup that implements every method — no boilerplate SQL needed.</p></div>
+    </div>
+  </div>
+
+  <div class="pre-label">How findByUserIdOrderByCreatedAtDesc is auto-implemented</div>
+  <pre><span class="cmt">// You write only this interface method signature:</span>
+<span class="typ">Page</span>&lt;<span class="typ">Notification</span>&gt; <span class="fn">findByUserIdOrderByCreatedAtDesc</span>(<span class="typ">UUID</span> userId, <span class="typ">Pageable</span> pageable);
+
+<span class="cmt">// Spring Data generates this SQL at startup (via reflection on the method name):</span>
+<span class="str">SELECT * FROM notifications
+WHERE user_id = ?
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?</span></pre>
+</div>
+
+<!-- ─── RABBITMQ ───────────────────────────────────────────── -->
+<div class="section" id="layer-rabbit">
+  <div class="section-badge">TinnieStudio Layer</div>
+  <h2 class="section-title">RabbitMQ — Async Messaging</h2>
+
+  <div class="badge-row">
+    <span class="badge badge-amber">Publisher</span>
+    <span class="badge badge-green">Consumer</span>
+    <span class="badge badge-blue">AMQP</span>
+  </div>
+
+  <p>RabbitMQ decouples producers from consumers. The <strong>media-worker</strong> publishes a message when video processing completes. The <strong>api-service</strong> receives it independently — no direct call between the two services.</p>
+
+  <div class="pre-label">Message flow — video processing completes</div>
+  <pre><span class="cmt">// media-worker/VideoProcessingService.java (publisher)</span>
+rabbitTemplate.<span class="fn">convertAndSend</span>(
+    <span class="str">"tinniestudio.direct"</span>,      <span class="cmt">// exchange</span>
+    <span class="str">"notifications.send"</span>,       <span class="cmt">// routing key</span>
+    <span class="typ">Map</span>.<span class="fn">of</span>(
+        <span class="str">"type"</span>,         <span class="str">"CONTENT_PROCESSED"</span>,
+        <span class="str">"videoAssetId"</span>, videoAssetId.<span class="fn">toString</span>(),
+        <span class="str">"contentId"</span>,    contentId.<span class="fn">toString</span>(),
+        <span class="str">"status"</span>,       <span class="str">"READY"</span>
+    )
+);
+
+<span class="cmt">// ─────────────────────────────────────────────────────────────
+// api-service/NotificationConsumer.java (consumer)
+// Spring AMQP starts a listener thread that polls the queue</span>
+<span class="ann">@RabbitListener</span>(queues = <span class="str">"notifications.send"</span>)
+<span class="kw">public void</span> <span class="fn">handleNotificationEvent</span>(<span class="typ">Map</span>&lt;<span class="typ">String</span>, <span class="typ">Object</span>&gt; message) {
+    <span class="kw">if</span> (<span class="str">"CONTENT_PROCESSED"</span>.<span class="fn">equals</span>(message.<span class="fn">get</span>(<span class="str">"type"</span>))) {
+        <span class="cmt">// Update VideoAsset status in the DB</span>
+        <span class="cmt">// Send in-app notification to the creator</span>
+    }
+}</pre>
+
+  <div class="callout info">
+    <div class="callout-head">Why the RabbitMQ errors on local bootRun?</div>
+    <p>Spring AMQP's listener containers start immediately and try to connect to <code>localhost:5672</code>. Without a broker running locally, they log <code>Connection refused</code> and retry every 30 seconds. The app still starts and serves HTTP — RabbitMQ is only needed for async message processing, not for the API itself.</p>
+  </div>
+</div>
+
+<!-- ─── REDIS ─────────────────────────────────────────────── -->
+<div class="section" id="layer-redis">
+  <div class="section-badge">TinnieStudio Layer</div>
+  <h2 class="section-title">Redis — Caching & Rate Limiting</h2>
+
+  <p>Redis is used for two distinct purposes in TinnieStudio, both backed by the same Redis server:</p>
+
+  <div class="flow-grid">
+    <div class="flow-row" style="grid-template-columns: 1fr 2fr">
+      <div class="flow-cell"><h4>Response Caching</h4></div>
+      <div class="flow-cell"><p>Spring's <code>@Cacheable</code> annotation stores method return values in Redis with a TTL. Next call with same args → return from Redis, skip DB query. Used for category lists, subscription plans — data that changes rarely.</p></div>
+    </div>
+    <div class="flow-row" style="grid-template-columns: 1fr 2fr">
+      <div class="flow-cell"><h4>Rate Limiting</h4></div>
+      <div class="flow-cell"><p><code>@RateLimit</code> uses Redis sliding-window counters. For each request, a key like <code>ratelimit:USER_OR_IP:userId:endpoint</code> is incremented in Redis. If count exceeds <code>maxRequests</code> in the window → 429 Too Many Requests returned before the controller is even called.</p></div>
+    </div>
+  </div>
+
+  <div class="pre-label">Rate limit check — behind the @RateLimit annotation</div>
+  <pre><span class="cmt">// RateLimitAspect intercepts methods annotated with @RateLimit
+// Before the method runs:</span>
+<span class="typ">String</span> key = <span class="str">"ratelimit:"</span> + strategy + <span class="str">":"</span> + identifier + <span class="str">":"</span> + endpoint;
+<span class="typ">Long</span> count = redisTemplate.<span class="fn">opsForValue</span>().<span class="fn">increment</span>(key);
+<span class="kw">if</span> (count == <span class="num">1</span>) {
+    redisTemplate.<span class="fn">expire</span>(key, windowMinutes, <span class="typ">TimeUnit</span>.MINUTES);  <span class="cmt">// set TTL on first hit</span>
+}
+<span class="kw">if</span> (count > annotation.<span class="fn">maxRequests</span>()) {
+    <span class="kw">throw new</span> <span class="typ">TooManyRequestsException</span>(annotation.<span class="fn">errorMessage</span>());
+}
+<span class="cmt">// method proceeds normally if count is within limit</span></pre>
+</div>
+
+<!-- ─── SCHEDULED JOBS ─────────────────────────────────────── -->
+<div class="section" id="layer-jobs">
+  <div class="section-badge">TinnieStudio Layer</div>
+  <h2 class="section-title">Scheduled Jobs — ShedLock</h2>
+
+  <p>Spring's <code>@Scheduled</code> fires a method on a timer. But in a multi-instance deployment, all instances fire at the same time — causing duplicate runs. <strong>ShedLock</strong> prevents this using a database lock.</p>
+
+  <div class="pre-label">How ShedLock prevents duplicate job runs</div>
+  <pre><span class="ann">@Scheduled</span>(cron = <span class="str">"0 0 2 * * *"</span>)       <span class="cmt">// Fire at 02:00 UTC daily</span>
+<span class="ann">@SchedulerLock</span>(name = <span class="str">"NotificationCleanupJob"</span>,
+    lockAtMostFor = <span class="str">"5m"</span>, lockAtLeastFor = <span class="str">"1m"</span>)
+<span class="ann">@Transactional</span>
+<span class="kw">public void</span> <span class="fn">run</span>() { ... }
+
+<span class="cmt">/*  When the cron fires across 3 running instances:
+    Instance A: INSERT INTO shedlock(name='NotificationCleanupJob', ...) ← wins
+    Instance B: INSERT fails (row exists) → skips job ← lock prevents double-run
+    Instance C: INSERT fails → skips job
+
+    After lockAtMostFor expires, the row is available again for the next run.
+    lockAtLeastFor prevents re-run even if instance A finishes quickly.
+*/</span></pre>
+</div>
+
+<hr class="divider">
+
+<!-- ─── TESTING ───────────────────────────────────────────── -->
+<div class="section" id="testing">
+  <div class="section-badge">Testing</div>
+  <h2 class="section-title">Testing Architecture</h2>
+  <p>TinnieStudio uses two testing patterns, each loading a different slice of the application.</p>
+
+  <h3 class="sub-title">@WebMvcTest — controller layer only</h3>
+  <p>Loads only the web layer: your controller, Spring MVC config, and Jackson. No database, no real services.</p>
+
+  <div class="pre-label">NotificationControllerTest.java — annotated</div>
+  <pre><span class="ann">@WebMvcTest</span>(controllers = <span class="typ">NotificationController</span>.<span class="kw">class</span>)
+<span class="cmt">// ↑ Loads ONLY NotificationController and MVC infrastructure.
+//   Does NOT start the full Spring context, Flyway, or DB.</span>
+<span class="ann">@AutoConfigureMockMvc</span>(addFilters = <span class="kw">false</span>)
+<span class="cmt">// ↑ Disables the SecurityFilterChain so tests don't need real JWTs</span>
+<span class="kw">class</span> <span class="typ">NotificationControllerTest</span> {
+
+    <span class="ann">@Autowired</span> <span class="typ">MockMvc</span> mockMvc;
+    <span class="cmt">// ↑ Fake HTTP client — fires requests directly into the DispatcherServlet
+    //   without a real network connection or Tomcat</span>
+
+    <span class="ann">@MockBean</span> <span class="typ">NotificationService</span> notificationService;
+    <span class="cmt">// ↑ Replaces the real NotificationService with a Mockito mock.
+    //   The controller gets injected with THIS mock, not the real impl.</span>
+
+    <span class="ann">@MockBean</span> <span class="typ">JwtTokenProvider</span> jwtTokenProvider;
+    <span class="ann">@MockBean</span> <span class="typ">JwtAuthenticationFilter</span> jwtAuthFilter;
+    <span class="cmt">// ↑ Required because WebMvcTest still tries to load security beans.
+    //   Mocking them prevents "No bean of type JwtTokenProvider found" errors.</span>
+
+    <span class="ann">@Test</span>
+    <span class="ann">@WithMockUser</span>(username = <span class="str">"00000000-0000-0000-0000-000000000002"</span>)
+    <span class="cmt">// ↑ Injects a fake SecurityContext so @AuthenticationPrincipal works</span>
+    <span class="kw">void</span> <span class="fn">unreadCount_returns200</span>() <span class="kw">throws</span> <span class="typ">Exception</span> {
+        when(notificationService.<span class="fn">getUnreadCount</span>(<span class="fn">any</span>())).<span class="fn">thenReturn</span>(<span class="num">3L</span>);
+        <span class="cmt">// ↑ Tell the mock: when this method is called (with any arg), return 3</span>
+
+        mockMvc.<span class="fn">perform</span>(<span class="fn">get</span>(<span class="str">"/notifications/unread-count"</span>))
+            .<span class="fn">andExpect</span>(<span class="fn">status</span>().<span class="fn">isOk</span>())
+            .<span class="fn">andExpect</span>(<span class="fn">jsonPath</span>(<span class="str">"$.data.count"</span>).<span class="fn">value</span>(<span class="num">3</span>));
+        <span class="cmt">// ↑ $.data.count — because SuccessResponseWrapper wraps: {success, data, message}</span>
+    }
+}</pre>
+
+  <h3 class="sub-title">@ExtendWith(MockitoExtension) — pure unit test</h3>
+  <p>No Spring at all. Just Mockito. Tests one class in complete isolation — fastest possible tests.</p>
+
+  <div class="pre-label">AnalyticsConsumerTest.java</div>
+  <pre><span class="ann">@ExtendWith</span>(<span class="typ">MockitoExtension</span>.<span class="kw">class</span>)
+<span class="cmt">// ↑ No Spring context loaded. Mockito annotations activated only.</span>
+<span class="kw">class</span> <span class="typ">AnalyticsConsumerTest</span> {
+
+    <span class="ann">@Mock</span> <span class="typ">ContentRepository</span> contentRepo;
+    <span class="ann">@Mock</span> <span class="typ">ContentAnalyticsDailyRepository</span> dailyRepo;
+    <span class="cmt">// ↑ Pure Mockito mocks — no Spring proxy, no DB connection</span>
+
+    <span class="ann">@InjectMocks</span> <span class="typ">AnalyticsConsumer</span> consumer;
+    <span class="cmt">// ↑ Creates new AnalyticsConsumer(contentRepo, dailyRepo) — real class, mock deps</span>
+
+    <span class="ann">@Test</span>
+    <span class="kw">void</span> <span class="fn">handleViewEvent_incrementsViewCountAndUpsertsDailyRow</span>() {
+        <span class="typ">UUID</span> contentId = <span class="typ">UUID</span>.<span class="fn">randomUUID</span>();
+        consumer.<span class="fn">handleAnalyticsEvent</span>(<span class="typ">Map</span>.<span class="fn">of</span>(
+            <span class="str">"type"</span>, <span class="str">"VIEW_EVENT"</span>, <span class="str">"contentId"</span>, contentId.<span class="fn">toString</span>()
+        ));
+        <span class="fn">verify</span>(contentRepo).<span class="fn">incrementViewCount</span>(contentId);
+        <span class="fn">verify</span>(dailyRepo).<span class="fn">upsertViewEvent</span>(<span class="fn">eq</span>(contentId), <span class="fn">any</span>(<span class="typ">LocalDate</span>.<span class="kw">class</span>));
+        <span class="cmt">// verify() asserts the mock method was called with these exact arguments</span>
+    }
+}</pre>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pattern</th><th>Spring loaded?</th><th>DB used?</th><th>Speed</th><th>Use for</th></tr></thead>
+      <tbody>
+        <tr><td><code>@ExtendWith(Mockito)</code></td><td>No</td><td>No</td><td>~10ms</td><td>Services, consumers, business logic</td></tr>
+        <tr><td><code>@WebMvcTest</code></td><td>Web slice only</td><td>No</td><td>~2s</td><td>Controllers, request/response mapping</td></tr>
+        <tr><td><code>@SpringBootTest</code></td><td>Full context</td><td>Yes (testcontainers)</td><td>~30s</td><td>Integration tests, full-stack</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ─── COMMANDS ─────────────────────────────────────────── -->
+<div class="section" id="commands">
+  <div class="section-badge">Reference</div>
+  <h2 class="section-title">Gradle Command Reference</h2>
+
+  <h3 class="sub-title">Run</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>./gradlew :api-service:bootRun</code></td><td>Start API on port 8080 (dev mode, no fat JAR built)</td></tr>
+        <tr><td><code>./gradlew :api-service:bootRun --args='--spring.profiles.active=prod'</code></td><td>Run with prod profile (JSON logging, etc.)</td></tr>
+        <tr><td><code>./gradlew :media-worker:bootRun</code></td><td>Start the video processing worker</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">Test</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>./gradlew :api-service:test</code></td><td>Run all tests (uses UP-TO-DATE cache)</td></tr>
+        <tr><td><code>./gradlew :api-service:test --rerun</code></td><td>Force all tests to re-run, ignore cache</td></tr>
+        <tr><td><code>./gradlew :api-service:test --tests "*.NotificationControllerTest"</code></td><td>Run one specific test class</td></tr>
+        <tr><td><code>./gradlew :api-service:test --tests "com.tinniestudio.api.modules.analytics.*"</code></td><td>Run all tests in a package</td></tr>
+        <tr><td><code>./gradlew test</code></td><td>Run tests in ALL modules</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">Build</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>./gradlew :api-service:compileJava</code></td><td>Compile only — fast sanity check, no tests</td></tr>
+        <tr><td><code>./gradlew :api-service:bootJar</code></td><td>Build deployable fat JAR (skips tests)</td></tr>
+        <tr><td><code>./gradlew :api-service:build</code></td><td>Full build: compile + test + jar</td></tr>
+        <tr><td><code>./gradlew :api-service:build -x test</code></td><td>Build JAR, skip tests</td></tr>
+        <tr><td><code>./gradlew clean build</code></td><td>Delete all build outputs and rebuild everything</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">Debug</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>./gradlew :api-service:dependencies --configuration runtimeClasspath</code></td><td>Show full dependency tree</td></tr>
+        <tr><td><code>./gradlew :api-service:dependencyInsight --dependency shedlock</code></td><td>Why is this library on the classpath?</td></tr>
+        <tr><td><code>./gradlew :api-service:test --stacktrace</code></td><td>Full exception stacktrace on test failure</td></tr>
+        <tr><td><code>./gradlew :api-service:build --warning-mode all</code></td><td>Show all Gradle deprecation warnings</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</div><!-- /content -->
+</div><!-- /main -->
+
+<script>
+// ─── THEME TOGGLE ─────────────────────────────────────────────
+function toggleTheme() {
+  const root = document.documentElement;
+  const current = root.getAttribute('data-theme');
+  if (!current) {
+    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  } else {
+    root.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+  }
+}
+
+// ─── ACTIVE NAV ON SCROLL ─────────────────────────────────────
+const sections = document.querySelectorAll('.section[id]');
+const navLinks = document.querySelectorAll('.nav-link');
+
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navLinks.forEach(l => l.classList.remove('active'));
+      const link = document.querySelector('.nav-link[href="#' + entry.target.id + '"]');
+      if (link) link.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+
+sections.forEach(s => obs.observe(s));
+</script>
+
+</body>
+</html>

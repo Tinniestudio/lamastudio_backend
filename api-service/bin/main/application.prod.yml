@@ -7,7 +7,7 @@ spring:
     import: optional:file:.env[.properties]
 
   application:
-    name: lamastudio-backend
+    name: tinniestudio-backend
 
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
@@ -29,7 +29,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
     show-sql: false
     properties:
       hibernate:
@@ -84,6 +84,9 @@ app:
     allowed-origins:
       - ${FRONTEND_URL}
       - ${APP_BASE_URL}
+    allowed-origin-patterns:
+      - https://*.tinniestudio.com
+      - https://tinniestudio.com
     allowed-methods:
       - GET
       - POST
@@ -103,7 +106,7 @@ app:
     refresh-token:
       secret: ${JWT_REFRESH_SECRET}
       expiration-ms: ${JWT_REFRESH_EXPIRATION_MS}    # 7 days
-    issuer: lamastudio
+    issuer: tinniestudio
 
   cookie:
     secure: ${COOKIE_SECURE}    # true in production (HTTPS)
@@ -127,7 +130,7 @@ server:
 
 logging:
   level:
-    com.lamastudio: DEBUG
+    com.tinniestudio: DEBUG
     org.springframework.security: INFO
 
 springdoc:
@@ -150,7 +153,12 @@ springdoc:
   default-produces-media-type: application/json
 
 management:
+  server:
+    port: 8081
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
