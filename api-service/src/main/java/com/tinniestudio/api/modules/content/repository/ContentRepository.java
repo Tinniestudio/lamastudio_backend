@@ -42,7 +42,8 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
         value = "SELECT c.id, c.title, c.slug, c.description, c.short_description," +
                 " c.type, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
                 " c.featured, c.poster_url, c.thumbnail_url, c.created_by, c.published_at," +
-                " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at" +
+                " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at," +
+                " c.average_rating, c.review_count" +
                 " FROM contents c" +
                 " WHERE c.status = 'PUBLISHED'" +
                 " AND c.search_vector @@ plainto_tsquery('english', :q)" +
@@ -82,7 +83,8 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
         value = "SELECT c.id, c.title, c.slug, c.description, c.short_description," +
                 " c.type, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
                 " c.featured, c.poster_url, c.thumbnail_url, c.created_by, c.published_at," +
-                " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at" +
+                " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at," +
+                " c.average_rating, c.review_count" +
                 " FROM contents c" +
                 " WHERE c.status = 'PUBLISHED'" +
                 " AND c.search_vector @@ plainto_tsquery('english', :q)" +
@@ -122,7 +124,8 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
         value = "SELECT c.id, c.title, c.slug, c.description, c.short_description," +
                 " c.type, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
                 " c.featured, c.poster_url, c.thumbnail_url, c.created_by, c.published_at," +
-                " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at" +
+                " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at," +
+                " c.average_rating, c.review_count" +
                 " FROM contents c" +
                 " WHERE c.status = 'PUBLISHED'" +
                 " AND c.search_vector @@ plainto_tsquery('english', :q)" +

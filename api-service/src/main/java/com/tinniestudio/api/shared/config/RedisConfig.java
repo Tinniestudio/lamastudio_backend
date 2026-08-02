@@ -58,10 +58,26 @@ public class RedisConfig {
      */
     static ObjectMapper cacheObjectMapper() {
         ObjectMapper mapper = new ObjectMapper();
-        mapper.activateDefaultTyping(
-                BasicPolymorphicTypeValidator.builder().allowIfSubType(Object.class).build(),
-                ObjectMapper.DefaultTyping.EVERYTHING,
-                JsonTypeInfo.As.WRAPPER_ARRAY);
+        mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+        // allowIfSubType(Object.class) would accept every class in existence — equivalent to no
+        // validation at all, and a polymorphic-deserialization gadget risk if Redis is ever
+        // compromised or an attacker-influenced value ends up cached. Scope to our own DTOs plus
+        // the JDK types DefaultTyping.EVERYTHING actually wraps: collections/maps, java.time
+        // values, UUID, and the boxed scalar types (EVERYTHING — unlike NON_FINAL — wraps these
+        // too, since they're technically final-but-still-typed under this policy). Nothing else
+        // is ever legitimately cached here.
+        BasicPolymorphicTypeValidator validator = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("com.tinniestudio.")
+                .allowIfSubType(java.util.Collection.class)
+                .allowIfSubType(java.util.Map.class)
+                .allowIfSubType(java.time.temporal.Temporal.class)
+                .allowIfSubType(java.util.UUID.class)
+                .allowIfSubType(Number.class)
+                .allowIfSubType(Boolean.class)
+                .allowIfSubType(String.class)
+                .allowIfSubType(Character.class)
+                .build();
+        mapper.activateDefaultTyping(validator, ObjectMapper.DefaultTyping.EVERYTHING, JsonTypeInfo.As.WRAPPER_ARRAY);
         return mapper;
     }
 
