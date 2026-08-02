@@ -32,15 +32,15 @@ const headers = {
 
 export default function () {
   // Public content browse (works with or without a token)
-  const contents = http.get(`${BASE_URL}/contents?page=0&size=10`, { headers });
+  const contents = http.get(`${BASE_URL}/api/v1/contents?page=0&size=10`, { headers });
   check(contents, { 'contents 200 or 401': (r) => r.status === 200 || r.status === 401 });
 
   // Authenticated endpoints — only exercise when a token is provided
   if (TOKEN) {
-    const notif = http.get(`${BASE_URL}/notifications/unread-count`, { headers });
+    const notif = http.get(`${BASE_URL}/api/v1/notifications/unread-count`, { headers });
     check(notif, { 'unread-count 200': (r) => r.status === 200 });
 
-    const profile = http.get(`${BASE_URL}/users/me`, { headers });
+    const profile = http.get(`${BASE_URL}/api/v1/users/me`, { headers });
     check(profile, { 'profile 200': (r) => r.status === 200 });
   }
 

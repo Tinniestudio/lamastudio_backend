@@ -19,14 +19,14 @@ const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 
 export default function () {
   // Health check (public endpoint — must always be fast)
-  const health = http.get(`${BASE_URL}/actuator/health`);
+  const health = http.get(`${BASE_URL}/api/v1/actuator/health`);
   check(health, {
     'health is 200': (r) => r.status === 200,
     'health response time < 200ms': (r) => r.timings.duration < 200,
   });
 
   // Public content browse
-  const contents = http.get(`${BASE_URL}/contents?page=0&size=10`);
+  const contents = http.get(`${BASE_URL}/api/v1/contents?page=0&size=10`);
   check(contents, {
     'contents status 200 or 401': (r) => r.status === 200 || r.status === 401,
   });
