@@ -111,7 +111,7 @@ publish_content "$movie2_id"
 log "Published movie 'Laughing Matter' ($movie2_id)"
 
 log "Creating series: 'Seed Chronicles'"
-series1=$(api "$PARTNER_USER" POST /admin/contents "{\"title\":\"Seed Chronicles\",\"type\":\"SERIES\",\"maturityRating\":\"TV_14\",\"description\":\"A drama series for load-testing.\",\"shortDescription\":\"Drama series\",\"categoryIds\":[\"$drama_id\"]}")
+series1=$(api "$PARTNER_USER" POST /admin/contents "{\"title\":\"Seed Chronicles\",\"type\":\"SERIES\",\"maturityRating\":\"R\",\"description\":\"A drama series for load-testing.\",\"shortDescription\":\"Drama series\",\"categoryIds\":[\"$drama_id\"]}")
 require_ok "$series1" "create series 1"
 series1_id=$(echo "$series1" | jq -r '.data.id')
 
