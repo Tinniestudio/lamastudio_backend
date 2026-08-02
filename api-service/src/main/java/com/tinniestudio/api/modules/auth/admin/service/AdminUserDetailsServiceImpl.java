@@ -12,9 +12,9 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -43,9 +43,14 @@ public class AdminUserDetailsServiceImpl implements UserDetailsService {
             throw new AccountNotActiveException("Admin account is " + admin.getAccountStatus().name().toLowerCase());
         }
 
-        Set<GrantedAuthority> authorities = admin.getRoles().stream()
-                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.name()))
-                .collect(Collectors.toSet());
+        // AdminRoleName only has SUPER_ADMIN/MODERATOR — neither ever grants "ROLE_ADMIN" on its
+        // own, yet nearly every admin controller across the codebase requires exactly
+        // hasRole('ADMIN') as the base admin check (SUPER_ADMIN/MODERATOR are only checked for a
+        // handful of finer-grained, more sensitive endpoints). Every Admin entity is an admin, so
+        // grant ROLE_ADMIN unconditionally alongside their specific role(s).
+        Set<GrantedAuthority> authorities = new HashSet<>();
+        authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        admin.getRoles().forEach(role -> authorities.add(new SimpleGrantedAuthority("ROLE_" + role.name())));
 
         return org.springframework.security.core.userdetails.User.builder()
                 .username(admin.getId().toString())

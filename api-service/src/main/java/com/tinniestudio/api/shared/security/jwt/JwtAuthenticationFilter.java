@@ -1,5 +1,6 @@
 package com.tinniestudio.api.shared.security.jwt;
 
+import com.tinniestudio.api.modules.auth.admin.service.AdminUserDetailsServiceImpl;
 import com.tinniestudio.api.modules.user.service.UserDetailsServiceImpl;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
@@ -26,18 +27,34 @@ import java.util.Arrays;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String ACCESS_TOKEN_COOKIE = "access_token";
+    private static final String ADMIN_ACCESS_TOKEN_COOKIE = "admin_access_token";
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtTokenProvider jwtTokenProvider;
     private final UserDetailsServiceImpl userDetailsService;
+    private final AdminJwtTokenProvider adminJwtTokenProvider;
+    private final AdminUserDetailsServiceImpl adminUserDetailsService;
 
-    // @Lazy on UserDetailsServiceImpl breaks the circular startup dependency:
-    // SecurityConfig → JwtAuthenticationFilter → UserDetailsServiceImpl → UserRepository
+    // @Lazy on UserDetailsServiceImpl/AdminUserDetailsServiceImpl breaks the circular startup
+    // dependency: SecurityConfig → JwtAuthenticationFilter → *DetailsServiceImpl → *Repository.
     // The proxy is injected immediately; the real bean is created on first HTTP request.
+    //
+    // This filter recognizes BOTH the user (access_token) and admin (admin_access_token)
+    // cookies/claims — several /admin/** business endpoints (partner applications, users,
+    // audit log, content moderation) are ADMIN-only or ADMIN-or-PARTNER, and all of them sit
+    // behind this chain (chain @Order(1) covers only /auth/admin/** login/refresh/etc, not
+    // these business paths). Without this, a real admin login (which sets admin_access_token,
+    // signed with a different secret than the user token) could never authenticate against any
+    // /admin/** business endpoint — invisible to tests that bypass real JWT resolution via
+    // @WithMockUser.
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
-                                    @Lazy UserDetailsServiceImpl userDetailsService) {
+                                    @Lazy UserDetailsServiceImpl userDetailsService,
+                                    AdminJwtTokenProvider adminJwtTokenProvider,
+                                    @Lazy AdminUserDetailsServiceImpl adminUserDetailsService) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.userDetailsService = userDetailsService;
+        this.adminJwtTokenProvider = adminJwtTokenProvider;
+        this.adminUserDetailsService = adminUserDetailsService;
     }
 
     @Override
@@ -48,48 +65,75 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         try {
-            String token = resolveToken(request);
+            String userToken = resolveCookie(request, ACCESS_TOKEN_COOKIE);
+            String bearerToken = resolveBearer(request);
 
-            if (StringUtils.hasText(token) && jwtTokenProvider.validateAccessToken(token)) {
-                Claims claims = jwtTokenProvider.parseAccessToken(token);
-                String userId = claims.getSubject();
-
-                UserDetails userDetails = userDetailsService.loadUserById(userId);
-
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(
-                                userDetails, null, userDetails.getAuthorities()
-                        );
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-
-                String sessionId = claims.get(JwtTokenProvider.CLAIM_SESSION_ID, String.class);
-                if (sessionId != null) {
-                    request.setAttribute("sessionId", sessionId);
+            if (StringUtils.hasText(userToken) && jwtTokenProvider.validateAccessToken(userToken)) {
+                authenticateAsUser(request, userToken);
+            } else if (StringUtils.hasText(bearerToken) && jwtTokenProvider.validateAccessToken(bearerToken)) {
+                authenticateAsUser(request, bearerToken);
+            } else {
+                String adminToken = resolveCookie(request, ADMIN_ACCESS_TOKEN_COOKIE);
+                if (StringUtils.hasText(adminToken) && adminJwtTokenProvider.validateAccessToken(adminToken)) {
+                    authenticateAsAdmin(request, adminToken);
                 }
             }
         } catch (Exception ex) {
-            log.debug("Could not set user authentication: {}", ex.getMessage());
+            log.debug("Could not set authentication: {}", ex.getMessage());
         }
 
         filterChain.doFilter(request, response);
     }
 
-    private String resolveToken(HttpServletRequest request) {
-        if (request.getCookies() != null) {
-            String cookie = Arrays.stream(request.getCookies())
-                    .filter(c -> ACCESS_TOKEN_COOKIE.equals(c.getName()))
-                    .map(Cookie::getValue)
-                    .findFirst()
-                    .orElse(null);
-            if (cookie != null) return cookie;
-        }
+    private void authenticateAsUser(HttpServletRequest request, String token) {
+        Claims claims = jwtTokenProvider.parseAccessToken(token);
+        String userId = claims.getSubject();
 
+        UserDetails userDetails = userDetailsService.loadUserById(userId);
+        setAuthentication(request, userDetails);
+
+        String sessionId = claims.get(JwtTokenProvider.CLAIM_SESSION_ID, String.class);
+        if (sessionId != null) {
+            request.setAttribute("sessionId", sessionId);
+        }
+    }
+
+    private void authenticateAsAdmin(HttpServletRequest request, String token) {
+        Claims claims = adminJwtTokenProvider.parseAccessToken(token);
+        String adminId = claims.getSubject();
+
+        UserDetails adminDetails = adminUserDetailsService.loadUserById(adminId);
+        setAuthentication(request, adminDetails);
+
+        String sessionId = claims.get(AdminJwtTokenProvider.CLAIM_SESSION_ID, String.class);
+        if (sessionId != null) {
+            request.setAttribute("adminSessionId", sessionId);
+        }
+    }
+
+    private void setAuthentication(HttpServletRequest request, UserDetails userDetails) {
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(
+                        userDetails, null, userDetails.getAuthorities()
+                );
+        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    private String resolveCookie(HttpServletRequest request, String cookieName) {
+        if (request.getCookies() == null) return null;
+        return Arrays.stream(request.getCookies())
+                .filter(c -> cookieName.equals(c.getName()))
+                .map(Cookie::getValue)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String resolveBearer(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith(BEARER_PREFIX)) {
             return bearerToken.substring(BEARER_PREFIX.length());
         }
-
         return null;
     }
 
