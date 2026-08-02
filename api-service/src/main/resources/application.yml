@@ -191,8 +191,12 @@ springdoc:
   default-produces-media-type: application/json
 
 management:
-  server:
-    port: 8081
+  # No separate management.server.port: actuator must be served on the same context as the
+  # main application so that SecurityConfig's filter chains (and the explicit ADMIN-only
+  # matchers for /actuator/metrics and /actuator/prometheus) actually apply to it. A separate
+  # management port runs actuator in its own child web application context that Spring
+  # Security's filter chains never see — the only "protection" would then be infra-level port
+  # binding, which disappears outside of docker-compose (see Batch 18 #2).
   endpoints:
     web:
       exposure:

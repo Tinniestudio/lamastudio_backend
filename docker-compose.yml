@@ -22,14 +22,15 @@ services:
       DB_PORT: 5432
       DB_NAME: tinniestudio_db
       DB_USER: postgres
-      DB_PASSWORD: ultimate
+      # DB_PASSWORD, RABBITMQ_USER, RABBITMQ_PASSWORD are intentionally NOT set here —
+      # `environment:` takes precedence over `env_file: .env` for the same key, so
+      # hardcoding credentials here would silently override any rotation done via .env.
+      # They come from .env via env_file below.
       # Redis: internal Docker service (system redis is loopback-only)
       REDIS_URL: redis://redis:6379
       # RabbitMQ: internal Docker service
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USER: guest
-      RABBITMQ_PASSWORD: guest
       # MinIO: uses canotices_minio (0.0.0.0:9000 on host)
       STORAGE_ENDPOINT: http://host.docker.internal:9000
     depends_on:
@@ -59,12 +60,11 @@ services:
       DB_PORT: 5432
       DB_NAME: tinniestudio_db
       DB_USER: postgres
-      DB_PASSWORD: ultimate
+      # DB_PASSWORD, RABBITMQ_USER, RABBITMQ_PASSWORD come from .env via env_file below —
+      # not hardcoded here, since `environment:` would otherwise silently override .env.
       # RabbitMQ: internal Docker service
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USER: guest
-      RABBITMQ_PASSWORD: guest
       # MinIO: uses canotices_minio (0.0.0.0:9000 on host)
       STORAGE_ENDPOINT: http://host.docker.internal:9000
     depends_on:
