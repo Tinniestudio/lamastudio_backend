@@ -20,6 +20,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.UUID;
 
@@ -58,7 +59,9 @@ public class AdminContentController {
     @PatchMapping("/{id}")
     public ResponseEntity<ContentResponse> update(
             @PathVariable UUID id,
-            @Valid @RequestBody UpdateContentRequest req) {
+            @Valid @RequestBody UpdateContentRequest req,
+            @AuthenticationPrincipal UserDetails principal) {
+        assertOwnedByCallerOrAdmin(id, principal);
         return ResponseEntity.ok(contentService.update(id, req));
     }
 
@@ -72,7 +75,10 @@ public class AdminContentController {
 
     @Operation(summary = "Submit for review (DRAFT → REVIEW)")
     @PostMapping("/{id}/submit")
-    public ResponseEntity<ContentResponse> submit(@PathVariable UUID id) {
+    public ResponseEntity<ContentResponse> submit(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserDetails principal) {
+        assertOwnedByCallerOrAdmin(id, principal);
         return ResponseEntity.ok(contentService.transitionStatus(id, ContentStatus.REVIEW));
     }
 
@@ -109,5 +115,24 @@ public class AdminContentController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ContentResponse> toggleFeatured(@PathVariable UUID id) {
         return ResponseEntity.ok(contentService.toggleFeatured(id));
+    }
+
+    /**
+     * update()/submit() are open to both ADMIN and PARTNER at the class level, but a partner
+     * must only be able to touch their own content — otherwise any partner can edit or resubmit
+     * any other partner's content by id. Admins bypass this check entirely.
+     */
+    private void assertOwnedByCallerOrAdmin(UUID contentId, UserDetails principal) {
+        boolean isAdmin = principal.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        if (isAdmin) {
+            return;
+        }
+        Content content = contentRepository.findById(contentId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId));
+        UUID callerId = UUID.fromString(principal.getUsername());
+        if (!callerId.equals(content.getCreatedBy())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId);
+        }
     }
 }

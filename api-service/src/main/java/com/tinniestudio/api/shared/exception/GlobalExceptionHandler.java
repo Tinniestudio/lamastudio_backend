@@ -12,6 +12,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.tinniestudio.api.modules.auth.exception.BadCredentialsException;
 import com.tinniestudio.api.modules.auth.exception.EmailAlreadyExistsException;
@@ -219,6 +220,23 @@ public class GlobalExceptionHandler {
                 Map<String, Object> body = buildStandardError("ACCESS_DENIED", "You do not have permission to access this resource", HttpStatus.FORBIDDEN.value(), request.getServletPath());
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
         }
+
+    // ── ResponseStatusException (thrown pervasively across content/season/episode/etc.) ──────
+    // Without this handler, the catch-all Exception handler below intercepts every
+    // ResponseStatusException FIRST (our own @RestControllerAdvice runs ahead of Spring's
+    // built-in ResponseStatusExceptionResolver), turning every intentional 404/409/400 thrown
+    // via ResponseStatusException into a generic 500. This handler restores the exception's
+    // own status code.
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Object> handleResponseStatusException(
+            ResponseStatusException ex,
+            HttpServletRequest request
+    ) {
+        HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+        String message = ex.getReason() != null ? ex.getReason() : status.getReasonPhrase();
+        Map<String, Object> body = buildStandardError(status.name(), message, status.value(), request.getServletPath());
+        return ResponseEntity.status(status).body(body);
+    }
 
     // ── Catch-all ─────────────────────────────────────────────────────────────
 

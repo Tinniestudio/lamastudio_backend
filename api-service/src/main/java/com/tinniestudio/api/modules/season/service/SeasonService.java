@@ -6,6 +6,7 @@ import com.tinniestudio.api.modules.season.dto.SeasonResponse;
 import com.tinniestudio.api.modules.season.dto.UpdateSeasonRequest;
 import com.tinniestudio.api.modules.season.repository.SeasonRepository;
 import com.tinniestudio.api.shared.entity.Content;
+import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import com.tinniestudio.api.shared.entity.Season;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -25,15 +26,26 @@ public class SeasonService {
 
     @Transactional(readOnly = true)
     public List<SeasonResponse> listByContent(UUID contentId) {
+        Content content = contentRepository.findById(contentId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId));
+        if (content.getStatus() != ContentStatus.PUBLISHED) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId);
+        }
         return seasonRepository.findByContentIdOrderBySeasonNumberAsc(contentId)
                 .stream().map(SeasonResponse::from).toList();
     }
 
     @Transactional(readOnly = true)
-    public SeasonResponse getById(UUID id) {
-        return seasonRepository.findById(id)
-            .map(SeasonResponse::from)
+    public SeasonResponse getById(UUID contentId, UUID id) {
+        Season season = seasonRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + id));
+        if (!season.getContent().getId().equals(contentId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + id);
+        }
+        if (season.getContent().getStatus() != ContentStatus.PUBLISHED) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + id);
+        }
+        return SeasonResponse.from(season);
     }
 
     @Transactional

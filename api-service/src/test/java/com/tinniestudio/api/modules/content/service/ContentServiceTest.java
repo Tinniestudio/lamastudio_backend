@@ -149,8 +149,9 @@ class ContentServiceTest {
     class GetBySlugTests {
 
         @Test
-        @DisplayName("returns response when slug exists")
+        @DisplayName("returns response when slug exists and content is published")
         void returnsResponseWhenFound() {
+            content.setStatus(ContentStatus.PUBLISHED);
             when(contentRepository.findBySlug("test-movie")).thenReturn(Optional.of(content));
 
             ContentResponse result = contentService.getBySlug("test-movie");
@@ -165,6 +166,55 @@ class ContentServiceTest {
             when(contentRepository.findBySlug("missing")).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> contentService.getBySlug("missing"))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
+
+        @Test
+        @DisplayName("throws 404 when content is not published (DRAFT/REVIEW/PROCESSING/REJECTED/ARCHIVED not publicly visible)")
+        void throws404WhenNotPublished() {
+            content.setStatus(ContentStatus.DRAFT);
+            when(contentRepository.findBySlug("test-movie")).thenReturn(Optional.of(content));
+
+            assertThatThrownBy(() -> contentService.getBySlug("test-movie"))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
+    }
+
+    @Nested
+    @DisplayName("getById()")
+    class GetByIdTests {
+
+        @Test
+        @DisplayName("returns response when id exists and content is published")
+        void returnsResponseWhenFound() {
+            content.setStatus(ContentStatus.PUBLISHED);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+
+            ContentResponse result = contentService.getById(contentId);
+
+            assertThat(result.title()).isEqualTo("Test Movie");
+        }
+
+        @Test
+        @DisplayName("throws 404 when id not found")
+        void throws404WhenNotFound() {
+            UUID missingId = UUID.randomUUID();
+            when(contentRepository.findById(missingId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> contentService.getById(missingId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
+
+        @Test
+        @DisplayName("throws 404 when content is not published")
+        void throws404WhenNotPublished() {
+            content.setStatus(ContentStatus.REJECTED);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+
+            assertThatThrownBy(() -> contentService.getById(contentId))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
         }

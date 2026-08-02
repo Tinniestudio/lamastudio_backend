@@ -75,10 +75,12 @@ class SeasonServiceTest {
     class ListByContentTests {
 
         @Test
-        @DisplayName("returns seasons in season-number order")
+        @DisplayName("returns seasons in season-number order for published content")
         void returnsSeasonsInOrder() {
+            seriesContent.setStatus(ContentStatus.PUBLISHED);
             Season s1 = buildSeason(1);
             Season s2 = buildSeason(2);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
             when(seasonRepository.findByContentIdOrderBySeasonNumberAsc(contentId))
                 .thenReturn(List.of(s1, s2));
 
@@ -89,6 +91,27 @@ class SeasonServiceTest {
             assertThat(result.get(1).seasonNumber()).isEqualTo(2);
             verify(seasonRepository).findByContentIdOrderBySeasonNumberAsc(contentId);
         }
+
+        @Test
+        @DisplayName("throws 404 when parent content is not published")
+        void throws404WhenContentNotPublished() {
+            seriesContent.setStatus(ContentStatus.DRAFT);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
+
+            assertThatThrownBy(() -> seasonService.listByContent(contentId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
+
+        @Test
+        @DisplayName("throws 404 when content does not exist")
+        void throws404WhenContentMissing() {
+            when(contentRepository.findById(contentId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> seasonService.listByContent(contentId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
     }
 
     @Nested
@@ -96,12 +119,13 @@ class SeasonServiceTest {
     class GetByIdTests {
 
         @Test
-        @DisplayName("returns response when season found")
+        @DisplayName("returns response when season found and content is published")
         void returnsResponseWhenFound() {
+            seriesContent.setStatus(ContentStatus.PUBLISHED);
             Season s = buildSeason(1);
             when(seasonRepository.findById(s.getId())).thenReturn(Optional.of(s));
 
-            SeasonResponse result = seasonService.getById(s.getId());
+            SeasonResponse result = seasonService.getById(contentId, s.getId());
 
             assertThat(result.seasonNumber()).isEqualTo(1);
             assertThat(result.contentId()).isEqualTo(contentId);
@@ -113,7 +137,31 @@ class SeasonServiceTest {
             UUID missingId = UUID.randomUUID();
             when(seasonRepository.findById(missingId)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> seasonService.getById(missingId))
+            assertThatThrownBy(() -> seasonService.getById(contentId, missingId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
+
+        @Test
+        @DisplayName("throws 404 when season belongs to a different content")
+        void throws404WhenWrongContent() {
+            Season s = buildSeason(1);
+            UUID wrongContentId = UUID.randomUUID();
+            when(seasonRepository.findById(s.getId())).thenReturn(Optional.of(s));
+
+            assertThatThrownBy(() -> seasonService.getById(wrongContentId, s.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
+
+        @Test
+        @DisplayName("throws 404 when parent content is not published")
+        void throws404WhenContentNotPublished() {
+            seriesContent.setStatus(ContentStatus.DRAFT);
+            Season s = buildSeason(1);
+            when(seasonRepository.findById(s.getId())).thenReturn(Optional.of(s));
+
+            assertThatThrownBy(() -> seasonService.getById(contentId, s.getId()))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
         }

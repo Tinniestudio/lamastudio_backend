@@ -28,6 +28,6 @@ public class SeasonController {
     @Operation(summary = "Get a specific season")
     @GetMapping("/{id}")
     public ResponseEntity<SeasonResponse> get(@PathVariable UUID contentId, @PathVariable UUID id) {
-        return ResponseEntity.ok(seasonService.getById(id));
+        return ResponseEntity.ok(seasonService.getById(contentId, id));
     }
 }

@@ -53,6 +53,7 @@ public class ContentService {
     @Transactional(readOnly = true)
     public ContentResponse getBySlug(String slug) {
         return contentRepository.findBySlug(slug)
+            .filter(this::isPubliclyVisible)
             .map(ContentResponse::from)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + slug));
     }
@@ -61,8 +62,18 @@ public class ContentService {
     @Transactional(readOnly = true)
     public ContentResponse getById(UUID id) {
         return contentRepository.findById(id)
+            .filter(this::isPubliclyVisible)
             .map(ContentResponse::from)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + id));
+    }
+
+    /**
+     * Only PUBLISHED content is visible through the public, unauthenticated content endpoints.
+     * DRAFT/REVIEW/PROCESSING/REJECTED/ARCHIVED content is only reachable via the admin/partner
+     * endpoints, which are role-gated separately.
+     */
+    public boolean isPubliclyVisible(Content content) {
+        return content.getStatus() == ContentStatus.PUBLISHED;
     }
 
     @Transactional

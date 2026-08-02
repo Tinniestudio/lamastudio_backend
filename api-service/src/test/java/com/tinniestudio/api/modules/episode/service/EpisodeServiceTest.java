@@ -88,10 +88,12 @@ class EpisodeServiceTest {
     class ListBySeasonTests {
 
         @Test
-        @DisplayName("returns episodes in episode-number order")
+        @DisplayName("returns episodes in episode-number order when content is published")
         void returnsEpisodesInOrder() {
+            content.setStatus(ContentStatus.PUBLISHED);
             Episode ep1 = buildEpisode(1);
             Episode ep2 = buildEpisode(2);
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
             when(episodeRepository.findBySeasonIdOrderByEpisodeNumberAsc(seasonId))
                 .thenReturn(List.of(ep1, ep2));
 
@@ -102,6 +104,27 @@ class EpisodeServiceTest {
             assertThat(result.get(1).episodeNumber()).isEqualTo(2);
             verify(episodeRepository).findBySeasonIdOrderByEpisodeNumberAsc(seasonId);
         }
+
+        @Test
+        @DisplayName("throws 404 when parent content is not published")
+        void throws404WhenContentNotPublished() {
+            content.setStatus(ContentStatus.DRAFT);
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
+
+            assertThatThrownBy(() -> episodeService.listBySeason(seasonId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
+
+        @Test
+        @DisplayName("throws 404 when season not found")
+        void throws404WhenSeasonMissing() {
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> episodeService.listBySeason(seasonId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
     }
 
     @Nested
@@ -109,8 +132,9 @@ class EpisodeServiceTest {
     class GetByIdTests {
 
         @Test
-        @DisplayName("returns response when found")
+        @DisplayName("returns response when found and content is published")
         void returnsResponseWhenFound() {
+            content.setStatus(ContentStatus.PUBLISHED);
             Episode ep = buildEpisode(1); // buildEpisode sets ep.setSeason(season) where season.getId() == seasonId
             when(episodeRepository.findById(ep.getId())).thenReturn(Optional.of(ep));
 
@@ -118,6 +142,18 @@ class EpisodeServiceTest {
 
             assertThat(result.episodeNumber()).isEqualTo(1);
             assertThat(result.seasonId()).isEqualTo(seasonId);
+        }
+
+        @Test
+        @DisplayName("throws 404 when parent content is not published")
+        void throws404WhenContentNotPublished() {
+            content.setStatus(ContentStatus.DRAFT);
+            Episode ep = buildEpisode(1);
+            when(episodeRepository.findById(ep.getId())).thenReturn(Optional.of(ep));
+
+            assertThatThrownBy(() -> episodeService.getById(seasonId, ep.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
         }
 
         @Test

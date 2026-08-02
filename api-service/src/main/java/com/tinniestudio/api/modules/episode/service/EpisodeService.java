@@ -6,6 +6,7 @@ import com.tinniestudio.api.modules.episode.dto.ReorderEpisodesRequest;
 import com.tinniestudio.api.modules.episode.dto.UpdateEpisodeRequest;
 import com.tinniestudio.api.modules.episode.repository.EpisodeRepository;
 import com.tinniestudio.api.modules.season.repository.SeasonRepository;
+import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import com.tinniestudio.api.shared.entity.Episode;
 import com.tinniestudio.api.shared.entity.Season;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,11 @@ public class EpisodeService {
 
     @Transactional(readOnly = true)
     public List<EpisodeResponse> listBySeason(UUID seasonId) {
+        Season season = seasonRepository.findById(seasonId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + seasonId));
+        if (season.getContent().getStatus() != ContentStatus.PUBLISHED) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + seasonId);
+        }
         return episodeRepository.findBySeasonIdOrderByEpisodeNumberAsc(seasonId)
                 .stream().map(EpisodeResponse::from).toList();
     }
@@ -36,6 +42,9 @@ public class EpisodeService {
         Episode episode = episodeRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found: " + id));
         if (!episode.getSeason().getId().equals(seasonId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found: " + id);
+        }
+        if (episode.getSeason().getContent().getStatus() != ContentStatus.PUBLISHED) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found: " + id);
         }
         return EpisodeResponse.from(episode);
