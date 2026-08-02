@@ -23,6 +23,13 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        # Default is true, which would requeue a rejected message back onto the SAME
+        # queue instead of routing it to the DLX (media.video.failed) declared in
+        # RabbitConfig. false lets a rejected/exception-throwing delivery be
+        # dead-lettered instead of looping forever.
+        default-requeue-rejected: false
 
   flyway:
     enabled: false

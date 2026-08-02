@@ -4,9 +4,19 @@ global:
 
 scrape_configs:
   - job_name: 'tinniestudio-api'
-    metrics_path: '/actuator/prometheus'
+    # Actuator is served on the app's main port/context-path — there's no separate
+    # management port anymore (see SecurityConfig: a split management port ran outside
+    # Spring Security's filter chains, so /actuator/prometheus was effectively unprotected).
+    metrics_path: '/api/v1/actuator/prometheus'
+    # Username is not secret (like a service-account name); only the password needs
+    # protecting, and Prometheus can't read env vars in this static config, so the actual
+    # password lives in a gitignored file mounted at the path below — see
+    # observability/secrets/README.md. Must match PROMETHEUS_SCRAPE_USERNAME/PASSWORD in .env.
+    basic_auth:
+      username: prometheus-scraper
+      password_file: /run/secrets/prometheus_scrape_password
     static_configs:
-      - targets: ['api-service:8081']
+      - targets: ['api-service:8080']
     scrape_interval: 30s
 
   - job_name: 'prometheus'

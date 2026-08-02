@@ -28,6 +28,21 @@ public class AppProperties {
     private String adminBootstrapToken;
     private int freeTierContentLimit = 2;
     private Cdn cdn = new Cdn();
+    private Metrics metrics = new Metrics();
+
+    /**
+     * Static Basic-auth credentials for the Prometheus scraper hitting /actuator/prometheus.
+     * Deliberately separate from the Admin/User JWT system — a scraper is a long-lived service
+     * identity, not a human session, so it can't rely on short-lived JWTs. Left blank by default
+     * (no local-dev friction); if either value is blank, ScrapeAuthenticationProvider rejects the
+     * request rather than silently accepting an empty credential.
+     */
+    @Getter
+    @Setter
+    public static class Metrics {
+        private String scrapeUsername;
+        private String scrapePassword;
+    }
 
     @Getter
     @Setter

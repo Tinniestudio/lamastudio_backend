@@ -150,6 +150,10 @@ app:
     secret-key: ${STORAGE_SECRET_KEY:minioadmin}
     presigned-url-ttl-seconds: ${STORAGE_PRESIGNED_TTL:3600}
 
+  metrics:
+    scrape-username: ${PROMETHEUS_SCRAPE_USERNAME:}
+    scrape-password: ${PROMETHEUS_SCRAPE_PASSWORD:}
+
 stripe:
   secret-key: ${STRIPE_SECRET_KEY:}
   webhook-secret: ${STRIPE_WEBHOOK_SECRET:}

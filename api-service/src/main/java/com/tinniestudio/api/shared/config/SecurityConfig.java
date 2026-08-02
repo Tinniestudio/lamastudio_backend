@@ -2,6 +2,7 @@ package com.tinniestudio.api.shared.config;
 
 import com.tinniestudio.api.modules.auth.admin.service.AdminUserDetailsServiceImpl;
 import com.tinniestudio.api.modules.user.service.UserDetailsServiceImpl;
+import com.tinniestudio.api.shared.security.ScrapeAuthenticationProvider;
 import com.tinniestudio.api.shared.security.jwt.*;
 import com.tinniestudio.api.shared.security.oauth.CustomOAuth2AuthorizationRequestResolver;
 import com.tinniestudio.api.shared.security.oauth.OAuth2AuthenticationFailureHandler;
@@ -10,6 +11,7 @@ import com.tinniestudio.api.shared.security.oauth.OAuth2AuthenticationSuccessHan
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
 import org.springframework.boot.actuate.health.HealthEndpoint;
+import org.springframework.boot.actuate.metrics.export.prometheus.PrometheusScrapeEndpoint;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
@@ -106,6 +108,31 @@ public class SecurityConfig {
                 .accessDeniedHandler(jwtAccessDeniedHandler)
             )
             .addFilterBefore(adminFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+    // ── Prometheus scrape chain — @Order(0), matches only /actuator/prometheus ─
+    // Basic auth against a single static credential pair (AppProperties.metrics), not the
+    // Admin/User JWT system. A scraper is a long-lived service identity; a 15-minute admin JWT
+    // would break scraping shortly after each Prometheus restart with no way to refresh itself.
+
+    @Bean
+    @Order(0)
+    public SecurityFilterChain prometheusScrapeSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .securityMatcher(EndpointRequest.to(PrometheusScrapeEndpoint.class))
+            .csrf(AbstractHttpConfigurer::disable)
+            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("SCRAPER"))
+            .httpBasic(org.springframework.security.config.Customizer.withDefaults())
+            // A fully-built local AuthenticationManager, not .authenticationProvider(...) — even
+            // registering ScrapeAuthenticationProvider as a Spring bean (regardless of how it's wired
+            // into a chain) broke the global authenticationManager() @Bean below, causing a circular
+            // lookup in AuthenticationConfiguration (StackOverflowError) on the real user login
+            // endpoint. Constructing it directly here keeps it out of the bean graph entirely.
+            .authenticationManager(new org.springframework.security.authentication.ProviderManager(
+                    new ScrapeAuthenticationProvider(appProperties)));
 
         return http.build();
     }

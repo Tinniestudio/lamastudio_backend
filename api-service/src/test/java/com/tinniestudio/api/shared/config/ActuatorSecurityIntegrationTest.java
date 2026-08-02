@@ -1,6 +1,5 @@
 package com.tinniestudio.api.shared.config;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,14 +15,23 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Regression test for Batch 18 #2: actuator health must be reachable without authentication,
- * while metrics/prometheus (which can leak internal topology and secrets via label values)
- * must require ADMIN authentication and be enforced by the application itself, not merely by
- * infra port binding.
+ * metrics must require ADMIN authentication (enforced by the application itself, not merely by
+ * infra port binding), and /actuator/prometheus must accept the dedicated static scrape
+ * credentials used by Prometheus itself (a long-lived service identity, not the human Admin/User
+ * JWT system).
+ *
+ * <p>{@code management.defaults.metrics.export.enabled=true} is set explicitly because
+ * spring-boot-test-autoconfigure disables metrics export by default for every
+ * {@code @SpringBootTest} (so tests don't accidentally push metrics to a real backend) — without
+ * this override, PrometheusMetricsExportAutoConfiguration never activates in this test's context
+ * and the PrometheusScrapeEndpoint bean (and therefore EndpointRequest.to(PrometheusScrapeEndpoint.class)
+ * as a security matcher) doesn't exist at all. Production is unaffected; this override is test-only.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
@@ -45,6 +53,9 @@ class ActuatorSecurityIntegrationTest {
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "none");
         registry.add("spring.flyway.enabled", () -> true);
+        registry.add("app.metrics.scrape-username", () -> "test-scraper");
+        registry.add("app.metrics.scrape-password", () -> "test-scrape-pass");
+        registry.add("management.defaults.metrics.export.enabled", () -> true);
     }
 
     @Autowired
@@ -65,12 +76,6 @@ class ActuatorSecurityIntegrationTest {
     }
 
     @Test
-    void prometheusEndpointRejectsUnauthenticatedRequests() throws Exception {
-        mockMvc.perform(get(CONTEXT_PATH + "/actuator/prometheus").contextPath(CONTEXT_PATH))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
     @WithMockUser(authorities = "ROLE_USER")
     void metricsEndpointRejectsNonAdminAuthenticatedUsers() throws Exception {
         mockMvc.perform(get(CONTEXT_PATH + "/actuator/metrics").contextPath(CONTEXT_PATH))
@@ -84,25 +89,33 @@ class ActuatorSecurityIntegrationTest {
                 .andExpect(status().isOk());
     }
 
-    /**
-     * Disabled: unrelated to the SecurityConfig fix under test. In this Spring context,
-     * {@code @ConditionalOnEnabledMetricsExport} resolves "management.defaults.metrics.export.enabled"
-     * to false (confirmed via the /actuator/conditions report), so PrometheusMetricsExportAutoConfiguration
-     * never activates and the app falls back to a bare SimpleMeterRegistry — {@code /actuator/prometheus}
-     * 500s with NoResourceFoundException because the endpoint bean is never created. This reproduced both
-     * before and after this fix, and persisted even after explicitly setting
-     * management.defaults.metrics.export.enabled=true / management.prometheus.metrics.export.enabled=true
-     * via @SpringBootTest(properties=...), so the cause is not simply a missing property — it needs its own
-     * dedicated investigation. The authorization behavior itself (the actual subject of this fix) IS proven:
-     * prometheusEndpointRejectsUnauthenticatedRequests confirms the endpoint requires authentication before
-     * this failure is ever reached.
-     */
-    @Disabled("Pre-existing, unrelated bug: PrometheusMetricsExportAutoConfiguration never activates in this "
-            + "test context (SimpleMeterRegistry fallback) — needs separate investigation, tracked outside this fix")
     @Test
-    @WithMockUser(authorities = "ROLE_ADMIN")
-    void prometheusEndpointAllowsAdmin() throws Exception {
+    void prometheusEndpointRejectsUnauthenticatedRequests() throws Exception {
         mockMvc.perform(get(CONTEXT_PATH + "/actuator/prometheus").contextPath(CONTEXT_PATH))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void prometheusEndpointRejectsWrongScrapeCredentials() throws Exception {
+        mockMvc.perform(get(CONTEXT_PATH + "/actuator/prometheus").contextPath(CONTEXT_PATH)
+                        .with(httpBasic("test-scraper", "wrong-password")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void prometheusEndpointAcceptsCorrectScrapeCredentials() throws Exception {
+        mockMvc.perform(get(CONTEXT_PATH + "/actuator/prometheus").contextPath(CONTEXT_PATH)
+                        .with(httpBasic("test-scraper", "test-scrape-pass")))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void prometheusScrapeCredentials_doNotGrantAccessToMetricsEndpoint() throws Exception {
+        // ROLE_SCRAPER is scoped to /actuator/prometheus only — Basic auth isn't even the
+        // configured mechanism on the /actuator/metrics chain (that one expects a JWT), so
+        // scrape credentials sent there must not grant access.
+        mockMvc.perform(get(CONTEXT_PATH + "/actuator/metrics").contextPath(CONTEXT_PATH)
+                        .with(httpBasic("test-scraper", "test-scrape-pass")))
+                .andExpect(status().isUnauthorized());
     }
 }

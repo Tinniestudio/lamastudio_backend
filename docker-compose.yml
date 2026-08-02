@@ -103,6 +103,8 @@ services:
     restart: always
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # See observability/secrets/README.md — must match PROMETHEUS_SCRAPE_PASSWORD in .env.
+      - ./observability/secrets/prometheus_scrape_password:/run/secrets/prometheus_scrape_password:ro
     ports:
       - "127.0.0.1:9090:9090"
     networks:
