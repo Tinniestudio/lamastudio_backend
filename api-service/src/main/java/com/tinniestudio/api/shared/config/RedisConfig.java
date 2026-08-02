@@ -17,6 +17,9 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.util.StringUtils;
 import org.springframework.core.env.Environment;
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import io.lettuce.core.RedisURI;
 
 import java.time.Duration;
@@ -43,6 +46,26 @@ public class RedisConfig {
     private static final long DEFAULT_CACHE_TTL_MINUTES = 30;
 
     /**
+     * GenericJackson2JsonRedisSerializer's default ObjectMapper embeds polymorphic type info
+     * PROPERTY-style ({@code "@class": "..."} on each JSON object). That works for a single
+     * object but cannot represent a top-level JSON array's type (there's no property slot on an
+     * array token) — so serializing a bare List writes it with no outer type wrapper, and the
+     * very next read of that same value fails ("expected VALUE_STRING ... got START_OBJECT")
+     * because the reader expects type info it never got. Any @Cacheable method returning a List
+     * (categories, content-list, discover, search, recommendations) hit this on every cache read
+     * following a cache write, deterministically. WRAPPER_ARRAY style wraps collections as
+     * {@code ["java.util.ArrayList", [...]]}, which round-trips correctly.
+     */
+    static ObjectMapper cacheObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.activateDefaultTyping(
+                BasicPolymorphicTypeValidator.builder().allowIfSubType(Object.class).build(),
+                ObjectMapper.DefaultTyping.EVERYTHING,
+                JsonTypeInfo.As.WRAPPER_ARRAY);
+        return mapper;
+    }
+
+    /**
      * Configure RedisTemplate with String keys and JSON values.
      * Shared by rate limiting and general app caching.
      *
@@ -55,7 +78,7 @@ public class RedisConfig {
         template.setConnectionFactory(connectionFactory);
 
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
-        GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer();
+        GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(cacheObjectMapper());
 
         // String keys for clarity and interoperability
         template.setKeySerializer(stringSerializer);
@@ -85,7 +108,7 @@ public class RedisConfig {
                         RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(
                         RedisSerializationContext.SerializationPair.fromSerializer(
-                                new GenericJackson2JsonRedisSerializer()));
+                                new GenericJackson2JsonRedisSerializer(cacheObjectMapper())));
 
         Map<String, RedisCacheConfiguration> cacheConfigs = new HashMap<>();
         cacheConfigs.put("categories",        config.entryTtl(Duration.ofMinutes(10)));
