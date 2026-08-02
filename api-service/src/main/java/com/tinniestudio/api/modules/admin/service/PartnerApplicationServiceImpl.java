@@ -57,6 +57,9 @@ public class PartnerApplicationServiceImpl implements PartnerApplicationService 
     public PartnerApplicationResponse approve(UUID applicationId, UUID adminId) {
         PartnerApplication app = applicationRepo.findById(applicationId)
             .orElseThrow(() -> new ResourceNotFoundException("Application not found"));
+        if (app.getStatus() != PartnerApplicationStatus.PENDING) {
+            throw new BadRequestException("Application has already been reviewed");
+        }
 
         app.setStatus(PartnerApplicationStatus.APPROVED);
         app.setReviewedBy(adminId);
@@ -87,6 +90,9 @@ public class PartnerApplicationServiceImpl implements PartnerApplicationService 
     public PartnerApplicationResponse reject(UUID applicationId, RejectApplicationRequest req, UUID adminId) {
         PartnerApplication app = applicationRepo.findById(applicationId)
             .orElseThrow(() -> new ResourceNotFoundException("Application not found"));
+        if (app.getStatus() != PartnerApplicationStatus.PENDING) {
+            throw new BadRequestException("Application has already been reviewed");
+        }
         app.setStatus(PartnerApplicationStatus.REJECTED);
         app.setRejectionReason(req.getReason());
         app.setReviewedBy(adminId);

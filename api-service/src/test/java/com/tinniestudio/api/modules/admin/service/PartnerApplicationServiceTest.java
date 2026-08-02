@@ -138,6 +138,41 @@ class PartnerApplicationServiceTest {
     }
 
     @Test
+    void approve_alreadyReviewed_throwsBadRequestAndDoesNotReRunSideEffects() {
+        UUID appId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        PartnerApplication app = makePendingApp(appId, UUID.randomUUID());
+        app.setStatus(PartnerApplicationStatus.APPROVED); // already reviewed
+
+        when(applicationRepo.findById(appId)).thenReturn(Optional.of(app));
+
+        assertThatThrownBy(() -> applicationService.approve(appId, adminId))
+            .isInstanceOf(BadRequestException.class);
+
+        verify(userRepo, never()).findById(any());
+        verify(profileRepo, never()).save(any());
+        verify(auditLogService, never()).log(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void reject_alreadyReviewed_throwsBadRequestAndDoesNotReRunSideEffects() {
+        UUID appId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        PartnerApplication app = makePendingApp(appId, UUID.randomUUID());
+        app.setStatus(PartnerApplicationStatus.REJECTED); // already reviewed
+
+        when(applicationRepo.findById(appId)).thenReturn(Optional.of(app));
+
+        RejectApplicationRequest req = new RejectApplicationRequest();
+        req.setReason("second attempt");
+
+        assertThatThrownBy(() -> applicationService.reject(appId, req, adminId))
+            .isInstanceOf(BadRequestException.class);
+
+        verify(auditLogService, never()).log(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void reject_setsRejectedStatusWithReason() {
         UUID appId = UUID.randomUUID();
         UUID adminId = UUID.randomUUID();
