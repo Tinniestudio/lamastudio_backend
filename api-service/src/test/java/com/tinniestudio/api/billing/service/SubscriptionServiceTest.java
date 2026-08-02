@@ -185,6 +185,47 @@ class SubscriptionServiceTest {
     }
 
     @Nested
+    @DisplayName("verifyPayment()")
+    class VerifyPayment {
+
+        @Test
+        @DisplayName("payment reference belonging to another user throws ResourceNotFoundException without calling Stripe")
+        void paymentOwnedByAnotherUser_throwsNotFound() {
+            when(paymentRepository.findByProviderReferenceAndUserId("pi_victim", userId))
+                .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.verifyPayment(userId, "pi_victim"))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+            verifyNoInteractions(stripeService);
+        }
+
+        @Test
+        @DisplayName("owner's already-successful payment returns status without re-verifying with Stripe")
+        void ownPaymentAlreadySuccessful_skipsStripeVerification() {
+            Payment payment = new Payment();
+            payment.setId(UUID.randomUUID());
+            payment.setUserId(userId);
+            payment.setStatus(PaymentStatus.SUCCESSFUL);
+            payment.setProviderReference("pi_mine");
+
+            when(paymentRepository.findByProviderReferenceAndUserId("pi_mine", userId))
+                .thenReturn(Optional.of(payment));
+            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+                .thenReturn(Optional.empty());
+            when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId))
+                .thenReturn(Optional.empty());
+            when(paymentRepository.findByUserIdOrderByCreatedAtDesc(userId))
+                .thenReturn(List.of());
+
+            SubscriptionStatusResponse result = service.verifyPayment(userId, "pi_mine");
+
+            assertThat(result.getPlan()).isEqualTo("FREE");
+            verifyNoInteractions(stripeService);
+        }
+    }
+
+    @Nested
     @DisplayName("validateCoupon()")
     class ValidateCoupon {
 

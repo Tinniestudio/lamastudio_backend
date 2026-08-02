@@ -305,7 +305,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     @Override
     @Transactional
     public SubscriptionStatusResponse verifyPayment(UUID userId, String paymentReference) {
-        Payment payment = paymentRepository.findByProviderReference(paymentReference)
+        Payment payment = paymentRepository.findByProviderReferenceAndUserId(paymentReference, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
 
         if (payment.getStatus() == PaymentStatus.SUCCESSFUL) {
