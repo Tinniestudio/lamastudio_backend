@@ -29,7 +29,10 @@ public class RateLimitAspect {
 
     @Around("@annotation(rateLimit)")
     public Object aroundRateLimit(ProceedingJoinPoint pjp, RateLimit rateLimit) throws Throwable {
-        String endpoint = pjp.getSignature().getName();
+        // Use the fully-qualified declaring type + method name so that same-named methods on
+        // different classes (e.g. AuthController#login vs AdminAuthController#login) do not
+        // collide onto the same rate-limit key.
+        String endpoint = pjp.getSignature().getDeclaringTypeName() + "." + pjp.getSignature().getName();
         String keyStrategy = rateLimit.keyStrategy();
         int maxRequests = rateLimit.maxRequests();
         int windowMinutes = rateLimit.windowMinutes();

@@ -8,6 +8,8 @@ import com.tinniestudio.api.shared.security.oauth.OAuth2AuthenticationFailureHan
 import com.tinniestudio.api.shared.security.oauth.OAuth2AuthenticationSuccessHandler;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
+import org.springframework.boot.actuate.health.HealthEndpoint;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
@@ -159,7 +161,6 @@ public class SecurityConfig {
         "/api/v1/subscriptions/plans",
         "/webhooks/stripe",
         "/api/v1/webhooks/stripe",
-        "/actuator/health",
         "/swagger-ui.html",
         "/swagger-ui",
         "/swagger-ui/**",
@@ -180,6 +181,12 @@ public class SecurityConfig {
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .authorizeHttpRequests(auth -> auth
+                // Actuator health (and any liveness/readiness probes) must stay public — used by
+                // container orchestration and uptime checks. Everything else under /actuator/**
+                // (metrics, prometheus, etc.) can leak internal topology/secrets via label values
+                // and must be ADMIN-only, enforced here rather than relying on infra port binding.
+                .requestMatchers(EndpointRequest.to(HealthEndpoint.class)).permitAll()
+                .requestMatchers(EndpointRequest.toAnyEndpoint()).hasRole("ADMIN")
                 .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                 .anyRequest().authenticated()
             )
