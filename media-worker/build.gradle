@@ -40,6 +40,10 @@ dependencies {
 
     // Test
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // In-memory DB for the real (non-mocked) transaction-boundary test in
+    // VideoProcessingServiceTransactionBoundaryTest — avoids a Docker/Testcontainers
+    // dependency just to prove a Spring @Transactional rollback boundary.
+    testImplementation 'com.h2database:h2'
     testCompileOnly         'org.projectlombok:lombok:1.18.32'
     testAnnotationProcessor 'org.projectlombok:lombok:1.18.32'
 }
