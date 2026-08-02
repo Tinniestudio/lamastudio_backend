@@ -5,11 +5,11 @@
 3. partner upload logon follow same presign upload
 4. verification automatic when admin proote the user, and admin can still update using the endpoint, for partner that voilate regulation
 5. remove gross revenue for now, only admin own that
-6. depend on question 5
+6. depend on question 5 — clarified 2026-08-01: any partner-facing dashboard/stats/analytics endpoint follows the same rule as #5; gross revenue/earnings stay admin-only everywhere, not just the one endpoint #5 originally covered.
 7. use partners/contents for scalability
-8. merge both into a big and flexible endpoint
-9. remove payment event, audit_log
-10. seperate field
+8. merge both into a big and flexible endpoint — clarified 2026-08-01: merge partner content listing + content management (create/update) into one flexible `/partners/contents` endpoint (query params for filter/search/sort, POST to create, PATCH to update), replacing the current bare read-only list. Ownership must be enforced (a partner can only touch their own content).
+9. remove payment event, audit_log — clarified 2026-08-01: this is partner-scoping only, not schema removal. payment_event and audit_log data must never appear in any partner-facing response/DTO. Admin keeps both tables and endpoints (see Batch 14 #6).
+10. seperate field — clarified 2026-08-01: partner-facing content responses must use a distinct DTO from the admin one (e.g. `PartnerContentResponse` vs `AdminContentResponse`), not a shared type — so admin-only fields (revenue, cost, internal flags) can't leak to partners by accident later.
 
 
 
