@@ -24,5 +24,9 @@ public class WorkerProperties {
         private String path = "/usr/bin/ffmpeg";
         private String ffprobePath = "/usr/bin/ffprobe";
         private int hlsSegmentDuration = 6;
+        // Max wall-clock time a single ffmpeg/ffprobe invocation may run before
+        // being forcibly killed. Distinct from processing.max-duration-seconds,
+        // which limits the *source video's* duration, not the transcode wall-clock time.
+        private long timeoutSeconds = 1800; // 30 minutes
     }
 }

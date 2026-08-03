@@ -36,6 +36,7 @@ worker:
     path: /usr/local/bin/ffmpeg
     ffprobe-path: /usr/local/bin/ffprobe
     hls-segment-duration: 6
+    timeout-seconds: ${FFMPEG_TIMEOUT_SECONDS:1800}
 
 app:
   storage:
