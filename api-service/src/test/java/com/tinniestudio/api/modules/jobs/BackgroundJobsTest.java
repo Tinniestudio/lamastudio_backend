@@ -8,16 +8,20 @@ import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
 import com.tinniestudio.api.shared.entity.DomainEnums.ProcessingStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.UploadStatus;
 import com.tinniestudio.api.shared.entity.VideoAsset;
+import com.tinniestudio.api.shared.storage.StorageService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -27,6 +31,7 @@ class BackgroundJobsTest {
 
     @Mock UploadSessionRepository uploadSessionRepo;
     @Mock VideoAssetRepository videoAssetRepo;
+    @Mock StorageService storageService;
     @Mock NotificationRepository notificationRepo;
     @Mock UserSessionRepository userSessionRepo;
     @Mock JobLogger jobLogger;
@@ -75,18 +80,20 @@ class BackgroundJobsTest {
     // ─── StaleVideoAssetJob ───────────────────────────────────────────────────
 
     @Test
-    @DisplayName("stale video asset job marks stuck PROCESSING assets as FAILED")
+    @DisplayName("stale video asset job atomically transitions stuck PROCESSING assets to FAILED")
     void staleVideoAssetJob_marksFailedAndLogs() {
-        VideoAsset asset = new VideoAsset();
-        asset.setProcessingStatus(ProcessingStatus.PROCESSING);
-
         when(jobLogger.start(any())).thenReturn(fakeLog("StaleVideoAssetJob"));
-        when(videoAssetRepo.findByProcessingStatusAndUpdatedAtBefore(
-                eq(ProcessingStatus.PROCESSING), any())).thenReturn(List.of(asset));
+        when(videoAssetRepo.transitionStaleProcessingAssets(
+                eq(ProcessingStatus.PROCESSING), eq(ProcessingStatus.FAILED), any()))
+                .thenReturn(1);
 
         staleVideoJob.run();
 
-        verify(videoAssetRepo).save(asset);
+        verify(videoAssetRepo).transitionStaleProcessingAssets(
+                eq(ProcessingStatus.PROCESSING), eq(ProcessingStatus.FAILED), any());
+        // No read-then-save: the job must never load entities and call save() —
+        // that's exactly the race the atomic UPDATE replaces.
+        verify(videoAssetRepo, never()).save(any());
         verify(jobLogger).success(any(), eq(1));
     }
 
@@ -94,12 +101,11 @@ class BackgroundJobsTest {
     @DisplayName("stale video asset job logs zero when nothing is stale")
     void staleVideoAssetJob_nothingStale_logsZero() {
         when(jobLogger.start(any())).thenReturn(fakeLog("StaleVideoAssetJob"));
-        when(videoAssetRepo.findByProcessingStatusAndUpdatedAtBefore(any(), any()))
-                .thenReturn(List.of());
+        when(videoAssetRepo.transitionStaleProcessingAssets(any(), any(), any()))
+                .thenReturn(0);
 
         staleVideoJob.run();
 
-        verify(videoAssetRepo, never()).save(any());
         verify(jobLogger).success(any(), eq(0));
     }
 
@@ -107,7 +113,7 @@ class BackgroundJobsTest {
     @DisplayName("stale video asset job records failure when repo throws")
     void staleVideoAssetJob_repoThrows_logsFailure() {
         when(jobLogger.start(any())).thenReturn(fakeLog("StaleVideoAssetJob"));
-        when(videoAssetRepo.findByProcessingStatusAndUpdatedAtBefore(any(), any()))
+        when(videoAssetRepo.transitionStaleProcessingAssets(any(), any(), any()))
                 .thenThrow(new RuntimeException("timeout"));
 
         staleVideoJob.run();
@@ -118,16 +124,61 @@ class BackgroundJobsTest {
     // ─── FailedVideoAssetCleanupJob ───────────────────────────────────────────
 
     @Test
-    @DisplayName("failed video asset cleanup job deletes assets older than 7 days and logs")
-    void failedVideoAssetCleanupJob_deletesAndLogs() {
+    @DisplayName("failed video asset cleanup job deletes storage object before/alongside DB row, then logs")
+    void failedVideoAssetCleanupJob_deletesStorageAndRowsAndLogs() {
+        VideoAsset asset1 = new VideoAsset();
+        asset1.setId(UUID.randomUUID());
+        asset1.setStorageKey("raw/asset-1.mp4");
+        VideoAsset asset2 = new VideoAsset();
+        asset2.setId(UUID.randomUUID());
+        asset2.setStorageKey("raw/asset-2.mp4");
+
         when(jobLogger.start(any())).thenReturn(fakeLog("FailedVideoAssetCleanupJob"));
-        when(videoAssetRepo.deleteByProcessingStatusAndUpdatedAtBefore(
-                eq(ProcessingStatus.FAILED), any())).thenReturn(5);
+        when(videoAssetRepo.findByProcessingStatusAndUpdatedAtBefore(eq(ProcessingStatus.FAILED), any()))
+                .thenReturn(List.of(asset1, asset2));
 
         failedVideoJob.run();
 
-        verify(videoAssetRepo).deleteByProcessingStatusAndUpdatedAtBefore(eq(ProcessingStatus.FAILED), any());
-        verify(jobLogger).success(any(), eq(5));
+        InOrder inOrder = inOrder(storageService, videoAssetRepo);
+        inOrder.verify(storageService).deleteObject("raw/asset-1.mp4");
+        inOrder.verify(storageService).deleteObject("raw/asset-2.mp4");
+        inOrder.verify(videoAssetRepo).deleteAllByIdInBatch(anyList());
+
+        verify(videoAssetRepo).deleteAllByIdInBatch(List.of(asset1.getId(), asset2.getId()));
+        verify(jobLogger).success(any(), eq(2));
+    }
+
+    @Test
+    @DisplayName("failed video asset cleanup job skips storage/DB delete when nothing is stale")
+    void failedVideoAssetCleanupJob_nothingStale_skipsDeletes() {
+        when(jobLogger.start(any())).thenReturn(fakeLog("FailedVideoAssetCleanupJob"));
+        when(videoAssetRepo.findByProcessingStatusAndUpdatedAtBefore(eq(ProcessingStatus.FAILED), any()))
+                .thenReturn(List.of());
+
+        failedVideoJob.run();
+
+        verify(storageService, never()).deleteObject(any());
+        verify(videoAssetRepo, never()).deleteAllByIdInBatch(any());
+        verify(jobLogger).success(any(), eq(0));
+    }
+
+    @Test
+    @DisplayName("failed video asset cleanup job still deletes DB row when storage delete fails")
+    void failedVideoAssetCleanupJob_storageDeleteThrows_stillDeletesRowAndLogsSuccess() {
+        VideoAsset asset = new VideoAsset();
+        asset.setId(UUID.randomUUID());
+        asset.setStorageKey("raw/broken.mp4");
+
+        when(jobLogger.start(any())).thenReturn(fakeLog("FailedVideoAssetCleanupJob"));
+        when(videoAssetRepo.findByProcessingStatusAndUpdatedAtBefore(eq(ProcessingStatus.FAILED), any()))
+                .thenReturn(List.of(asset));
+        doThrow(new RuntimeException("storage unreachable"))
+                .when(storageService).deleteObject("raw/broken.mp4");
+
+        failedVideoJob.run();
+
+        verify(videoAssetRepo).deleteAllByIdInBatch(List.of(asset.getId()));
+        verify(jobLogger).success(any(), eq(1));
     }
 
     // ─── NotificationCleanupJob ───────────────────────────────────────────────
