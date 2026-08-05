@@ -22,7 +22,7 @@ public class StorageConfig {
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(props.getAccessKey(), props.getSecretKey())))
                 .region(Region.of(props.getRegion()))
-                .forcePathStyle(true)
+                .forcePathStyle(props.isPathStyleAccess())
                 .build();
     }
 }
