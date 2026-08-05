@@ -66,6 +66,7 @@ public class VideoProcessingService {
             Path inputFile = jobDir.resolve("input.mp4");
             Files.createDirectories(jobDir);
             storageService.download(payload.getStorageKey(), inputFile);
+            asset.setFileSizeBytes(Files.size(inputFile));
 
             // 3. PROBING
             updateJobStatus(job, "PROBING");
