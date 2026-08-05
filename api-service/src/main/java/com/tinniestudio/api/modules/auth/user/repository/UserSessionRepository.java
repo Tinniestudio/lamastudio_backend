@@ -25,6 +25,13 @@ public interface UserSessionRepository extends JpaRepository<UserSession, UUID> 
 
     Optional<UserSession> findByUserIdAndIdAndRevokedFalse(UUID userId, UUID sessionId);
 
+    /**
+     * Lean existence check used on every authenticated request (JwtAuthenticationFilter) to
+     * confirm the session tied to an access token hasn't been revoked. Deliberately a boolean
+     * projection rather than fetching the whole entity.
+     */
+    boolean existsByUserIdAndIdAndRevokedFalse(UUID userId, UUID sessionId);
+
     @Modifying
     @Query("UPDATE UserSession s SET s.revoked = true, s.revokedAt = CURRENT_TIMESTAMP, s.revokedByAdminId = :adminId WHERE s.userId = :userId AND s.revoked = false")
     int revokeAllByUserId(@Param("userId") UUID userId, @Param("adminId") UUID adminId);

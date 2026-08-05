@@ -1,6 +1,7 @@
 package com.tinniestudio.api.shared.security.jwt;
 
 import com.tinniestudio.api.modules.auth.admin.service.AdminUserDetailsServiceImpl;
+import com.tinniestudio.api.modules.auth.user.service.SessionService;
 import com.tinniestudio.api.modules.user.service.UserDetailsServiceImpl;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
@@ -21,6 +22,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -34,6 +36,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final UserDetailsServiceImpl userDetailsService;
     private final AdminJwtTokenProvider adminJwtTokenProvider;
     private final AdminUserDetailsServiceImpl adminUserDetailsService;
+    private final SessionService sessionService;
 
     // @Lazy on UserDetailsServiceImpl/AdminUserDetailsServiceImpl breaks the circular startup
     // dependency: SecurityConfig → JwtAuthenticationFilter → *DetailsServiceImpl → *Repository.
@@ -50,11 +53,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
                                     @Lazy UserDetailsServiceImpl userDetailsService,
                                     AdminJwtTokenProvider adminJwtTokenProvider,
-                                    @Lazy AdminUserDetailsServiceImpl adminUserDetailsService) {
+                                    @Lazy AdminUserDetailsServiceImpl adminUserDetailsService,
+                                    @Lazy SessionService sessionService) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.userDetailsService = userDetailsService;
         this.adminJwtTokenProvider = adminJwtTokenProvider;
         this.adminUserDetailsService = adminUserDetailsService;
+        this.sessionService = sessionService;
     }
 
     @Override
@@ -88,11 +93,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private void authenticateAsUser(HttpServletRequest request, String token) {
         Claims claims = jwtTokenProvider.parseAccessToken(token);
         String userId = claims.getSubject();
+        String sessionId = claims.get(JwtTokenProvider.CLAIM_SESSION_ID, String.class);
+
+        // BUG FIX: the JWT signature being valid only proves the token was issued by us — it
+        // says nothing about whether the session it was minted for has since been revoked
+        // (logout on another device, password change, admin force-logout/suspend/ban). Without
+        // this check a stolen or "logged out" access token stays usable for its full remaining
+        // lifetime. Reject (fall through unauthenticated) rather than throw, consistent with the
+        // rest of this filter's fail-closed-but-quiet posture.
+        if (sessionId != null && !sessionService.isSessionActive(UUID.fromString(userId), UUID.fromString(sessionId))) {
+            log.debug("Rejecting access token for user {}: session {} is revoked or not found", userId, sessionId);
+            return;
+        }
 
         UserDetails userDetails = userDetailsService.loadUserById(userId);
         setAuthentication(request, userDetails);
 
-        String sessionId = claims.get(JwtTokenProvider.CLAIM_SESSION_ID, String.class);
         if (sessionId != null) {
             request.setAttribute("sessionId", sessionId);
         }
