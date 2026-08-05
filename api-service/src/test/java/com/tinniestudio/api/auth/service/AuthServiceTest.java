@@ -99,7 +99,7 @@ class AuthServiceTest {
         Role userRole = new Role(RoleName.ROLE_USER);
         UUID sessionId = UUID.randomUUID();
 
-        when(userRepository.existsByEmail("test@example.com")).thenReturn(false);
+        when(userRepository.existsByEmailAndDeletedAtIsNull("test@example.com")).thenReturn(false);
         when(roleRepository.findByName(RoleName.ROLE_USER)).thenReturn(Optional.of(userRole));
         when(passwordEncoder.encode("Password1!")).thenReturn("encoded");
         when(userRepository.save(any(User.class))).thenAnswer(inv -> {
@@ -122,7 +122,7 @@ class AuthServiceTest {
 
         assertThat(authResponse.getEmail()).isEqualTo("test@example.com");
         assertThat(authResponse.getRoles()).contains(RoleName.ROLE_USER.name());
-        verify(userRepository).existsByEmail("test@example.com");
+        verify(userRepository).existsByEmailAndDeletedAtIsNull("test@example.com");
         verify(passwordEncoder).encode("Password1!");
         verify(userRepository).save(any(User.class));
         verify(emailService).sendVerificationEmail(eq("test@example.com"), eq("Jane Doe"), any());
@@ -133,12 +133,12 @@ class AuthServiceTest {
     void register_duplicateEmail() {
         RegisterRequest request = new RegisterRequest();
         request.setEmail("exists@example.com");
-        when(userRepository.existsByEmail("exists@example.com")).thenReturn(true);
+        when(userRepository.existsByEmailAndDeletedAtIsNull("exists@example.com")).thenReturn(true);
 
         assertThatThrownBy(() -> authService.register(request, new MockHttpServletResponse()))
                 .isInstanceOf(EmailAlreadyExistsException.class);
 
-        verify(userRepository).existsByEmail("exists@example.com");
+        verify(userRepository).existsByEmailAndDeletedAtIsNull("exists@example.com");
         verifyNoMoreInteractions(userRepository);
     }
 
