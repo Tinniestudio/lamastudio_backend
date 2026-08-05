@@ -6,6 +6,7 @@ import com.tinniestudio.api.modules.auth.user.service.SessionService;
 import com.tinniestudio.api.modules.user.repository.UserRepository;
 import com.tinniestudio.api.shared.entity.DomainEnums.AccountStatus;
 import com.tinniestudio.api.shared.entity.User;
+import com.tinniestudio.api.shared.exception.BadRequestException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -104,6 +105,25 @@ class AdminUserServiceTest {
 
         assertThat(user.getAccountStatus()).isEqualTo(AccountStatus.ACTIVE);
         verify(sessionService, never()).revokeAllUserSessions(any(), any());
+    }
+
+    @Test
+    void updateStatus_deleted_rejectedAsBadRequest() {
+        // BUG 3: DELETED must not be settable via PATCH /admin/users/{id}/status — the only
+        // correct path for deletion is DELETE /admin/users/{id} (AdminUserServiceImpl#softDelete),
+        // which sets deletedAt AND is covered by TOKEN_REVOKE_STATUSES-equivalent handling.
+        // Setting DELETED here previously flipped accountStatus without ever setting deletedAt
+        // and without revoking sessions (DELETED was missing from TOKEN_REVOKE_STATUSES).
+        UUID userId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        UpdateUserStatusRequest req = new UpdateUserStatusRequest();
+        req.setStatus(AccountStatus.DELETED);
+
+        assertThatThrownBy(() -> adminUserService.updateStatus(userId, req, adminId))
+            .isInstanceOf(BadRequestException.class);
+
+        verifyNoInteractions(userRepo, sessionService, auditLogService);
     }
 
     @Test
