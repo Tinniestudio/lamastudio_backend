@@ -94,6 +94,23 @@ public class SessionServiceImpl implements SessionService {
         cacheService.set(sessionKey(userId, sessionId), "1", SESSION_TTL);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isSessionActive(UUID userId, UUID sessionId) {
+        // Fast path: cache hit means the session was active as of its last create/validate/restore.
+        if (cacheService.exists(sessionKey(userId, sessionId))) {
+            return true;
+        }
+        // Cache miss could mean revoked OR merely evicted (e.g. Redis memory pressure) — fall
+        // back to the lean DB existence check and restore the cache entry so we don't hit the
+        // DB again on every subsequent request within the session TTL.
+        boolean active = userSessionRepository.existsByUserIdAndIdAndRevokedFalse(userId, sessionId);
+        if (active) {
+            cacheService.set(sessionKey(userId, sessionId), "1", SESSION_TTL);
+        }
+        return active;
+    }
+
     // ── Revoke ────────────────────────────────────────────────────────────────
 
     @Override

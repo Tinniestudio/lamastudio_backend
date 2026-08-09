@@ -72,7 +72,7 @@ public class AuthService {
         if (request == null) throw new BadRequestException("Request body is required");
 
         String email = normalizeEmail(request.getEmail());
-        if (userRepository.existsByEmail(email)) {
+        if (userRepository.existsByEmailAndDeletedAtIsNull(email)) {
             throw new EmailAlreadyExistsException("Email address is already registered");
         }
 

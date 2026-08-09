@@ -62,15 +62,30 @@ class UserRepositoryTest {
     }
 
     @Test
-    @DisplayName("existsByEmail returns true when email exists")
-    void existsByEmail() {
+    @DisplayName("existsByEmailAndDeletedAtIsNull returns true when email exists and is not deleted")
+    void existsByEmailAndDeletedAtIsNull() {
         User user = new User();
         user.setEmail("exists@example.com");
         user.setProvider(AuthProvider.LOCAL);
         entityManager.persistAndFlush(user);
 
-        assertThat(userRepository.existsByEmail("exists@example.com")).isTrue();
-        assertThat(userRepository.existsByEmail("missing@example.com")).isFalse();
+        assertThat(userRepository.existsByEmailAndDeletedAtIsNull("exists@example.com")).isTrue();
+        assertThat(userRepository.existsByEmailAndDeletedAtIsNull("missing@example.com")).isFalse();
+    }
+
+    @Test
+    @DisplayName("BUG 2: existsByEmailAndDeletedAtIsNull returns false for a soft-deleted user, allowing re-registration")
+    void existsByEmailAndDeletedAtIsNull_excludesSoftDeletedUser() {
+        User user = new User();
+        user.setEmail("deleted@example.com");
+        user.setProvider(AuthProvider.LOCAL);
+        user.softDelete();
+        entityManager.persistAndFlush(user);
+
+        assertThat(userRepository.existsByEmailAndDeletedAtIsNull("deleted@example.com")).isFalse();
+        // findByEmail is intentionally left unscoped: login/resend-verification/forgot-password
+        // still need to fetch the soft-deleted user to explicitly reject them.
+        assertThat(userRepository.findByEmail("deleted@example.com")).isPresent();
     }
 
     @Test
