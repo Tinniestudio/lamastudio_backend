@@ -14,4 +14,9 @@ public class StorageProperties {
     private String region = "us-east-1";
     private String accessKey;
     private String secretKey;
+    // MinIO (and most S3-compatible providers) require path-style bucket
+    // addressing; real AWS S3 generally prefers virtual-hosted style and has
+    // deprecated path-style for many bucket/region combos. Default true for
+    // local/MinIO dev, override to false via STORAGE_PATH_STYLE_ACCESS in prod.
+    private boolean pathStyleAccess = true;
 }

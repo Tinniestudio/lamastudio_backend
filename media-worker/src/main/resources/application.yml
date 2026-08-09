@@ -43,6 +43,7 @@ worker:
     path: /usr/local/bin/ffmpeg
     ffprobe-path: /usr/local/bin/ffprobe
     hls-segment-duration: 6
+    timeout-seconds: ${FFMPEG_TIMEOUT_SECONDS:1800}
 
 app:
   storage:
@@ -50,6 +51,9 @@ app:
     bucket: ${STORAGE_BUCKET:tinniestudio}
     region: ${STORAGE_REGION:us-east-1}
     access-key: ${AWS_ACCESS_KEY_ID:minioadmin}
+    # MinIO requires path-style URLs; real AWS S3 generally does not want this.
+    # Override to false via env var when pointing at production S3.
+    path-style-access: ${STORAGE_PATH_STYLE_ACCESS:true}
     secret-key: ${AWS_SECRET_ACCESS_KEY:minioadmin}
 
 logging:
