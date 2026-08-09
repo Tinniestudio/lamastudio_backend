@@ -1,6 +1,8 @@
 package com.tinniestudio.api.modules.analytics.controller;
 
+import com.tinniestudio.api.modules.analytics.dto.AdminRevenueAnalyticsResponse;
 import com.tinniestudio.api.modules.analytics.dto.AnalyticsSummaryResponse;
+import com.tinniestudio.api.modules.analytics.dto.WeeklyAnalyticsSummaryResponse;
 import com.tinniestudio.api.modules.analytics.service.AnalyticsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -78,5 +80,52 @@ public class AnalyticsController {
         AnalyticsSummaryResponse data =
                 analyticsService.getPartnerAnalytics(userId, effectiveFrom, effectiveTo);
         return ResponseEntity.ok(data);
+    }
+
+    @Operation(summary = "Get weekly (Mon-Sun) analytics for a content item")
+    @GetMapping("/contents/{id}/weekly")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('PARTNER')")
+    public ResponseEntity<WeeklyAnalyticsSummaryResponse> getContentAnalyticsWeekly(
+            @PathVariable UUID id,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @AuthenticationPrincipal UserDetails principal) {
+
+        LocalDate effectiveFrom = from != null ? from : LocalDate.now().minusWeeks(12);
+        LocalDate effectiveTo = to != null ? to : LocalDate.now();
+        UUID userId = UUID.fromString(principal.getUsername());
+        boolean isAdmin = principal.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+        return ResponseEntity.ok(
+                analyticsService.getContentAnalyticsWeekly(id, effectiveFrom, effectiveTo, userId, isAdmin));
+    }
+
+    @Operation(summary = "Get partner's own weekly (Mon-Sun) analytics across all content")
+    @GetMapping("/partners/me/weekly")
+    @PreAuthorize("hasRole('PARTNER') or hasRole('ADMIN')")
+    public ResponseEntity<WeeklyAnalyticsSummaryResponse> getPartnerAnalyticsWeekly(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @AuthenticationPrincipal UserDetails principal) {
+
+        LocalDate effectiveFrom = from != null ? from : LocalDate.now().minusWeeks(12);
+        LocalDate effectiveTo = to != null ? to : LocalDate.now();
+        UUID userId = UUID.fromString(principal.getUsername());
+
+        return ResponseEntity.ok(analyticsService.getPartnerAnalyticsWeekly(userId, effectiveFrom, effectiveTo));
+    }
+
+    @Operation(summary = "Get platform-wide revenue analytics (strictly admin-only, Batch 13 #5/#6)")
+    @GetMapping("/admin/revenue")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<AdminRevenueAnalyticsResponse> getAdminRevenueAnalytics(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+
+        LocalDate effectiveFrom = from != null ? from : LocalDate.now().minusDays(30);
+        LocalDate effectiveTo = to != null ? to : LocalDate.now();
+
+        return ResponseEntity.ok(analyticsService.getAdminRevenueAnalytics(effectiveFrom, effectiveTo));
     }
 }

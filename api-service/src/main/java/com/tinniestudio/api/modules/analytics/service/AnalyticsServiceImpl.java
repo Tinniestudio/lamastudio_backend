@@ -1,9 +1,15 @@
 package com.tinniestudio.api.modules.analytics.service;
 
+import com.tinniestudio.api.modules.analytics.dto.AdminRevenueAnalyticsResponse;
 import com.tinniestudio.api.modules.analytics.dto.AnalyticsSummaryResponse;
 import com.tinniestudio.api.modules.analytics.dto.ContentAnalyticsDailyDto;
+import com.tinniestudio.api.modules.analytics.dto.ContentAnalyticsWeeklyDto;
+import com.tinniestudio.api.modules.analytics.dto.WeeklyAnalyticsSummaryResponse;
 import com.tinniestudio.api.modules.analytics.entity.ContentAnalyticsDaily;
+import com.tinniestudio.api.modules.analytics.entity.ContentAnalyticsWeekly;
 import com.tinniestudio.api.modules.analytics.repository.ContentAnalyticsDailyRepository;
+import com.tinniestudio.api.modules.analytics.repository.ContentAnalyticsWeeklyRepository;
+import com.tinniestudio.api.modules.billing.repository.PaymentRepository;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
@@ -13,7 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,7 +30,9 @@ import java.util.UUID;
 public class AnalyticsServiceImpl implements AnalyticsService {
 
     private final ContentAnalyticsDailyRepository dailyRepo;
+    private final ContentAnalyticsWeeklyRepository weeklyRepo;
     private final ContentRepository contentRepo;
+    private final PaymentRepository paymentRepo;
 
     @Override
     @Transactional(readOnly = true)
@@ -83,6 +93,59 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     }
 
     // -----------------------------------------------------------------------
+    // Gap 1 — admin-only revenue (Batch 16 #4, Batch 13 #5/#6)
+    // -----------------------------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminRevenueAnalyticsResponse getAdminRevenueAnalytics(LocalDate from, LocalDate to) {
+        Instant fromInstant = from.atStartOfDay(ZoneOffset.UTC).toInstant();
+        // 'to' is exclusive-upper-bound at the start of the day AFTER `to`, so the
+        // range is inclusive of the entire `to` calendar day.
+        Instant toInstant = to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+
+        BigDecimal totalRevenue = paymentRepo.sumAmountBetween(fromInstant, toInstant);
+        if (totalRevenue == null) totalRevenue = BigDecimal.ZERO;
+        long count = paymentRepo.countSuccessfulBetween(fromInstant, toInstant);
+
+        return new AdminRevenueAnalyticsResponse(from, to, totalRevenue, count);
+    }
+
+    // -----------------------------------------------------------------------
+    // Gap 2 — weekly (Mon-Sun) rollup (Batch 16 #6)
+    // -----------------------------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public WeeklyAnalyticsSummaryResponse getContentAnalyticsWeekly(UUID contentId, LocalDate from, LocalDate to,
+                                                                     UUID requesterId, boolean isAdmin) {
+        Content content = contentRepo.findById(contentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Content not found: " + contentId));
+        if (!isAdmin && !content.getCreatedBy().equals(requesterId)) {
+            throw new ResourceNotFoundException("Content not found: " + contentId);
+        }
+        List<ContentAnalyticsWeekly> rows =
+                weeklyRepo.findByContentIdAndWeekStartDateBetweenOrderByWeekStartDateAsc(contentId, from, to);
+        return toWeeklySummary(rows);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public WeeklyAnalyticsSummaryResponse getPartnerAnalyticsWeekly(UUID partnerId, LocalDate from, LocalDate to) {
+        List<Content> contents = contentRepo.findByCreatedBy(partnerId);
+        if (contents.isEmpty()) {
+            return toWeeklySummary(List.of());
+        }
+        List<ContentAnalyticsWeekly> rows = contents.stream()
+                .map(Content::getId)
+                .flatMap(id -> weeklyRepo
+                        .findByContentIdAndWeekStartDateBetweenOrderByWeekStartDateAsc(id, from, to)
+                        .stream())
+                .toList();
+        return toWeeklySummary(rows);
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 
@@ -113,6 +176,35 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                 .toList();
 
         return new AnalyticsSummaryResponse(totalViews, totalCompletions, totalUniqueViewers, avgWatch, daily);
+    }
+
+    private WeeklyAnalyticsSummaryResponse toWeeklySummary(List<ContentAnalyticsWeekly> rows) {
+        long totalViews = rows.stream()
+                .mapToLong(r -> r.getViews() != null ? r.getViews() : 0L)
+                .sum();
+        long totalCompletions = rows.stream()
+                .mapToLong(r -> r.getCompletions() != null ? r.getCompletions() : 0L)
+                .sum();
+        long totalUniqueViewers = rows.stream()
+                .mapToLong(r -> r.getUniqueViewers() != null ? r.getUniqueViewers() : 0L)
+                .sum();
+
+        BigDecimal avgWatch;
+        if (rows.isEmpty()) {
+            avgWatch = BigDecimal.ZERO;
+        } else {
+            long totalWatch = rows.stream()
+                    .mapToLong(r -> r.getWatchTimeSeconds() != null ? r.getWatchTimeSeconds() : 0L)
+                    .sum();
+            avgWatch = BigDecimal.valueOf(totalWatch)
+                    .divide(BigDecimal.valueOf(rows.size()), 2, RoundingMode.HALF_UP);
+        }
+
+        List<ContentAnalyticsWeeklyDto> weekly = rows.stream()
+                .map(ContentAnalyticsWeeklyDto::from)
+                .toList();
+
+        return new WeeklyAnalyticsSummaryResponse(totalViews, totalCompletions, totalUniqueViewers, avgWatch, weekly);
     }
 
     private String toCsv(List<ContentAnalyticsDaily> rows) {

@@ -13,6 +13,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -47,5 +49,17 @@ public class ContentController {
     @GetMapping("/id/{id}")
     public ResponseEntity<ContentResponse> getById(@PathVariable UUID id) {
         return ResponseEntity.ok(contentService.getById(id));
+    }
+
+    @Operation(summary = "Record a view event for content — public, works for anonymous viewers " +
+            "(Batch 16 #7: anonymous views are tracked with userId=null)")
+    @RateLimit(maxRequests = 30, windowMinutes = 1, keyStrategy = "USER_OR_IP")
+    @PostMapping("/id/{id}/view")
+    public ResponseEntity<Void> recordView(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserDetails principal) {
+        UUID userId = principal != null ? UUID.fromString(principal.getUsername()) : null;
+        contentService.recordView(id, userId);
+        return ResponseEntity.accepted().build();
     }
 }

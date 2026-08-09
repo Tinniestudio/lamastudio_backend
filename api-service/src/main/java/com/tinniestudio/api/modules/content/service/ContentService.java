@@ -11,7 +11,10 @@ import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
+import com.tinniestudio.api.shared.queue.RabbitConfig;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -25,14 +28,17 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ContentService {
 
     private final ContentRepository contentRepository;
     private final CategoryRepository categoryRepository;
+    private final RabbitTemplate rabbitTemplate;
 
     @Transactional(readOnly = true)
     public Page<ContentSummaryResponse> list(
@@ -74,6 +80,31 @@ public class ContentService {
      */
     public boolean isPubliclyVisible(Content content) {
         return content.getStatus() == ContentStatus.PUBLISHED;
+    }
+
+    /**
+     * Records a view event for a content item, published to the same analytics.ingest
+     * queue consumed by AnalyticsConsumer/AnalyticsEventProcessor. Unlike playback manifest
+     * generation (which requires auth for subscription/capability checks), this is a
+     * lightweight, genuinely public "beacon" endpoint — {@code userId} is null for
+     * unauthenticated callers, which is by design (Batch 16 #7: anonymous views are
+     * tracked with userId=null for better analysis). Best-effort: publish failures never
+     * fail the request.
+     */
+    @Transactional(readOnly = true)
+    public void recordView(UUID id, UUID userId) {
+        Content content = contentRepository.findById(id)
+            .filter(this::isPubliclyVisible)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + id));
+        try {
+            rabbitTemplate.convertAndSend(RabbitConfig.QUEUE_ANALYTICS_INGEST, Map.of(
+                "type", "VIEW_EVENT",
+                "userId", userId != null ? userId.toString() : "",
+                "contentId", content.getId().toString()
+            ));
+        } catch (Exception e) {
+            log.warn("Analytics VIEW_EVENT publish failed (non-critical): {}", e.getMessage());
+        }
     }
 
     @Transactional

@@ -28,4 +28,12 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
 
     @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.createdAt >= :after AND p.status = 'SUCCESSFUL'")
     BigDecimal sumAmountAfter(@Param("after") Instant after);
+
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p " +
+           "WHERE p.createdAt >= :from AND p.createdAt < :to AND p.status = 'SUCCESSFUL'")
+    BigDecimal sumAmountBetween(@Param("from") Instant from, @Param("to") Instant to);
+
+    @Query("SELECT COUNT(p) FROM Payment p " +
+           "WHERE p.createdAt >= :from AND p.createdAt < :to AND p.status = 'SUCCESSFUL'")
+    long countSuccessfulBetween(@Param("from") Instant from, @Param("to") Instant to);
 }
