@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -28,6 +29,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,6 +44,7 @@ class ContentServiceTest {
 
     @Mock private ContentRepository contentRepository;
     @Mock private CategoryRepository categoryRepository;
+    @Mock private RabbitTemplate rabbitTemplate;
 
     @InjectMocks private ContentService contentService;
 
@@ -369,6 +372,67 @@ class ContentServiceTest {
             ContentResponse result = contentService.toggleFeatured(contentId);
 
             assertThat(result.featured()).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("recordView() — Gap 3 (Batch 16 #7): anonymous view tracking")
+    class RecordViewTests {
+
+        @Test
+        @DisplayName("publishes a VIEW_EVENT with userId=null for an unauthenticated (anonymous) caller")
+        void anonymousCaller_publishesViewEventWithNullUserId() {
+            content.setStatus(ContentStatus.PUBLISHED);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+
+            contentService.recordView(contentId, null);
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+            verify(rabbitTemplate).convertAndSend(eq("analytics.ingest"), captor.capture());
+
+            Map<String, Object> message = captor.getValue();
+            assertThat(message.get("type")).isEqualTo("VIEW_EVENT");
+            assertThat(message.get("userId")).isEqualTo("");
+            assertThat(message.get("contentId")).isEqualTo(contentId.toString());
+        }
+
+        @Test
+        @DisplayName("publishes a VIEW_EVENT with the real userId for an authenticated caller")
+        void authenticatedCaller_publishesViewEventWithRealUserId() {
+            content.setStatus(ContentStatus.PUBLISHED);
+            UUID userId = UUID.randomUUID();
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+
+            contentService.recordView(contentId, userId);
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+            verify(rabbitTemplate).convertAndSend(eq("analytics.ingest"), captor.capture());
+            assertThat(captor.getValue().get("userId")).isEqualTo(userId.toString());
+        }
+
+        @Test
+        @DisplayName("throws 404 for unpublished content (no view recorded, no publish attempted)")
+        void unpublishedContent_throws404_doesNotPublish() {
+            content.setStatus(ContentStatus.DRAFT);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+
+            assertThatThrownBy(() -> contentService.recordView(contentId, null))
+                    .isInstanceOf(ResponseStatusException.class);
+
+            verifyNoInteractions(rabbitTemplate);
+        }
+
+        @Test
+        @DisplayName("does not propagate an exception when the broker publish fails (best-effort)")
+        void publishFailure_isSwallowed() {
+            content.setStatus(ContentStatus.PUBLISHED);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+            doThrow(new RuntimeException("broker down")).when(rabbitTemplate).convertAndSend(anyString(), any(Map.class));
+
+            // Should not throw despite the broker failure.
+            contentService.recordView(contentId, null);
         }
     }
 }
