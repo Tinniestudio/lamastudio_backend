@@ -4,6 +4,7 @@ import com.tinniestudio.api.modules.reviews.dto.CreateReviewRequest;
 import com.tinniestudio.api.modules.reviews.dto.ReviewResponse;
 import com.tinniestudio.api.modules.reviews.dto.UpdateReviewRequest;
 import com.tinniestudio.api.modules.reviews.service.ReviewService;
+import com.tinniestudio.api.shared.ratelimit.RateLimit;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -36,6 +37,7 @@ public class ReviewController {
     }
 
     @Operation(summary = "Create a review for a content item")
+    @RateLimit(maxRequests = 10, windowMinutes = 60, keyStrategy = "USER_OR_IP")
     @PostMapping("/contents/{contentId}/reviews")
     public ResponseEntity<ReviewResponse> create(
             @AuthenticationPrincipal UserDetails principal,
