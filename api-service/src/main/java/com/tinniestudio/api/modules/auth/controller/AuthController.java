@@ -50,6 +50,7 @@ public class AuthController {
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class),
                 examples = @ExampleObject(value = "{\"status\":409,\"error\":\"Conflict\",\"message\":\"Email address is already registered\",\"path\":\"/api/v1/auth/register\",\"timestamp\":\"2024-11-01T12:00:00Z\"}")))
     })
+    @RateLimit(maxRequests = 5, windowMinutes = 15, keyStrategy = "IP_ONLY")
     @PostMapping("/register")
     @SecurityRequirements({})
     public ResponseEntity<AuthProfileResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletResponse response) {
@@ -186,6 +187,7 @@ public class AuthController {
                 examples = @ExampleObject(value = "{\"status\":400,\"error\":\"Bad Request\",\"message\":\"Password reset token has expired\",\"path\":\"/api/v1/auth/reset-password\",\"timestamp\":\"2024-11-01T12:00:00Z\"}")))
     })
     @SecurityRequirements({})
+    @RateLimit(maxRequests = 5, windowMinutes = 15, keyStrategy = "IP_ONLY")
     @PatchMapping("/reset-password")
     public ResponseEntity<Map<String, String>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
