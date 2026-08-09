@@ -22,13 +22,14 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 
 /**
@@ -99,7 +100,15 @@ class VideoProcessingServiceTransactionBoundaryTest {
         payload.setVideoAssetId(assetId);
         payload.setStorageKey(asset.getRawStorageKey());
 
-        doNothing().when(storageService).download(anyString(), any(Path.class));
+        // download() must actually create a file — process() reads its size (Files.size) for
+        // byte-tracking immediately afterwards, before ever reaching ffprobe. A no-op mock would
+        // make the pipeline fail at the size-check instead of at the intended ffprobe step.
+        doAnswer(invocation -> {
+            Path target = invocation.getArgument(1);
+            Files.createDirectories(target.getParent());
+            Files.write(target, new byte[]{1, 2, 3, 4});
+            return null;
+        }).when(storageService).download(anyString(), any(Path.class));
         when(ffprobeRunner.probe(anyString()))
             .thenThrow(new RuntimeException("ffprobe crashed mid-pipeline"));
 
