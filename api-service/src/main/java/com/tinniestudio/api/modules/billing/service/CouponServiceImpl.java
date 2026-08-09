@@ -62,11 +62,17 @@ public class CouponServiceImpl implements CouponService {
     @Override
     @Transactional
     public void redeemCoupon(UUID couponId, UUID userId, UUID subscriptionId) {
-        Coupon coupon = couponRepository.findById(couponId)
-                .orElseThrow(() -> new ResourceNotFoundException("Coupon not found"));
+        if (!couponRepository.findById(couponId).isPresent()) {
+            throw new ResourceNotFoundException("Coupon not found");
+        }
 
-        coupon.setUsesCount(coupon.getUsesCount() + 1);
-        couponRepository.save(coupon);
+        // Atomic conditional UPDATE instead of read-check-in-Java-then-save: this prevents
+        // the lost-update race where two concurrent redemptions could both pass the
+        // uses_count < max_uses check before either commit, over-redeeming a capped coupon.
+        int rowsAffected = couponRepository.incrementUsesCountIfUnderLimit(couponId);
+        if (rowsAffected == 0) {
+            throw new BadRequestException("Coupon usage limit has been reached");
+        }
 
         CouponRedemption redemption = new CouponRedemption();
         redemption.setCouponId(couponId);
