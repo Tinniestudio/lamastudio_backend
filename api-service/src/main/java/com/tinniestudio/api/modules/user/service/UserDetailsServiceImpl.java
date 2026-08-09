@@ -1,6 +1,7 @@
 package com.tinniestudio.api.modules.user.service;
 
 import com.tinniestudio.api.modules.user.repository.UserRepository;
+import com.tinniestudio.api.shared.entity.DomainEnums.AccountStatus;
 import com.tinniestudio.api.shared.entity.User;
 import com.tinniestudio.api.shared.exception.AccountNotActiveException;
 
@@ -41,6 +42,27 @@ public class UserDetailsServiceImpl implements UserDetailsService {
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + id));
 
         validateAccountActive(user);
+
+        return buildUserDetails(user);
+    }
+
+    /**
+     * Used ONLY by JwtAuthenticationFilter when the request path is the appeal-submission
+     * endpoint (POST /appeals). A SUSPENDED account otherwise cannot authenticate at all — see
+     * validateAccountActive()/loadUserById() — but suspension appeals exist specifically to
+     * recover from suspension, so that one endpoint must remain reachable. BAN and DELETED
+     * accounts are still rejected here: BAN must "block user from total access" (Batch 14 #2),
+     * and DELETED has no path back.
+     */
+    @Transactional(readOnly = true)
+    public UserDetails loadSuspendedUserById(String id) {
+        UUID uuid = UUID.fromString(id);
+        User user = userRepository.findById(uuid)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + id));
+
+        if (user.getAccountStatus() != AccountStatus.SUSPENDED) {
+            throw new AccountNotActiveException("Account is " + user.getAccountStatus().name().toLowerCase());
+        }
 
         return buildUserDetails(user);
     }

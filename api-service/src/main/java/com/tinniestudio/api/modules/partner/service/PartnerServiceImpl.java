@@ -2,6 +2,7 @@ package com.tinniestudio.api.modules.partner.service;
 
 import com.tinniestudio.api.modules.admin.dto.AuditLogResponse;
 import com.tinniestudio.api.modules.admin.repository.AuditLogRepository;
+import com.tinniestudio.api.modules.admin.service.AuditLogService;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.partner.dto.*;
 import com.tinniestudio.api.modules.partner.repository.PartnerProfileRepository;
@@ -34,6 +35,7 @@ public class PartnerServiceImpl implements PartnerService {
     private final AuditLogRepository auditLogRepo;
     private final StorageService storageService;
     private final UploadSessionRepository uploadSessionRepo;
+    private final AuditLogService auditLogService;
 
     private PartnerProfile requireProfile(UUID userId) {
         return profileRepo.findByUserId(userId)
@@ -91,5 +93,16 @@ public class PartnerServiceImpl implements PartnerService {
     public Page<PartnerUploadSummaryResponse> getUploads(UUID userId, Pageable pageable) {
         return uploadSessionRepo.findByUserIdOrderByCreatedAtDesc(userId, pageable)
             .map(PartnerUploadSummaryResponse::from);
+    }
+
+    @Override
+    @Transactional
+    public PartnerProfileResponse adminUpdateProfile(UUID userId, AdminUpdatePartnerProfileRequest req, UUID adminId) {
+        PartnerProfile profile = requireProfile(userId);
+        if (req.getIsVerified() != null) profile.setIsVerified(req.getIsVerified());
+        if (req.getRevenueSharePercentage() != null) profile.setRevenueSharePercentage(req.getRevenueSharePercentage());
+        PartnerProfileResponse response = PartnerProfileResponse.from(profileRepo.save(profile));
+        auditLogService.log("PARTNER_PROFILE_UPDATED_BY_ADMIN", adminId, "PARTNER_PROFILE", userId, null, null);
+        return response;
     }
 }

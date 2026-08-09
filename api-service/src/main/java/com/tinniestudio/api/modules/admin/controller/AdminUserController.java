@@ -1,9 +1,11 @@
 package com.tinniestudio.api.modules.admin.controller;
 
 import com.tinniestudio.api.modules.admin.dto.AdminUserResponse;
+import com.tinniestudio.api.modules.admin.dto.PromoteToPartnerRequest;
 import com.tinniestudio.api.modules.admin.dto.UpdateUserRequest;
 import com.tinniestudio.api.modules.admin.dto.UpdateUserStatusRequest;
 import com.tinniestudio.api.modules.admin.service.AdminUserService;
+import com.tinniestudio.api.modules.partner.dto.PartnerProfileResponse;
 import com.tinniestudio.api.shared.entity.DomainEnums.AccountStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -69,5 +71,16 @@ public class AdminUserController {
             @AuthenticationPrincipal UserDetails principal) {
         adminUserService.softDelete(id, UUID.fromString(principal.getUsername()));
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Directly promote a user to partner (no application required)")
+    @PostMapping("/{id}/promote-to-partner")
+    public ResponseEntity<PartnerProfileResponse> promoteToPartner(
+            @PathVariable UUID id,
+            @Valid @RequestBody(required = false) PromoteToPartnerRequest req,
+            @AuthenticationPrincipal UserDetails principal) {
+        return ResponseEntity.ok(
+            adminUserService.promoteToPartner(id, req, UUID.fromString(principal.getUsername()))
+        );
     }
 }

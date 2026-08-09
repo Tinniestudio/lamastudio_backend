@@ -2,9 +2,11 @@ package com.tinniestudio.api.modules.admin.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tinniestudio.api.modules.admin.dto.AdminUserResponse;
+import com.tinniestudio.api.modules.admin.dto.PromoteToPartnerRequest;
 import com.tinniestudio.api.modules.admin.dto.UpdateUserRequest;
 import com.tinniestudio.api.modules.admin.dto.UpdateUserStatusRequest;
 import com.tinniestudio.api.modules.admin.service.AdminUserService;
+import com.tinniestudio.api.modules.partner.dto.PartnerProfileResponse;
 import com.tinniestudio.api.modules.user.service.UserDetailsServiceImpl;
 import com.tinniestudio.api.shared.entity.DomainEnums.AccountStatus;
 import com.tinniestudio.api.shared.security.jwt.JwtAuthenticationFilter;
@@ -20,6 +22,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -55,6 +58,10 @@ class AdminUserControllerTest {
 
     private MockHttpServletRequestBuilder deleteWithContext(String path) {
         return delete(CONTEXT_PATH + path).contextPath(CONTEXT_PATH);
+    }
+
+    private MockHttpServletRequestBuilder postWithContext(String path) {
+        return post(CONTEXT_PATH + path).contextPath(CONTEXT_PATH);
     }
 
     private AdminUserResponse sampleUser(UUID id) {
@@ -123,5 +130,24 @@ class AdminUserControllerTest {
 
         mockMvc.perform(deleteWithContext("/admin/users/" + id))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @WithMockUser(username = ADMIN_ID, roles = "ADMIN")
+    void promoteToPartner_returns200() throws Exception {
+        UUID id = UUID.randomUUID();
+        PromoteToPartnerRequest req = new PromoteToPartnerRequest();
+        req.setCompanyName("Acme Corp");
+
+        PartnerProfileResponse profile = new PartnerProfileResponse(
+            UUID.randomUUID(), id, "Acme Corp", null, null, null, BigDecimal.valueOf(70), true
+        );
+        when(adminUserService.promoteToPartner(eq(id), any(), any())).thenReturn(profile);
+
+        mockMvc.perform(postWithContext("/admin/users/" + id + "/promote-to-partner")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.companyName").value("Acme Corp"));
     }
 }

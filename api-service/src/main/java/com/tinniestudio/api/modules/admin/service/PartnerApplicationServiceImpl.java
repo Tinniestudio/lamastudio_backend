@@ -4,9 +4,7 @@ import com.tinniestudio.api.modules.admin.dto.PartnerApplicationResponse;
 import com.tinniestudio.api.modules.admin.dto.RejectApplicationRequest;
 import com.tinniestudio.api.modules.partner.dto.PartnerApplicationRequest;
 import com.tinniestudio.api.modules.partner.repository.PartnerApplicationRepository;
-import com.tinniestudio.api.modules.partner.repository.PartnerProfileRepository;
-import com.tinniestudio.api.modules.role.repository.RoleRepository;
-import com.tinniestudio.api.modules.user.repository.UserRepository;
+import com.tinniestudio.api.modules.partner.service.PartnerPromotionService;
 import com.tinniestudio.api.shared.entity.*;
 import com.tinniestudio.api.shared.entity.DomainEnums.PartnerApplicationStatus;
 import com.tinniestudio.api.shared.exception.BadRequestException;
@@ -24,9 +22,7 @@ import java.util.UUID;
 public class PartnerApplicationServiceImpl implements PartnerApplicationService {
 
     private final PartnerApplicationRepository applicationRepo;
-    private final PartnerProfileRepository profileRepo;
-    private final UserRepository userRepo;
-    private final RoleRepository roleRepo;
+    private final PartnerPromotionService partnerPromotionService;
     private final AuditLogService auditLogService;
 
     @Override
@@ -66,20 +62,7 @@ public class PartnerApplicationServiceImpl implements PartnerApplicationService 
         app.setReviewedAt(Instant.now());
         applicationRepo.save(app);
 
-        User user = userRepo.findById(app.getUserId())
-            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        Role partnerRole = roleRepo.findByName(RoleName.ROLE_PARTNER)
-            .orElseThrow(() -> new ResourceNotFoundException("ROLE_PARTNER not found"));
-        user.addRole(partnerRole);
-        userRepo.save(user);
-
-        if (!profileRepo.existsByUserId(app.getUserId())) {
-            PartnerProfile profile = new PartnerProfile();
-            profile.setUserId(app.getUserId());
-            profile.setCompanyName(app.getCompanyName());
-            profile.setWebsiteUrl(app.getWebsiteUrl());
-            profileRepo.save(profile);
-        }
+        partnerPromotionService.grantPartnerRoleAndProfile(app.getUserId(), app.getCompanyName(), app.getWebsiteUrl());
 
         auditLogService.log("PARTNER_APPLICATION_APPROVED", adminId, "PARTNER_APPLICATION", applicationId, null, null);
         return PartnerApplicationResponse.from(app);

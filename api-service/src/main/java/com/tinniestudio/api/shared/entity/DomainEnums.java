@@ -149,6 +149,10 @@ public final class DomainEnums {
         PENDING, APPROVED, REJECTED
     }
 
+    public enum AppealStatus {
+        PENDING, APPROVED, REJECTED
+    }
+
     public enum NotificationEventType {
         CONTENT_PROCESSED,
         CONTENT_APPROVED,

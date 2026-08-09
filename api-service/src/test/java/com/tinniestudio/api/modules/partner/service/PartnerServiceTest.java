@@ -1,7 +1,9 @@
 package com.tinniestudio.api.modules.partner.service;
 
 import com.tinniestudio.api.modules.admin.repository.AuditLogRepository;
+import com.tinniestudio.api.modules.admin.service.AuditLogService;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
+import com.tinniestudio.api.modules.partner.dto.AdminUpdatePartnerProfileRequest;
 import com.tinniestudio.api.modules.partner.dto.PartnerDashboardResponse;
 import com.tinniestudio.api.modules.partner.dto.PartnerProfileResponse;
 import com.tinniestudio.api.modules.partner.dto.UpdatePartnerProfileRequest;
@@ -41,6 +43,7 @@ class PartnerServiceTest {
     @Mock AuditLogRepository auditLogRepo;
     @Mock StorageService storageService;
     @Mock UploadSessionRepository uploadSessionRepo;
+    @Mock AuditLogService auditLogService;
     @InjectMocks PartnerServiceImpl partnerService;
 
     private PartnerProfile makeProfile(UUID userId) {
@@ -122,5 +125,55 @@ class PartnerServiceTest {
         assertThat(result.contentInReview()).isEqualTo(2L);
         assertThat(result.activeUploads()).isEqualTo(1L);
         assertThat(result.totalViewCount()).isEqualTo(1000L);
+    }
+
+    @Test
+    void adminUpdateProfile_unverifiesPartnerAndLogsAudit() {
+        UUID userId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        PartnerProfile profile = makeProfile(userId);
+        when(profileRepo.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(profileRepo.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        AdminUpdatePartnerProfileRequest req = new AdminUpdatePartnerProfileRequest();
+        req.setIsVerified(false);
+
+        PartnerProfileResponse result = partnerService.adminUpdateProfile(userId, req, adminId);
+
+        assertThat(result.isVerified()).isFalse();
+        assertThat(profile.getIsVerified()).isFalse();
+        verify(auditLogService).log(
+            eq("PARTNER_PROFILE_UPDATED_BY_ADMIN"), eq(adminId),
+            eq("PARTNER_PROFILE"), eq(userId), isNull(), isNull()
+        );
+    }
+
+    @Test
+    void adminUpdateProfile_updatesRevenueShareOnly() {
+        UUID userId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        PartnerProfile profile = makeProfile(userId);
+        when(profileRepo.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(profileRepo.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        AdminUpdatePartnerProfileRequest req = new AdminUpdatePartnerProfileRequest();
+        req.setRevenueSharePercentage(BigDecimal.valueOf(55));
+
+        PartnerProfileResponse result = partnerService.adminUpdateProfile(userId, req, adminId);
+
+        assertThat(result.revenueSharePercentage()).isEqualByComparingTo(BigDecimal.valueOf(55));
+        assertThat(profile.getIsVerified()).isTrue(); // unchanged
+    }
+
+    @Test
+    void adminUpdateProfile_notFound_throwsResourceNotFound() {
+        UUID userId = UUID.randomUUID();
+        when(profileRepo.findByUserId(userId)).thenReturn(Optional.empty());
+
+        AdminUpdatePartnerProfileRequest req = new AdminUpdatePartnerProfileRequest();
+        req.setIsVerified(false);
+
+        assertThatThrownBy(() -> partnerService.adminUpdateProfile(userId, req, UUID.randomUUID()))
+            .isInstanceOf(ResourceNotFoundException.class);
     }
 }

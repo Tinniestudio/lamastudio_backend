@@ -3,6 +3,7 @@ package com.tinniestudio.api.shared.security.jwt;
 import com.tinniestudio.api.modules.auth.admin.service.AdminUserDetailsServiceImpl;
 import com.tinniestudio.api.modules.auth.user.service.SessionService;
 import com.tinniestudio.api.modules.user.service.UserDetailsServiceImpl;
+import com.tinniestudio.api.shared.exception.AccountNotActiveException;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -106,12 +107,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        UserDetails userDetails = userDetailsService.loadUserById(userId);
+        UserDetails userDetails;
+        try {
+            userDetails = userDetailsService.loadUserById(userId);
+        } catch (AccountNotActiveException ex) {
+            // A SUSPENDED account otherwise fails to authenticate against ANY endpoint (see
+            // UserDetailsServiceImpl.validateAccountActive) — except this one path, which exists
+            // specifically so a suspended user can submit an appeal. loadSuspendedUserById()
+            // still rejects BAN/DELETED, so this narrows the relaxation to SUSPENDED only, and
+            // isAppealSubmissionPath() narrows it to this one endpoint only.
+            if (!isAppealSubmissionPath(request)) {
+                throw ex;
+            }
+            userDetails = userDetailsService.loadSuspendedUserById(userId);
+        }
         setAuthentication(request, userDetails);
 
         if (sessionId != null) {
             request.setAttribute("sessionId", sessionId);
         }
+    }
+
+    private boolean isAppealSubmissionPath(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return path.equals("/appeals") || path.equals("/api/v1/appeals");
     }
 
     private void authenticateAsAdmin(HttpServletRequest request, String token) {
