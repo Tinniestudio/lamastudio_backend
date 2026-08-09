@@ -1,11 +1,15 @@
 package com.tinniestudio.api.modules.admin.service;
 
 import com.tinniestudio.api.modules.admin.dto.AdminUserResponse;
+import com.tinniestudio.api.modules.admin.dto.PromoteToPartnerRequest;
 import com.tinniestudio.api.modules.admin.dto.UpdateUserRequest;
 import com.tinniestudio.api.modules.admin.dto.UpdateUserStatusRequest;
 import com.tinniestudio.api.modules.auth.user.service.SessionService;
+import com.tinniestudio.api.modules.partner.dto.PartnerProfileResponse;
+import com.tinniestudio.api.modules.partner.service.PartnerPromotionService;
 import com.tinniestudio.api.modules.user.repository.UserRepository;
 import com.tinniestudio.api.shared.entity.DomainEnums.AccountStatus;
+import com.tinniestudio.api.shared.entity.PartnerProfile;
 import com.tinniestudio.api.shared.entity.User;
 import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +27,7 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final UserRepository userRepo;
     private final SessionService sessionService;
     private final AuditLogService auditLogService;
+    private final PartnerPromotionService partnerPromotionService;
 
     private static final EnumSet<AccountStatus> TOKEN_REVOKE_STATUSES =
         EnumSet.of(AccountStatus.SUSPENDED, AccountStatus.BAN);
@@ -76,5 +81,17 @@ public class AdminUserServiceImpl implements AdminUserService {
         user.softDelete();
         userRepo.save(user);
         auditLogService.log("USER_DELETED", adminId, "USER", userId, null, null);
+    }
+
+    @Override
+    @Transactional
+    public PartnerProfileResponse promoteToPartner(UUID userId, PromoteToPartnerRequest req, UUID adminId) {
+        PartnerProfile profile = partnerPromotionService.grantPartnerRoleAndProfile(
+            userId,
+            req != null ? req.getCompanyName() : null,
+            req != null ? req.getWebsiteUrl() : null
+        );
+        auditLogService.log("USER_PROMOTED_TO_PARTNER", adminId, "USER", userId, null, null);
+        return PartnerProfileResponse.from(profile);
     }
 }

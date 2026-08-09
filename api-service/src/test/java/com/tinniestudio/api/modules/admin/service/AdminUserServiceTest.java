@@ -1,10 +1,14 @@
 package com.tinniestudio.api.modules.admin.service;
 
 import com.tinniestudio.api.modules.admin.dto.AdminUserResponse;
+import com.tinniestudio.api.modules.admin.dto.PromoteToPartnerRequest;
 import com.tinniestudio.api.modules.admin.dto.UpdateUserStatusRequest;
 import com.tinniestudio.api.modules.auth.user.service.SessionService;
+import com.tinniestudio.api.modules.partner.dto.PartnerProfileResponse;
+import com.tinniestudio.api.modules.partner.service.PartnerPromotionService;
 import com.tinniestudio.api.modules.user.repository.UserRepository;
 import com.tinniestudio.api.shared.entity.DomainEnums.AccountStatus;
+import com.tinniestudio.api.shared.entity.PartnerProfile;
 import com.tinniestudio.api.shared.entity.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +34,7 @@ class AdminUserServiceTest {
     @Mock UserRepository userRepo;
     @Mock SessionService sessionService;
     @Mock AuditLogService auditLogService;
+    @Mock PartnerPromotionService partnerPromotionService;
     @InjectMocks AdminUserServiceImpl adminUserService;
 
     private User makeUser(UUID id, AccountStatus status) {
@@ -128,5 +133,42 @@ class AdminUserServiceTest {
 
         assertThatThrownBy(() -> adminUserService.getById(userId))
             .isInstanceOf(RuntimeException.class);
+    }
+
+    @Test
+    void promoteToPartner_delegatesToPromotionServiceAndLogsAudit() {
+        UUID userId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        PartnerProfile profile = new PartnerProfile();
+        profile.setUserId(userId);
+        profile.setCompanyName("Acme");
+
+        when(partnerPromotionService.grantPartnerRoleAndProfile(userId, "Acme", "https://acme.com"))
+            .thenReturn(profile);
+
+        PromoteToPartnerRequest req = new PromoteToPartnerRequest();
+        req.setCompanyName("Acme");
+        req.setWebsiteUrl("https://acme.com");
+
+        PartnerProfileResponse result = adminUserService.promoteToPartner(userId, req, adminId);
+
+        assertThat(result.companyName()).isEqualTo("Acme");
+        verify(partnerPromotionService).grantPartnerRoleAndProfile(userId, "Acme", "https://acme.com");
+        verify(auditLogService).log(eq("USER_PROMOTED_TO_PARTNER"), eq(adminId), eq("USER"), eq(userId), isNull(), isNull());
+    }
+
+    @Test
+    void promoteToPartner_nullRequest_passesNullFields() {
+        UUID userId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        PartnerProfile profile = new PartnerProfile();
+        profile.setUserId(userId);
+
+        when(partnerPromotionService.grantPartnerRoleAndProfile(userId, null, null))
+            .thenReturn(profile);
+
+        adminUserService.promoteToPartner(userId, null, adminId);
+
+        verify(partnerPromotionService).grantPartnerRoleAndProfile(userId, null, null);
     }
 }

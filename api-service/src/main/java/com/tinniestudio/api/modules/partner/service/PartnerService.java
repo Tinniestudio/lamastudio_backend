@@ -13,4 +13,10 @@ public interface PartnerService {
     String uploadLogo(UUID userId, MultipartFile file) throws IOException;
     PartnerDashboardResponse getDashboard(UUID userId);
     Page<PartnerUploadSummaryResponse> getUploads(UUID userId, Pageable pageable);
+
+    /**
+     * Admin-only write path: toggle verification and/or revenue share on an existing
+     * partner's profile (e.g. un-verify a partner who violates regulation, per Batch 13 #4).
+     */
+    PartnerProfileResponse adminUpdateProfile(UUID userId, AdminUpdatePartnerProfileRequest req, UUID adminId);
 }

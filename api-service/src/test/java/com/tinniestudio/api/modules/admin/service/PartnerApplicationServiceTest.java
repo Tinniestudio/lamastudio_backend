@@ -4,21 +4,17 @@ import com.tinniestudio.api.modules.admin.dto.PartnerApplicationResponse;
 import com.tinniestudio.api.modules.admin.dto.RejectApplicationRequest;
 import com.tinniestudio.api.modules.partner.dto.PartnerApplicationRequest;
 import com.tinniestudio.api.modules.partner.repository.PartnerApplicationRepository;
-import com.tinniestudio.api.modules.partner.repository.PartnerProfileRepository;
-import com.tinniestudio.api.modules.role.repository.RoleRepository;
-import com.tinniestudio.api.modules.user.repository.UserRepository;
+import com.tinniestudio.api.modules.partner.service.PartnerPromotionService;
 import com.tinniestudio.api.shared.entity.*;
 import com.tinniestudio.api.shared.entity.DomainEnums.PartnerApplicationStatus;
 import com.tinniestudio.api.shared.exception.BadRequestException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.util.HashSet;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -30,19 +26,9 @@ import static org.mockito.Mockito.*;
 class PartnerApplicationServiceTest {
 
     @Mock PartnerApplicationRepository applicationRepo;
-    @Mock PartnerProfileRepository profileRepo;
-    @Mock UserRepository userRepo;
-    @Mock RoleRepository roleRepo;
+    @Mock PartnerPromotionService partnerPromotionService;
     @Mock AuditLogService auditLogService;
     @InjectMocks PartnerApplicationServiceImpl applicationService;
-
-    private User makeUser(UUID id) {
-        User u = new User();
-        ReflectionTestUtils.setField(u, "id", id);
-        u.setEmail("user@test.com");
-        u.setRoles(new HashSet<>());
-        return u;
-    }
 
     private PartnerApplication makePendingApp(UUID appId, UUID userId) {
         PartnerApplication app = new PartnerApplication();
@@ -86,55 +72,29 @@ class PartnerApplicationServiceTest {
     }
 
     @Test
-    void approve_assignsPartnerRoleAndCreatesProfile() {
+    void approve_delegatesRoleAndProfileCreationToPromotionService() {
         UUID appId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID adminId = UUID.randomUUID();
-        User user = makeUser(userId);
         PartnerApplication app = makePendingApp(appId, userId);
         app.setCompanyName("Acme");
-
-        Role partnerRole = new Role(RoleName.ROLE_PARTNER);
+        app.setWebsiteUrl("https://acme.com");
 
         when(applicationRepo.findById(appId)).thenReturn(Optional.of(app));
-        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
-        when(roleRepo.findByName(RoleName.ROLE_PARTNER)).thenReturn(Optional.of(partnerRole));
         when(applicationRepo.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(userRepo.save(any())).thenReturn(user);
-        when(profileRepo.existsByUserId(userId)).thenReturn(false);
-        when(profileRepo.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(partnerPromotionService.grantPartnerRoleAndProfile(userId, "Acme", "https://acme.com"))
+            .thenReturn(new PartnerProfile());
 
         PartnerApplicationResponse result = applicationService.approve(appId, adminId);
 
         assertThat(result.status()).isEqualTo("APPROVED");
         assertThat(app.getReviewedBy()).isEqualTo(adminId);
-        verify(profileRepo).save(any());
+        verify(partnerPromotionService).grantPartnerRoleAndProfile(userId, "Acme", "https://acme.com");
         verify(auditLogService).log(
             eq("PARTNER_APPLICATION_APPROVED"), eq(adminId),
             eq("PARTNER_APPLICATION"), eq(appId),
             isNull(), isNull()
         );
-    }
-
-    @Test
-    void approve_profileAlreadyExists_doesNotCreateDuplicate() {
-        UUID appId = UUID.randomUUID();
-        UUID userId = UUID.randomUUID();
-        UUID adminId = UUID.randomUUID();
-        PartnerApplication app = makePendingApp(appId, userId);
-        User user = makeUser(userId);
-        Role partnerRole = new Role(RoleName.ROLE_PARTNER);
-
-        when(applicationRepo.findById(appId)).thenReturn(Optional.of(app));
-        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
-        when(roleRepo.findByName(RoleName.ROLE_PARTNER)).thenReturn(Optional.of(partnerRole));
-        when(applicationRepo.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(userRepo.save(any())).thenReturn(user);
-        when(profileRepo.existsByUserId(userId)).thenReturn(true); // already exists
-
-        applicationService.approve(appId, adminId);
-
-        verify(profileRepo, never()).save(any()); // must not create duplicate
     }
 
     @Test
@@ -149,8 +109,7 @@ class PartnerApplicationServiceTest {
         assertThatThrownBy(() -> applicationService.approve(appId, adminId))
             .isInstanceOf(BadRequestException.class);
 
-        verify(userRepo, never()).findById(any());
-        verify(profileRepo, never()).save(any());
+        verify(partnerPromotionService, never()).grantPartnerRoleAndProfile(any(), any(), any());
         verify(auditLogService, never()).log(any(), any(), any(), any(), any(), any());
     }
 
