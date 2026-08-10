@@ -13,6 +13,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Admin Plans", description = "Admin CRUD for subscription plans")
@@ -55,8 +56,8 @@ public class AdminSubscriptionController {
     @Operation(summary = "Soft-delete a plan (sets isActive = false)")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     @DeleteMapping("/{planId}")
-    public ResponseEntity<Void> delete(@PathVariable UUID planId) {
+    public ResponseEntity<Object> delete(@PathVariable UUID planId) {
         adminSubscriptionService.deletePlan(planId);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "Subscription plan deleted successfully"));
     }
 }

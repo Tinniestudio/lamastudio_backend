@@ -98,7 +98,7 @@ class PlaybackControllerTest {
     @Test
     @DisplayName("POST /playback/progress returns 204 No Content")
     @WithMockUser(username = USER_ID, roles = "USER")
-    void recordProgress_returns204() throws Exception {
+    void recordProgress_returns200() throws Exception {
         ProgressRequest req = new ProgressRequest();
         req.setContentId(UUID.randomUUID());
         req.setProgressSeconds(300);
@@ -109,7 +109,8 @@ class PlaybackControllerTest {
         mockMvc.perform(postWithContext("/playback/progress")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message").value("Progress recorded successfully"));
     }
 
     @Test

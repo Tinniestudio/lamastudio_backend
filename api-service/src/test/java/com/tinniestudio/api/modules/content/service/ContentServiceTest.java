@@ -99,7 +99,7 @@ class ContentServiceTest {
             CreateContentRequest req = new CreateContentRequest(
                 "New Movie", ContentType.MOVIE, null, null, null, null, null, null, null
             );
-            when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(contentRepository.saveAndFlush(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
 
             ContentResponse result = contentService.create(req, createdBy);
 
@@ -122,7 +122,7 @@ class ContentServiceTest {
                 "Action Movie", ContentType.MOVIE, null, null, null, null, null, null, List.of(catId)
             );
             when(categoryRepository.findAllById(List.of(catId))).thenReturn(List.of(cat));
-            when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(contentRepository.saveAndFlush(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
 
             ContentResponse result = contentService.create(req, createdBy);
 
@@ -138,7 +138,7 @@ class ContentServiceTest {
                 "Inception", ContentType.MOVIE, MaturityRating.PG_13,
                 null, null, null, false, null, null
             );
-            when(contentRepository.save(any(Content.class)))
+            when(contentRepository.saveAndFlush(any(Content.class)))
                 .thenThrow(new org.springframework.dao.DataIntegrityViolationException("slug unique violation"));
 
             assertThatThrownBy(() -> contentService.create(req, creatorId))

@@ -57,7 +57,7 @@ class AdminPartnerApplicationControllerTest {
 
         mockMvc.perform(get("/admin/partner-applications"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.content").isArray());
+            .andExpect(jsonPath("$.data").isArray());
     }
 
     @Test

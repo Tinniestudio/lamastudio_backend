@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Admin - Episodes", description = "Manage season episodes")
@@ -45,9 +46,9 @@ public class AdminEpisodeController {
     @Operation(summary = "Delete an episode")
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> delete(@PathVariable UUID seasonId, @PathVariable UUID id) {
+    public ResponseEntity<Object> delete(@PathVariable UUID seasonId, @PathVariable UUID id) {
         episodeService.delete(seasonId, id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "Episode deleted successfully"));
     }
 
     @Operation(summary = "Reorder episodes — provide episodeIds in desired 1..N order")

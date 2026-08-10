@@ -42,10 +42,15 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Page<User> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
+    // CAST(:search AS string) is required: when :search is bound NULL, PostgreSQL/pgjdbc can't
+    // infer a type for the LOWER(CONCAT(...)) expression's parameter and defaults it to bytea,
+    // throwing "function lower(bytea) does not exist" — a well-known JPQL+Postgres gotcha for
+    // this exact "optional filter" pattern. The explicit cast forces the correct text type
+    // regardless of whether a search term was actually provided.
     @Query("""
         SELECT u FROM User u
         WHERE (:status IS NULL OR u.accountStatus = :status)
-        AND (:search IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')))
+        AND (:search IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))
         ORDER BY u.createdAt DESC
         """)
     Page<User> findByFilters(

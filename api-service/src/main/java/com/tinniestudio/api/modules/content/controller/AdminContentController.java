@@ -22,6 +22,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Admin - Content", description = "Manage content lifecycle")
@@ -68,9 +69,9 @@ public class AdminContentController {
     @Operation(summary = "Delete content")
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+    public ResponseEntity<Object> delete(@PathVariable UUID id) {
         contentService.delete(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "Content deleted successfully"));
     }
 
     @Operation(summary = "Submit for review (DRAFT → REVIEW)")

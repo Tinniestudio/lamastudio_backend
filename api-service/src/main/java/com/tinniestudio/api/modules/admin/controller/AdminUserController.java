@@ -20,6 +20,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Admin - Users", description = "Admin user management")
@@ -56,21 +57,21 @@ public class AdminUserController {
 
     @Operation(summary = "Update user account status")
     @PatchMapping("/{id}/status")
-    public ResponseEntity<Void> updateStatus(
+    public ResponseEntity<Object> updateStatus(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateUserStatusRequest req,
             @AuthenticationPrincipal UserDetails principal) {
         adminUserService.updateStatus(id, req, UUID.fromString(principal.getUsername()));
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "User status updated successfully"));
     }
 
     @Operation(summary = "Soft-delete a user account")
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(
+    public ResponseEntity<Object> delete(
             @PathVariable UUID id,
             @AuthenticationPrincipal UserDetails principal) {
         adminUserService.softDelete(id, UUID.fromString(principal.getUsername()));
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "User deleted successfully"));
     }
 
     @Operation(summary = "Directly promote a user to partner (no application required)")

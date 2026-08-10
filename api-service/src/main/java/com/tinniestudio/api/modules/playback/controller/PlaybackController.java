@@ -13,6 +13,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Playback", description = "Playback access, manifests, and progress tracking")
@@ -49,11 +50,11 @@ public class PlaybackController {
 
     @Operation(summary = "Record or update watch progress for a content item or episode")
     @PostMapping("/progress")
-    public ResponseEntity<Void> recordProgress(
+    public ResponseEntity<Object> recordProgress(
             @AuthenticationPrincipal UserDetails principal,
             @Valid @RequestBody ProgressRequest request) {
         playbackService.recordProgress(userId(principal), request);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "Progress recorded successfully"));
     }
 
     @Operation(summary = "Get the authenticated user's continue-watching list")

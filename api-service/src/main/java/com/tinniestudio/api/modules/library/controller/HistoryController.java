@@ -14,6 +14,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Watch History", description = "User watch history")
@@ -34,19 +35,19 @@ public class HistoryController {
 
     @Operation(summary = "Delete a single watch history entry")
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(
+    public ResponseEntity<Object> delete(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID id) {
         historyService.delete(userId(principal), id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "Watch history entry deleted successfully"));
     }
 
     @Operation(summary = "Clear all watch history for the authenticated user")
     @DeleteMapping
-    public ResponseEntity<Void> deleteAll(
+    public ResponseEntity<Object> deleteAll(
             @AuthenticationPrincipal UserDetails principal) {
         historyService.deleteAll(userId(principal));
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "Watch history cleared successfully"));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

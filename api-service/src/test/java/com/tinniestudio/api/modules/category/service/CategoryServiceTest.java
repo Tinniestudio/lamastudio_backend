@@ -103,7 +103,7 @@ class CategoryServiceTest {
 
             when(storageService.uploadFile(anyString(), any(), eq("image/jpeg")))
                 .thenReturn("http://localhost:9000/tinniestudio/posters/categories/horror.jpg");
-            when(categoryRepository.save(any(Category.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(categoryRepository.saveAndFlush(any(Category.class))).thenAnswer(inv -> inv.getArgument(0));
 
             CategoryResponse result = categoryService.create(req, poster);
 
@@ -116,7 +116,7 @@ class CategoryServiceTest {
         @DisplayName("saves category without poster when poster is null")
         void savesWithoutPoster() {
             CreateCategoryRequest req = new CreateCategoryRequest("Drama", null, 2);
-            when(categoryRepository.save(any(Category.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(categoryRepository.saveAndFlush(any(Category.class))).thenAnswer(inv -> inv.getArgument(0));
 
             CategoryResponse result = categoryService.create(req, null);
 
@@ -129,7 +129,7 @@ class CategoryServiceTest {
         @DisplayName("throws 409 when DB unique constraint is violated")
         void throwsConflictOnDuplicateName() {
             CreateCategoryRequest req = new CreateCategoryRequest("Action", null, 1);
-            when(categoryRepository.save(any(Category.class)))
+            when(categoryRepository.saveAndFlush(any(Category.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
             assertThatThrownBy(() -> categoryService.create(req, null))

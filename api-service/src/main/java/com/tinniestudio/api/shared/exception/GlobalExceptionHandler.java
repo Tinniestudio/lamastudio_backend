@@ -1,6 +1,8 @@
 package com.tinniestudio.api.shared.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,8 +12,10 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.tinniestudio.api.modules.auth.exception.BadCredentialsException;
@@ -48,6 +52,54 @@ public class GlobalExceptionHandler {
 
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
         }
+
+    // ── Malformed path variable / query param (e.g. "not-a-uuid" for a UUID path variable) ──
+    // Without this handler, a client typo (bad UUID, non-numeric page size, etc.) was falling
+    // through to the catch-all Exception handler below and returning a misleading 500
+    // "unexpected error" instead of a 400 naming the actual bad parameter.
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Object> handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex,
+            HttpServletRequest request
+    ) {
+        String requiredType = ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "the expected type";
+        String message = "Parameter '" + ex.getName() + "' must be a valid " + requiredType
+                + " (received: '" + ex.getValue() + "')";
+        Map<String, Object> body = buildStandardError("INVALID_PARAMETER", message,
+                HttpStatus.BAD_REQUEST.value(), request.getServletPath());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    // ── Method-level @Validated on @RequestParam/@PathVariable (not @Valid @RequestBody) ────
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<Object> handleConstraintViolation(
+            ConstraintViolationException ex,
+            HttpServletRequest request
+    ) {
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
+        for (ConstraintViolation<?> violation : ex.getConstraintViolations()) {
+            String path = violation.getPropertyPath().toString();
+            String field = path.contains(".") ? path.substring(path.lastIndexOf('.') + 1) : path;
+            fieldErrors.putIfAbsent(field, violation.getMessage());
+        }
+        Map<String, Object> body = buildStandardError("VALIDATION_FAILED",
+                "One or more fields failed validation",
+                HttpStatus.BAD_REQUEST.value(), request.getServletPath());
+        body.put("fieldErrors", fieldErrors);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    // ── Required @RequestParam missing entirely ──────────────────────────────
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<Object> handleMissingParameter(
+            MissingServletRequestParameterException ex,
+            HttpServletRequest request
+    ) {
+        Map<String, Object> body = buildStandardError("MISSING_PARAMETER",
+                "Required parameter '" + ex.getParameterName() + "' is missing",
+                HttpStatus.BAD_REQUEST.value(), request.getServletPath());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
 
     // ── @ModelAttribute binding / query-param validation ─────────────────────
 

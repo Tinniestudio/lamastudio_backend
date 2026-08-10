@@ -73,27 +73,29 @@ class HistoryControllerTest {
 
         mockMvc.perform(getWithContext("/history"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.content[0].contentId").value(contentId.toString()));
+            .andExpect(jsonPath("$.data[0].contentId").value(contentId.toString()));
     }
 
     @Test
-    @DisplayName("DELETE /history/{id} returns 204 No Content")
+    @DisplayName("DELETE /history/{id} returns 200 with confirmation message")
     @WithMockUser(username = USER_ID, roles = "USER")
-    void deleteHistoryEntry_returns204() throws Exception {
+    void deleteHistoryEntry_returns200() throws Exception {
         UUID historyId = UUID.randomUUID();
         doNothing().when(historyService).delete(any(UUID.class), any(UUID.class));
 
         mockMvc.perform(deleteWithContext("/history/" + historyId))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message").value("Watch history entry deleted successfully"));
     }
 
     @Test
-    @DisplayName("DELETE /history returns 204 No Content (clear all)")
+    @DisplayName("DELETE /history returns 200 with confirmation message (clear all)")
     @WithMockUser(username = USER_ID, roles = "USER")
-    void deleteAllHistory_returns204() throws Exception {
+    void deleteAllHistory_returns200() throws Exception {
         doNothing().when(historyService).deleteAll(any(UUID.class));
 
         mockMvc.perform(deleteWithContext("/history"))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message").value("Watch history cleared successfully"));
     }
 }

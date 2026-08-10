@@ -44,17 +44,17 @@ public class NotificationController {
 
     @Operation(summary = "Mark a notification as read")
     @PostMapping("/{id}/read")
-    public ResponseEntity<Void> markRead(@PathVariable UUID id,
+    public ResponseEntity<Object> markRead(@PathVariable UUID id,
                                           @AuthenticationPrincipal UserDetails principal) {
         notificationService.markRead(userId(principal), id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "Notification marked as read"));
     }
 
     @Operation(summary = "Mark all notifications as read")
     @PostMapping("/read-all")
-    public ResponseEntity<Void> markAllRead(@AuthenticationPrincipal UserDetails principal) {
+    public ResponseEntity<Object> markAllRead(@AuthenticationPrincipal UserDetails principal) {
         notificationService.markAllRead(userId(principal));
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "All notifications marked as read"));
     }
 
     @Operation(summary = "Get notification preferences")

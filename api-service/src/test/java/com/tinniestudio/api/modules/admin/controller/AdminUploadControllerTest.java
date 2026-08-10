@@ -38,6 +38,6 @@ class AdminUploadControllerTest {
 
         mockMvc.perform(get("/admin/uploads/processing"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.content").isArray());
+            .andExpect(jsonPath("$.data").isArray());
     }
 }

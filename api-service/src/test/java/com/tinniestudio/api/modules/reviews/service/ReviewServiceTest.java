@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.reviews.service;
 
+import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.reviews.dto.CreateReviewRequest;
 import com.tinniestudio.api.modules.reviews.dto.ReviewResponse;
 import com.tinniestudio.api.modules.reviews.dto.UpdateReviewRequest;
@@ -37,6 +38,9 @@ class ReviewServiceTest {
 
     @Mock
     private ReviewRepository reviewRepo;
+
+    @Mock
+    private ContentRepository contentRepo;
 
     @InjectMocks
     private ReviewServiceImpl reviewService;
@@ -92,6 +96,7 @@ class ReviewServiceTest {
         request.setRating((short) 5);
         request.setBody("Excellent!");
 
+        when(contentRepo.existsById(contentId)).thenReturn(true);
         when(reviewRepo.existsByUserIdAndContentId(userId, contentId)).thenReturn(false);
 
         ContentReview savedReview = new ContentReview();
@@ -102,12 +107,12 @@ class ReviewServiceTest {
         savedReview.setBody("Excellent!");
         savedReview.setStatus(ReviewStatus.APPROVED);
 
-        when(reviewRepo.save(any(ContentReview.class))).thenReturn(savedReview);
+        when(reviewRepo.saveAndFlush(any(ContentReview.class))).thenReturn(savedReview);
 
         ReviewResponse result = reviewService.create(userId, contentId, request);
 
         ArgumentCaptor<ContentReview> captor = ArgumentCaptor.forClass(ContentReview.class);
-        verify(reviewRepo).save(captor.capture());
+        verify(reviewRepo).saveAndFlush(captor.capture());
         ContentReview captured = captor.getValue();
         assertThat(captured.getUserId()).isEqualTo(userId);
         assertThat(captured.getContentId()).isEqualTo(contentId);
@@ -125,6 +130,7 @@ class ReviewServiceTest {
         CreateReviewRequest request = new CreateReviewRequest();
         request.setRating((short) 3);
 
+        when(contentRepo.existsById(contentId)).thenReturn(true);
         when(reviewRepo.existsByUserIdAndContentId(userId, contentId)).thenReturn(true);
 
         assertThatThrownBy(() -> reviewService.create(userId, contentId, request))
@@ -132,7 +138,23 @@ class ReviewServiceTest {
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(CONFLICT));
 
-        verify(reviewRepo, never()).save(any());
+        verify(reviewRepo, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("create: throws 404 NOT_FOUND when content does not exist")
+    void create_throwsNotFoundWhenContentMissing() {
+        CreateReviewRequest request = new CreateReviewRequest();
+        request.setRating((short) 3);
+
+        when(contentRepo.existsById(contentId)).thenReturn(false);
+
+        assertThatThrownBy(() -> reviewService.create(userId, contentId, request))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
+                        .isEqualTo(NOT_FOUND));
+
+        verify(reviewRepo, never()).saveAndFlush(any());
     }
 
     // ─── update() ────────────────────────────────────────────────────────────

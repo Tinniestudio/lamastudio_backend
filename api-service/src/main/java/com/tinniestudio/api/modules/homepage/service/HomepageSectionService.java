@@ -48,7 +48,11 @@ public class HomepageSectionService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found: " + req.categoryId())));
         }
         try {
-            return SectionResponse.from(repository.save(section));
+            // saveAndFlush, not save: with a UUID-generated id, Hibernate has no reason to flush
+            // the INSERT immediately, so a unique-constraint violation would otherwise surface at
+            // transaction commit — after this method (and its try/catch) has already returned —
+            // producing a raw 500 instead of this intended 409.
+            return SectionResponse.from(repository.saveAndFlush(section));
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Failed to create section — a constraint was violated (sectionType may already exist): " + e.getMostSpecificCause().getMessage());
         }

@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Admin - Seasons", description = "Manage series seasons")
@@ -43,8 +44,8 @@ public class AdminSeasonController {
     @Operation(summary = "Delete a season and all its episodes")
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> delete(@PathVariable UUID contentId, @PathVariable UUID id) {
+    public ResponseEntity<Object> delete(@PathVariable UUID contentId, @PathVariable UUID id) {
         seasonService.delete(contentId, id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "Season deleted successfully"));
     }
 }

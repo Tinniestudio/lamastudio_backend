@@ -15,6 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Favorites", description = "User favorites management")
@@ -44,11 +45,11 @@ public class FavoriteController {
 
     @Operation(summary = "Remove a content item from favorites")
     @DeleteMapping("/{contentId}")
-    public ResponseEntity<Void> remove(
+    public ResponseEntity<Object> remove(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID contentId) {
         favoriteService.remove(userId(principal), contentId);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "Removed from favorites successfully"));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

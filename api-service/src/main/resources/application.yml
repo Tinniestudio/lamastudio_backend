@@ -172,6 +172,10 @@ logging:
   level:
     com.tinniestudio: DEBUG
     org.springframework.security: INFO
+    # SQL + bound-parameter logging — the single most useful thing missing from DEBUG-on-our-own-
+    # package-only: without it, tracking down a query bug means adding temporary log statements.
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
 
 springdoc:
   api-docs:

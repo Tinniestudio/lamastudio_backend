@@ -179,7 +179,7 @@ class SeasonServiceTest {
             );
             when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
             when(seasonRepository.findMaxSeasonNumberByContentId(contentId)).thenReturn(Optional.of(2));
-            when(seasonRepository.save(any(Season.class))).thenAnswer(inv -> {
+            when(seasonRepository.saveAndFlush(any(Season.class))).thenAnswer(inv -> {
                 Season s = inv.getArgument(0);
                 s.setId(UUID.randomUUID());
                 s.setEpisodes(new ArrayList<>());
@@ -199,7 +199,7 @@ class SeasonServiceTest {
             );
             when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
             when(seasonRepository.findMaxSeasonNumberByContentId(contentId)).thenReturn(Optional.empty());
-            when(seasonRepository.save(any(Season.class))).thenAnswer(inv -> {
+            when(seasonRepository.saveAndFlush(any(Season.class))).thenAnswer(inv -> {
                 Season s = inv.getArgument(0);
                 s.setId(UUID.randomUUID());
                 s.setEpisodes(new ArrayList<>());
@@ -219,7 +219,7 @@ class SeasonServiceTest {
             );
             when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
             when(seasonRepository.existsByContentIdAndSeasonNumber(contentId, 5)).thenReturn(false);
-            when(seasonRepository.save(any(Season.class))).thenAnswer(inv -> {
+            when(seasonRepository.saveAndFlush(any(Season.class))).thenAnswer(inv -> {
                 Season s = inv.getArgument(0);
                 s.setId(UUID.randomUUID());
                 s.setEpisodes(new ArrayList<>());
@@ -350,7 +350,7 @@ class SeasonServiceTest {
             CreateSeasonRequest req = new CreateSeasonRequest(null, "Season 1", null, null, null, null);
             when(contentRepository.findById(seriesContent.getId())).thenReturn(Optional.of(seriesContent));
             when(seasonRepository.findMaxSeasonNumberByContentId(seriesContent.getId())).thenReturn(Optional.of(0));
-            when(seasonRepository.save(any(Season.class)))
+            when(seasonRepository.saveAndFlush(any(Season.class)))
                 .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
 
             assertThatThrownBy(() -> seasonService.create(seriesContent.getId(), req))

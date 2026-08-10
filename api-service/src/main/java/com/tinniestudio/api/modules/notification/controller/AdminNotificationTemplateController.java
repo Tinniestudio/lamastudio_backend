@@ -12,6 +12,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Admin - Notification Templates")
@@ -46,8 +47,8 @@ public class AdminNotificationTemplateController {
 
     @Operation(summary = "Delete notification template")
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+    public ResponseEntity<Object> delete(@PathVariable UUID id) {
         templateService.delete(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "Notification template deleted successfully"));
     }
 }

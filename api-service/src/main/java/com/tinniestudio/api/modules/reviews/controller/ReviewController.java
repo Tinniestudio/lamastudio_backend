@@ -19,6 +19,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Reviews", description = "Content reviews management")
@@ -58,11 +59,11 @@ public class ReviewController {
 
     @Operation(summary = "Delete a review")
     @DeleteMapping("/reviews/{id}")
-    public ResponseEntity<Void> delete(
+    public ResponseEntity<Object> delete(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID id) {
         reviewService.delete(userId(principal), id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("message", "Review deleted successfully"));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

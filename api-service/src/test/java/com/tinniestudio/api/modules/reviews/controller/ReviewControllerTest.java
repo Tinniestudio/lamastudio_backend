@@ -76,7 +76,7 @@ class ReviewControllerTest {
 
         mockMvc.perform(getWithContext("/contents/" + contentId + "/reviews"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.content[0].rating").value(4));
+            .andExpect(jsonPath("$.data[0].rating").value(4));
     }
 
     @Test
@@ -130,13 +130,14 @@ class ReviewControllerTest {
     }
 
     @Test
-    @DisplayName("DELETE /reviews/{id} returns 204 No Content")
+    @DisplayName("DELETE /reviews/{id} returns 200 with confirmation message")
     @WithMockUser(username = USER_ID, roles = "USER")
-    void deleteReview_returns204() throws Exception {
+    void deleteReview_returns200() throws Exception {
         UUID reviewId = UUID.randomUUID();
         doNothing().when(reviewService).delete(any(UUID.class), any(UUID.class));
 
         mockMvc.perform(deleteWithContext("/reviews/" + reviewId))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message").value("Review deleted successfully"));
     }
 }

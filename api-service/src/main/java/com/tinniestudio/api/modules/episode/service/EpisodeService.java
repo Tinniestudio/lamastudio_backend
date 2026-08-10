@@ -75,7 +75,9 @@ public class EpisodeService {
         episode.setDurationSeconds(req.durationSeconds());
         episode.setThumbnailUrl(req.thumbnailUrl());
         try {
-            return EpisodeResponse.from(episodeRepository.save(episode));
+            // saveAndFlush: see ContentService.create for why plain save() doesn't reliably
+            // surface the constraint violation inside this try/catch.
+            return EpisodeResponse.from(episodeRepository.saveAndFlush(episode));
         } catch (DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Episode number " + episodeNumber + " already exists in this season");

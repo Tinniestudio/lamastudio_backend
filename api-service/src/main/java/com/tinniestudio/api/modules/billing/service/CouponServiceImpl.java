@@ -80,7 +80,9 @@ public class CouponServiceImpl implements CouponService {
         redemption.setSubscriptionId(subscriptionId);
 
         try {
-            couponRedemptionRepository.save(redemption);
+            // saveAndFlush: see ContentService.create for why plain save() doesn't reliably
+            // surface the constraint violation inside this try/catch.
+            couponRedemptionRepository.saveAndFlush(redemption);
         } catch (DataIntegrityViolationException ex) {
             throw new BadRequestException("Coupon already redeemed by this user");
         }

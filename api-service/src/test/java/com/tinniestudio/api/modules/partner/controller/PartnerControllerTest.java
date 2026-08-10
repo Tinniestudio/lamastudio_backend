@@ -150,7 +150,7 @@ class PartnerControllerTest {
 
         mockMvc.perform(get("/partners/uploads"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.content").isArray());
+            .andExpect(jsonPath("$.data").isArray());
     }
 
     @Test
@@ -161,6 +161,6 @@ class PartnerControllerTest {
 
         mockMvc.perform(get("/partners/contents"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.content").isArray());
+            .andExpect(jsonPath("$.data").isArray());
     }
 }

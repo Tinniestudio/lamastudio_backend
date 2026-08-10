@@ -202,7 +202,7 @@ class EpisodeServiceTest {
             );
             when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
             when(episodeRepository.findMaxEpisodeNumberBySeasonId(seasonId)).thenReturn(Optional.of(2));
-            when(episodeRepository.save(any(Episode.class))).thenAnswer(inv -> {
+            when(episodeRepository.saveAndFlush(any(Episode.class))).thenAnswer(inv -> {
                 Episode ep = inv.getArgument(0);
                 ep.setId(UUID.randomUUID());
                 return ep;
@@ -221,7 +221,7 @@ class EpisodeServiceTest {
             );
             when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
             when(episodeRepository.findMaxEpisodeNumberBySeasonId(seasonId)).thenReturn(Optional.empty());
-            when(episodeRepository.save(any(Episode.class))).thenAnswer(inv -> {
+            when(episodeRepository.saveAndFlush(any(Episode.class))).thenAnswer(inv -> {
                 Episode ep = inv.getArgument(0);
                 ep.setId(UUID.randomUUID());
                 return ep;
@@ -240,7 +240,7 @@ class EpisodeServiceTest {
             );
             when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
             when(episodeRepository.existsBySeasonIdAndEpisodeNumber(seasonId, 5)).thenReturn(false);
-            when(episodeRepository.save(any(Episode.class))).thenAnswer(inv -> {
+            when(episodeRepository.saveAndFlush(any(Episode.class))).thenAnswer(inv -> {
                 Episode ep = inv.getArgument(0);
                 ep.setId(UUID.randomUUID());
                 return ep;
@@ -274,7 +274,7 @@ class EpisodeServiceTest {
             );
             when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
             when(episodeRepository.findMaxEpisodeNumberBySeasonId(seasonId)).thenReturn(Optional.of(0));
-            when(episodeRepository.save(any(Episode.class)))
+            when(episodeRepository.saveAndFlush(any(Episode.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
             assertThatThrownBy(() -> episodeService.create(seasonId, req))

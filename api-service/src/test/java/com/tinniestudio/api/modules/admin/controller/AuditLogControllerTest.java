@@ -47,7 +47,7 @@ class AuditLogControllerTest {
 
         mockMvc.perform(get("/admin/audit-logs"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.content").isArray());
+            .andExpect(jsonPath("$.data").isArray());
     }
 
     @Test
@@ -59,6 +59,6 @@ class AuditLogControllerTest {
 
         mockMvc.perform(get("/admin/audit-logs/target/USER/{id}", targetId))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.content").isArray());
+            .andExpect(jsonPath("$.data").isArray());
     }
 }

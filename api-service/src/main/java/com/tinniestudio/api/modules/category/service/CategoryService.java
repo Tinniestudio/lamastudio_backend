@@ -57,7 +57,9 @@ public class CategoryService {
             category.setPosterUrl(uploadPoster(poster, req.name()));
         }
         try {
-            return CategoryResponse.from(categoryRepository.save(category));
+            // saveAndFlush: see ContentService.create for why plain save() doesn't reliably
+            // surface the constraint violation inside this try/catch.
+            return CategoryResponse.from(categoryRepository.saveAndFlush(category));
         } catch (DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Category name already exists: " + req.name());
         }

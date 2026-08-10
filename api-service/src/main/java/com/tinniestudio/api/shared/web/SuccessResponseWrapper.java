@@ -1,5 +1,6 @@
 package com.tinniestudio.api.shared.web;
 
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -78,6 +79,16 @@ public class SuccessResponseWrapper implements ResponseBodyAdvice<Object> {
                 && map.get("message") instanceof String s) {
             message = s;
             data = null;
+        } else if (body instanceof Page<?> page) {
+            // Every list endpoint that returns ResponseEntity<Page<T>> previously had Spring
+            // Data's raw Page serialized straight into `data` — a verbose, framework-specific
+            // shape (nested "pageable", duplicated "sort", "empty"/"unpaged" noise) that leaked
+            // Spring internals into the public API. Unwrap it into content + the existing
+            // ApiResponse.Meta envelope instead, consistent with every other response shape.
+            message = defaultMessage(request.getMethod());
+            ApiResponse.Meta meta = new ApiResponse.Meta(
+                    page.getTotalElements(), page.getNumber(), page.getSize(), page.getTotalPages());
+            return ApiResponse.ok(message, page.getContent(), meta);
         } else {
             message = defaultMessage(request.getMethod());
             data = body;

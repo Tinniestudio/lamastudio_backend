@@ -68,8 +68,9 @@ class AdminNotificationTemplateControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    void delete_returns204() throws Exception {
+    void delete_returns200() throws Exception {
         mockMvc.perform(delete("/admin/notification-templates/{id}", UUID.randomUUID()))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message").value("Notification template deleted successfully"));
     }
 }

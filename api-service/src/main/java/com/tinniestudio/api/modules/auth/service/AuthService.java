@@ -199,17 +199,34 @@ public class AuthService {
         // Extract sessionId from request attribute (set by JwtAuthenticationFilter)
         String sessionIdAttr = (String) request.getAttribute("sessionId");
         if (StringUtils.hasText(sessionIdAttr)) {
+            UUID userId = null;
+            UUID sessionId = null;
             try {
+                // Parsing the refresh token/session id can legitimately fail for edge cases
+                // (missing cookie, already-expired refresh token) — that's not a real failure,
+                // there's simply nothing to revoke, so logout should still succeed for the
+                // client (cookies get cleared below regardless).
                 String tokenStr = extractRefreshToken(request);
                 Claims claims = tokenStr != null && jwtTokenProvider.validateRefreshToken(tokenStr)
                         ? jwtTokenProvider.parseRefreshToken(tokenStr) : null;
-                UUID userId = claims != null ? UUID.fromString(claims.getSubject()) : null;
-                UUID sessionId = UUID.fromString(sessionIdAttr);
-                if (userId != null) {
-                    sessionService.revokeSession(userId, sessionId, null);
-                }
+                userId = claims != null ? UUID.fromString(claims.getSubject()) : null;
+                sessionId = UUID.fromString(sessionIdAttr);
             } catch (Exception ex) {
-                log.debug("Could not revoke session on logout: {}", ex.getMessage());
+                log.debug("Could not parse session/refresh token on logout: {}", ex.getMessage());
+            }
+            if (userId != null) {
+                try {
+                    // Unlike the parsing step above, a failure HERE means the session was NOT
+                    // actually revoked server-side even though the client is about to be told
+                    // logout succeeded (cookies still get cleared) — that combination previously
+                    // vanished into a debug-level log line, invisible outside verbose debugging.
+                    // Surfaced at warn with the real exception so it's actually seen.
+                    sessionService.revokeSession(userId, sessionId, null);
+                } catch (Exception ex) {
+                    log.warn("Session revocation failed during logout for user {} session {} — " +
+                            "client will still be logged out locally, but the session row was not revoked",
+                            userId, sessionId, ex);
+                }
             }
         }
         cookieFactory.clearAuthCookies(response);

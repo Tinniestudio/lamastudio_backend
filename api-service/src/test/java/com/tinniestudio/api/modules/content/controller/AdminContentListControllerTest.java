@@ -40,6 +40,6 @@ class AdminContentListControllerTest {
 
         mockMvc.perform(get("/admin/contents"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.content").isArray());
+            .andExpect(jsonPath("$.data").isArray());
     }
 }

@@ -73,7 +73,9 @@ public class SeasonService {
         season.setPosterUrl(req.posterUrl());
         season.setThumbnailUrl(req.thumbnailUrl());
         try {
-            return SeasonResponse.from(seasonRepository.save(season));
+            // saveAndFlush: see ContentService.create for why plain save() doesn't reliably
+            // surface the constraint violation inside this try/catch.
+            return SeasonResponse.from(seasonRepository.saveAndFlush(season));
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Season number " + seasonNumber + " already exists for this content");

@@ -50,7 +50,7 @@ class NotificationControllerTest {
         when(notificationService.listForUser(any(), any())).thenReturn(new PageImpl<>(List.of(sampleNotif())));
         mockMvc.perform(get("/notifications"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.content").isArray());
+            .andExpect(jsonPath("$.data").isArray());
     }
 
     @Test
@@ -64,16 +64,18 @@ class NotificationControllerTest {
 
     @Test
     @WithMockUser(username = USER_ID)
-    void markRead_returns204() throws Exception {
+    void markRead_returns200() throws Exception {
         mockMvc.perform(post("/notifications/{id}/read", UUID.randomUUID()))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message").value("Notification marked as read"));
     }
 
     @Test
     @WithMockUser(username = USER_ID)
-    void markAllRead_returns204() throws Exception {
+    void markAllRead_returns200() throws Exception {
         mockMvc.perform(post("/notifications/read-all"))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message").value("All notifications marked as read"));
     }
 
     @Test

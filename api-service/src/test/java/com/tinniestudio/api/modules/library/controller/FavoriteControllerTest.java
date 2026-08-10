@@ -77,7 +77,7 @@ class FavoriteControllerTest {
 
         mockMvc.perform(getWithContext("/favorites"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.content[0].contentId").value(contentId.toString()));
+            .andExpect(jsonPath("$.data[0].contentId").value(contentId.toString()));
     }
 
     @Test
@@ -92,13 +92,14 @@ class FavoriteControllerTest {
     }
 
     @Test
-    @DisplayName("DELETE /favorites/{contentId} returns 204 No Content")
+    @DisplayName("DELETE /favorites/{contentId} returns 200 with confirmation message")
     @WithMockUser(username = USER_ID, roles = "USER")
-    void removeFavorite_returns204() throws Exception {
+    void removeFavorite_returns200() throws Exception {
         UUID contentId = UUID.randomUUID();
         doNothing().when(favoriteService).remove(any(UUID.class), any(UUID.class));
 
         mockMvc.perform(deleteWithContext("/favorites/" + contentId))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message").value("Removed from favorites successfully"));
     }
 }

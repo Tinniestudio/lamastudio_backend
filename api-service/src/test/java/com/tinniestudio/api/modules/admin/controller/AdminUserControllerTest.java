@@ -77,7 +77,7 @@ class AdminUserControllerTest {
 
         mockMvc.perform(getWithContext("/admin/users"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[0].email").value("test@example.com"));
+                .andExpect(jsonPath("$.data[0].email").value("test@example.com"));
     }
 
     @Test
@@ -108,7 +108,7 @@ class AdminUserControllerTest {
 
     @Test
     @WithMockUser(username = ADMIN_ID, roles = "ADMIN")
-    void updateUserStatus_returns204() throws Exception {
+    void updateUserStatus_returns200() throws Exception {
         UUID id = UUID.randomUUID();
         UpdateUserStatusRequest req = new UpdateUserStatusRequest();
         req.setStatus(AccountStatus.SUSPENDED);
@@ -119,17 +119,19 @@ class AdminUserControllerTest {
         mockMvc.perform(patchWithContext("/admin/users/" + id + "/status")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("User status updated successfully"));
     }
 
     @Test
     @WithMockUser(username = ADMIN_ID, roles = "ADMIN")
-    void deleteUser_returns204() throws Exception {
+    void deleteUser_returns200() throws Exception {
         UUID id = UUID.randomUUID();
         doNothing().when(adminUserService).softDelete(any(), any());
 
         mockMvc.perform(deleteWithContext("/admin/users/" + id))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("User deleted successfully"));
     }
 
     @Test

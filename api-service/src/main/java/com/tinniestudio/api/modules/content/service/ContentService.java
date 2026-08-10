@@ -127,7 +127,10 @@ public class ContentService {
             content.setCategories(new HashSet<>(categoryRepository.findAllById(req.categoryIds())));
         }
         try {
-            return ContentResponse.from(contentRepository.save(content));
+            // saveAndFlush, not save: a UUID-generated id means Hibernate defers the INSERT to
+            // commit time, so the slug-uniqueness violation would otherwise surface after this
+            // try/catch has already returned, producing a raw 500 instead of this 409.
+            return ContentResponse.from(contentRepository.saveAndFlush(content));
         } catch (DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Content title conflict — slug already exists");
         }

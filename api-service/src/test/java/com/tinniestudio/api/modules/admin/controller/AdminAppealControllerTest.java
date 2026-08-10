@@ -56,7 +56,7 @@ class AdminAppealControllerTest {
 
         mockMvc.perform(get("/admin/appeals"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.content").isArray());
+            .andExpect(jsonPath("$.data").isArray());
     }
 
     @Test

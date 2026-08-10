@@ -72,7 +72,7 @@ class HomepageSectionServiceTest {
         @DisplayName("creates section with sectionType and displayOrder")
         void createsSection() {
             CreateSectionRequest req = new CreateSectionRequest("Featured", SectionType.FEATURED, null, 2);
-            when(repository.save(any(HomepageSection.class))).thenAnswer(inv -> {
+            when(repository.saveAndFlush(any(HomepageSection.class))).thenAnswer(inv -> {
                 HomepageSection s = inv.getArgument(0);
                 s.setId(UUID.randomUUID());
                 return s;
@@ -109,7 +109,7 @@ class HomepageSectionServiceTest {
 
             CreateSectionRequest req = new CreateSectionRequest("Action Row", SectionType.CATEGORY, catId, 3);
             when(categoryRepository.findById(catId)).thenReturn(Optional.of(category));
-            when(repository.save(any(HomepageSection.class))).thenAnswer(inv -> {
+            when(repository.saveAndFlush(any(HomepageSection.class))).thenAnswer(inv -> {
                 HomepageSection s = inv.getArgument(0);
                 s.setId(UUID.randomUUID());
                 return s;

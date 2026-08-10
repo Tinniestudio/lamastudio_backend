@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.reviews.service;
 
+import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.reviews.dto.CreateReviewRequest;
 import com.tinniestudio.api.modules.reviews.dto.ReviewResponse;
 import com.tinniestudio.api.modules.reviews.dto.UpdateReviewRequest;
@@ -8,6 +9,7 @@ import com.tinniestudio.api.modules.reviews.repository.ReviewRepository;
 import com.tinniestudio.api.shared.entity.ContentReview;
 import com.tinniestudio.api.shared.entity.DomainEnums.ReviewStatus;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -22,6 +24,7 @@ import java.util.UUID;
 public class ReviewServiceImpl implements ReviewService {
 
     private final ReviewRepository reviewRepo;
+    private final ContentRepository contentRepo;
 
     @Override
     @Transactional(readOnly = true)
@@ -34,6 +37,13 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     @Transactional
     public ReviewResponse create(UUID userId, UUID contentId, CreateReviewRequest request) {
+        // content_reviews.content_id has a FK to contents(id) — reviewing a content id that
+        // doesn't exist previously fell straight through to the FK violation at flush time,
+        // which the catch-all handler turns into a raw 500. Check existence up front for a
+        // proper 404 instead.
+        if (!contentRepo.existsById(contentId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId);
+        }
         if (reviewRepo.existsByUserIdAndContentId(userId, contentId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "You have already reviewed this content");
@@ -46,7 +56,16 @@ public class ReviewServiceImpl implements ReviewService {
         review.setBody(request.getBody());
         review.setStatus(ReviewStatus.APPROVED);
 
-        return ReviewResponse.from(reviewRepo.save(review));
+        try {
+            // saveAndFlush: the proactive existsByUserIdAndContentId check above is racy under
+            // concurrent requests — the DB-level uq_review_user_content constraint is the real
+            // guard. Plain save() defers the INSERT to commit time (UUID-generated id), so a
+            // violation would escape this try/catch as a raw 500 instead of the intended 409.
+            return ReviewResponse.from(reviewRepo.saveAndFlush(review));
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "You have already reviewed this content");
+        }
     }
 
     @Override
