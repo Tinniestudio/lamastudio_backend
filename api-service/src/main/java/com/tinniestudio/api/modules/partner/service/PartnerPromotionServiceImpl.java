@@ -40,4 +40,18 @@ public class PartnerPromotionServiceImpl implements PartnerPromotionService {
             return profileRepo.save(profile);
         });
     }
+
+    @Override
+    @Transactional
+    public void revokePartnerRole(UUID userId) {
+        User user = userRepo.findById(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+        roleRepo.findByName(RoleName.ROLE_PARTNER).ifPresent(user::removeRole);
+        userRepo.save(user);
+
+        profileRepo.findByUserId(userId).ifPresent(profile -> {
+            profile.setIsVerified(false);
+            profileRepo.save(profile);
+        });
+    }
 }

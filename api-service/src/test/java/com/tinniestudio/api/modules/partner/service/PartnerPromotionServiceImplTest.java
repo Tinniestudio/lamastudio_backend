@@ -88,4 +88,55 @@ class PartnerPromotionServiceImplTest {
         assertThatThrownBy(() -> promotionService.grantPartnerRoleAndProfile(userId, "Acme", null))
             .isInstanceOf(ResourceNotFoundException.class);
     }
+
+    @Test
+    void revokePartnerRole_removesRoleAndUnverifiesProfile() {
+        UUID userId = UUID.randomUUID();
+        Role partnerRole = new Role(RoleName.ROLE_PARTNER);
+        User user = makeUser(userId);
+        user.addRole(partnerRole);
+        PartnerProfile profile = new PartnerProfile();
+        profile.setUserId(userId);
+        profile.setIsVerified(true);
+
+        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
+        when(roleRepo.findByName(RoleName.ROLE_PARTNER)).thenReturn(Optional.of(partnerRole));
+        when(userRepo.save(any())).thenReturn(user);
+        when(profileRepo.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(profileRepo.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        promotionService.revokePartnerRole(userId);
+
+        assertThat(user.getRoles()).doesNotContain(partnerRole);
+        assertThat(profile.getIsVerified()).isFalse();
+        verify(userRepo).save(user);
+        verify(profileRepo).save(profile);
+    }
+
+    @Test
+    void revokePartnerRole_noProfile_stillRemovesRoleWithoutError() {
+        UUID userId = UUID.randomUUID();
+        Role partnerRole = new Role(RoleName.ROLE_PARTNER);
+        User user = makeUser(userId);
+        user.addRole(partnerRole);
+
+        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
+        when(roleRepo.findByName(RoleName.ROLE_PARTNER)).thenReturn(Optional.of(partnerRole));
+        when(userRepo.save(any())).thenReturn(user);
+        when(profileRepo.findByUserId(userId)).thenReturn(Optional.empty());
+
+        promotionService.revokePartnerRole(userId);
+
+        assertThat(user.getRoles()).doesNotContain(partnerRole);
+        verify(profileRepo, never()).save(any());
+    }
+
+    @Test
+    void revokePartnerRole_userNotFound_throwsResourceNotFound() {
+        UUID userId = UUID.randomUUID();
+        when(userRepo.findById(userId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> promotionService.revokePartnerRole(userId))
+            .isInstanceOf(ResourceNotFoundException.class);
+    }
 }

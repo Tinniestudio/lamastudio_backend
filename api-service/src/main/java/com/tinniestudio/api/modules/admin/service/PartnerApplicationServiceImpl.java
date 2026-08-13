@@ -73,14 +73,24 @@ public class PartnerApplicationServiceImpl implements PartnerApplicationService 
     public PartnerApplicationResponse reject(UUID applicationId, RejectApplicationRequest req, UUID adminId) {
         PartnerApplication app = applicationRepo.findById(applicationId)
             .orElseThrow(() -> new ResourceNotFoundException("Application not found"));
-        if (app.getStatus() != PartnerApplicationStatus.PENDING) {
-            throw new BadRequestException("Application has already been reviewed");
+        // Reject is allowed from PENDING (the normal review path) or APPROVED (revoking a
+        // previously-granted approval, e.g. a partner later found to violate regulation) — only
+        // an already-REJECTED application is a terminal state that blocks re-review.
+        if (app.getStatus() == PartnerApplicationStatus.REJECTED) {
+            throw new BadRequestException("Application has already been rejected");
         }
+        boolean wasApproved = app.getStatus() == PartnerApplicationStatus.APPROVED;
+
         app.setStatus(PartnerApplicationStatus.REJECTED);
         app.setRejectionReason(req.getReason());
         app.setReviewedBy(adminId);
         app.setReviewedAt(Instant.now());
         applicationRepo.save(app);
+
+        if (wasApproved) {
+            partnerPromotionService.revokePartnerRole(app.getUserId());
+        }
+
         auditLogService.log("PARTNER_APPLICATION_REJECTED", adminId, "PARTNER_APPLICATION", applicationId, req.getReason(), null);
         return PartnerApplicationResponse.from(app);
     }

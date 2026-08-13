@@ -124,6 +124,10 @@ public class User {
         roles.add(role);
     }
 
+    public void removeRole(Role role) {
+        roles.remove(role);
+    }
+
     public void softDelete() {
         this.deletedAt = Instant.now();
         this.accountStatus = AccountStatus.DELETED;

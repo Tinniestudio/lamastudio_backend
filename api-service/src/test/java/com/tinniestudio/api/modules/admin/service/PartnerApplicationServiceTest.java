@@ -132,6 +132,50 @@ class PartnerApplicationServiceTest {
     }
 
     @Test
+    void reject_afterApproved_revokesPartnerRoleAndSetsRejected() {
+        UUID appId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        PartnerApplication app = makePendingApp(appId, userId);
+        app.setStatus(PartnerApplicationStatus.APPROVED); // previously approved
+
+        when(applicationRepo.findById(appId)).thenReturn(Optional.of(app));
+        when(applicationRepo.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        RejectApplicationRequest req = new RejectApplicationRequest();
+        req.setReason("Violated content regulations");
+
+        PartnerApplicationResponse result = applicationService.reject(appId, req, adminId);
+
+        assertThat(result.status()).isEqualTo("REJECTED");
+        assertThat(result.rejectionReason()).isEqualTo("Violated content regulations");
+        verify(partnerPromotionService).revokePartnerRole(userId);
+        verify(auditLogService).log(
+            eq("PARTNER_APPLICATION_REJECTED"), eq(adminId),
+            eq("PARTNER_APPLICATION"), eq(appId),
+            eq("Violated content regulations"), isNull()
+        );
+    }
+
+    @Test
+    void reject_fromPending_doesNotRevokePartnerRole() {
+        UUID appId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        PartnerApplication app = makePendingApp(appId, userId); // still PENDING, never approved
+
+        when(applicationRepo.findById(appId)).thenReturn(Optional.of(app));
+        when(applicationRepo.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        RejectApplicationRequest req = new RejectApplicationRequest();
+        req.setReason("Incomplete submission");
+
+        applicationService.reject(appId, req, adminId);
+
+        verify(partnerPromotionService, never()).revokePartnerRole(any());
+    }
+
+    @Test
     void reject_setsRejectedStatusWithReason() {
         UUID appId = UUID.randomUUID();
         UUID adminId = UUID.randomUUID();

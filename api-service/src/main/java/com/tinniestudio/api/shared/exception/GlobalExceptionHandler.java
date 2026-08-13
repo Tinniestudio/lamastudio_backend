@@ -6,6 +6,7 @@ import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -16,6 +17,8 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.tinniestudio.api.modules.auth.exception.BadCredentialsException;
@@ -249,6 +252,54 @@ public class GlobalExceptionHandler {
         log.debug("Malformed request body at {}: {}", request.getServletPath(), ex.getMessage());
         Map<String, Object> body = buildStandardError("MALFORMED_REQUEST",
                 "Request body is malformed or contains invalid characters",
+                HttpStatus.BAD_REQUEST.value(), request.getServletPath());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    // Endpoints like admin/categories accept only application/json or multipart/form-data
+    // (see AdminCategoryController) — sending anything else (e.g. a raw application/octet-stream
+    // body) previously fell through to the catch-all Exception handler and returned a misleading
+    // 500 "unexpected error" instead of a 415 naming the actual unsupported Content-Type.
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<Object> handleMediaTypeNotSupported(
+            HttpMediaTypeNotSupportedException ex,
+            HttpServletRequest request
+    ) {
+        String receivedType = ex.getContentType() != null ? ex.getContentType().toString() : "unknown";
+        String supported = ex.getSupportedMediaTypes().isEmpty()
+                ? "a different Content-Type"
+                : ex.getSupportedMediaTypes().stream().map(Object::toString)
+                    .reduce((a, b) -> a + ", " + b).orElse("");
+        String message = "Content-Type '" + receivedType + "' is not supported for this endpoint. "
+                + "Expected one of: " + supported;
+        Map<String, Object> body = buildStandardError("UNSUPPORTED_MEDIA_TYPE", message,
+                HttpStatus.UNSUPPORTED_MEDIA_TYPE.value(), request.getServletPath());
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(body);
+    }
+
+    // File-upload endpoints (e.g. POST /partners/profile/logo, category poster upload) bind a
+    // MultipartFile via @RequestParam/@RequestPart — calling them with a non-multipart request
+    // (missing/wrong Content-Type, plain JSON, etc.) previously fell through to the catch-all
+    // Exception handler and returned a misleading 500 instead of a 400 naming the real problem.
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<Object> handleMultipart(
+            MultipartException ex,
+            HttpServletRequest request
+    ) {
+        log.debug("Multipart request error at {}: {}", request.getServletPath(), ex.getMessage());
+        Map<String, Object> body = buildStandardError("INVALID_MULTIPART_REQUEST",
+                "This endpoint requires a multipart/form-data request with the expected file part(s)",
+                HttpStatus.BAD_REQUEST.value(), request.getServletPath());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<Object> handleMissingPart(
+            MissingServletRequestPartException ex,
+            HttpServletRequest request
+    ) {
+        Map<String, Object> body = buildStandardError("MISSING_REQUEST_PART",
+                "Required file part '" + ex.getRequestPartName() + "' is missing from the multipart request",
                 HttpStatus.BAD_REQUEST.value(), request.getServletPath());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }

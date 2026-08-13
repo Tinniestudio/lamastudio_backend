@@ -47,8 +47,12 @@ public class UploadSession extends BaseEntity {
 
     private Instant completedAt;
 
-    @Column(name = "file_size_bytes")
-    private Long fileSizeBytes;
+    // NOT NULL DEFAULT 0 at the DB level (V38), populated with the real size once the upload
+    // is confirmed in completeSession(). Without a Java-side default, Hibernate sends an
+    // explicit NULL on the initial INSERT (session creation) instead of omitting the column,
+    // which bypasses the DB default and violates the NOT NULL constraint.
+    @Column(name = "file_size_bytes", nullable = false)
+    private Long fileSizeBytes = 0L;
 
     @Version
     private Long version;

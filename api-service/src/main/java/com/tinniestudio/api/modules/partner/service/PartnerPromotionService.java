@@ -18,4 +18,13 @@ public interface PartnerPromotionService {
      * and an existing PartnerProfile is never overwritten/duplicated.
      */
     PartnerProfile grantPartnerRoleAndProfile(UUID userId, String companyName, String websiteUrl);
+
+    /**
+     * Revokes ROLE_PARTNER from a user — used when admin rejects a previously-APPROVED partner
+     * application (undoing the approval) or otherwise removes partner access for a regulation
+     * violation. The PartnerProfile row is kept (not deleted) for audit/history purposes and is
+     * simply left orphaned of the role; it's marked unverified so nothing treats it as active.
+     * Idempotent: removing a role the user doesn't have is a no-op (Set semantics).
+     */
+    void revokePartnerRole(UUID userId);
 }
