@@ -8,13 +8,21 @@ import com.tinniestudio.api.modules.partner.dto.*;
 import com.tinniestudio.api.modules.partner.service.PartnerService;
 import com.tinniestudio.api.shared.ratelimit.RateLimit;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
+// NOTE: io.swagger.v3.oas.annotations.parameters.RequestBody is deliberately NOT imported by
+// simple name — it collides with org.springframework.web.bind.annotation.RequestBody (used on
+// apply()/updateProfile()'s JSON body parameters below) and an explicit import would shadow the
+// wildcard import, silently breaking Spring's body binding for those methods. Used
+// fully-qualified at the uploadLogo() call site instead.
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -65,8 +73,21 @@ public class PartnerController {
         return ResponseEntity.ok(partnerService.updateProfile(userId, req));
     }
 
+    // Explicit consumes + a Swagger-only "shadow" DTO for the multipart schema: without either,
+    // springdoc has previously defaulted this operation's documented request body to a plain
+    // JSON object in Swagger UI (no file picker), which both hides the real multipart contract
+    // from API consumers and encourages hand-rolled curl reproductions that mis-set the file
+    // part's Content-Type — see AdminCategoryController's multipart overloads for the same
+    // pattern applied to a request-JSON-part + file combination.
     @Operation(summary = "Upload partner logo")
-    @PostMapping("/profile/logo")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+        required = true,
+        content = @Content(
+            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            schema = @Schema(implementation = LogoUploadForm.class)
+        )
+    )
+    @PostMapping(value = "/profile/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PartnerProfileResponse> uploadLogo(
             @AuthenticationPrincipal UserDetails principal,
             @RequestParam("file") MultipartFile file) throws IOException {

@@ -5,7 +5,13 @@ import com.tinniestudio.api.modules.category.dto.CreateCategoryRequest;
 import com.tinniestudio.api.modules.category.dto.UpdateCategoryRequest;
 import com.tinniestudio.api.modules.category.service.CategoryService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Encoding;
 import io.swagger.v3.oas.annotations.tags.Tag;
+// NOTE: io.swagger.v3.oas.annotations.parameters.RequestBody is deliberately NOT imported by
+// simple name — it collides with org.springframework.web.bind.annotation.RequestBody (used on
+// the JSON-overload method parameters below) and an explicit import would shadow the wildcard
+// import, silently breaking those. Used fully-qualified at the call site instead.
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -46,7 +52,20 @@ public class AdminCategoryController {
         return ResponseEntity.status(HttpStatus.CREATED).body(categoryService.create(request, null));
     }
 
+    // The explicit `encoding` hint tells Swagger UI (and any client generated from the OpenAPI
+    // spec) to send the "request" part as Content-Type: application/json. Without it, a part
+    // with no declared type is prone to defaulting to application/octet-stream — which this
+    // endpoint's JSON-only sibling (above) rejects with a 415, since Spring's content
+    // negotiation for @RequestPart falls back to matching against the plain-JSON overload's
+    // consumes clause when the multipart body itself can't be parsed as intended.
     @Operation(summary = "Create category with poster image (multipart)")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+        required = true,
+        content = @Content(
+            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            encoding = @Encoding(name = "request", contentType = MediaType.APPLICATION_JSON_VALUE)
+        )
+    )
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<CategoryResponse> createWithPoster(
             @RequestPart("request") @Valid CreateCategoryRequest request,
@@ -63,6 +82,13 @@ public class AdminCategoryController {
     }
 
     @Operation(summary = "Update category with new poster image (multipart)")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+        required = true,
+        content = @Content(
+            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            encoding = @Encoding(name = "request", contentType = MediaType.APPLICATION_JSON_VALUE)
+        )
+    )
     @PatchMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<CategoryResponse> updateWithPoster(
             @PathVariable UUID id,
