@@ -198,6 +198,26 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
+    // Thrown by StorageService implementations (MinioStorageService) on a real connectivity/auth
+    // failure talking to the object store (unreachable endpoint, wrong credentials, etc.) — an
+    // operational failure the caller can retry, not a client input error. Without this handler
+    // it fell through to the catch-all Exception handler and returned a generic 500 "unexpected
+    // error" for every upload/poster/logo endpoint that touches storage, indistinguishable from
+    // an actual bug. UploadService.completeSession() already special-cases this locally as 503;
+    // this handler gives every OTHER storage-touching endpoint (uploadFile for posters/logos,
+    // generateUploadUrl, deleteObject) the same treatment for free.
+    @ExceptionHandler(StorageException.class)
+    public ResponseEntity<Object> handleStorageException(
+            StorageException ex,
+            HttpServletRequest request
+    ) {
+        log.error("Storage operation failed at {}: {}", request.getServletPath(), ex.getMessage(), ex);
+        Map<String, Object> body = buildStandardError("STORAGE_UNAVAILABLE",
+                "Storage is temporarily unavailable — please retry",
+                HttpStatus.SERVICE_UNAVAILABLE.value(), request.getServletPath());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body);
+    }
+
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<Object> handleRateLimitExceeded(
             RateLimitExceededException ex,
