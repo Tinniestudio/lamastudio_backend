@@ -60,4 +60,12 @@ public class AdminSubscriptionController {
         adminSubscriptionService.deletePlan(planId);
         return ResponseEntity.ok(Map.of("message", "Subscription plan deleted successfully"));
     }
+
+    @Operation(summary = "Restore a deleted plan (sets isActive = true)")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PutMapping("/{planId}/restore")
+    public ResponseEntity<Object> restore(@PathVariable UUID planId) {
+        adminSubscriptionService.restorePlan(planId);
+        return ResponseEntity.ok(Map.of("message", "Subscription plan restored successfully"));
+    }
 }

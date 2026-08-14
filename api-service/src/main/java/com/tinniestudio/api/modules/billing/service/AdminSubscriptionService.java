@@ -18,4 +18,6 @@ public interface AdminSubscriptionService {
 
     /** Soft delete — sets isActive = false. Never removes the row. */
     void deletePlan(UUID planId);
+
+    void restorePlan(UUID planId);
 }

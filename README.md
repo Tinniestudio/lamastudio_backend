@@ -378,4 +378,43 @@ psql -U postgres -d tinniestudio_db < backup.sql
 
 psql -U db_user -h host -d db_name
 
-\
+
+Client                    api-service                 MinIO/S3              media-worker
+  |                            |                            |                      |
+  |--POST /uploads/sessions -->|                            |                      |
+  |                            |--generate presigned PUT --->|                      |
+  |<--{sessionId, uploadUrl}---|                            |                      |
+  |                            |                            |                      |
+  |--PUT raw video bytes-------------------------------------->|                    |
+  |<--200 OK (direct to storage, API never sees the bytes)------|                    |
+  |                            |                            |                      |
+  |--POST /uploads/{id}/complete>                            |                      |
+  |                            |--HEAD check object exists-->|                      |
+  |                            |--create VideoAsset(PENDING)-|                      |
+  |                            |--publish VIDEO_PROCESSING_JOB (RabbitMQ)---------->|
+  |<--{videoAssetId}-----------|                            |                      |
+  |                            |                            |<--download original--|
+  |                            |                            |                      |--ffprobe (duration/resolution/codec)
+  |                            |                            |                      |--ffmpeg: transcode to HLS renditions
+  |                            |                            |                      |    (1080p/720p/480p/360p, whichever ≤ source height)
+  |                            |                            |                      |--generate thumbnail
+  |                            |                            |<--upload renditions + master.m3u8--|
+  |                            |<--VideoAsset.status = READY-------------------------|
+  |                            |<--notify user (CONTENT_PROCESSED)--------------------|
+
+
+Client                                      api-service
+  |                                              |
+  |--GET /playback/manifest/content/{id}-------->|
+  |                                    checkAccess() — content PUBLISHED? active subscription?
+  |                                    find READY VideoAsset for this content
+  |                                    manifestUrl = CDN_BASE_URL + "/" + asset.manifestUrl
+  |<--{manifestUrl, subtitles[], resumeAt}--------|
+  |
+  |--GET {manifestUrl} (master.m3u8)---------------------------------> CDN / storage bucket
+  |<--master playlist listing all resolution variants------------------|
+  |
+  | HLS player (hls.js / native <video>) picks a variant based on
+  | measured bandwidth, fetches that variant's .m3u8 + .ts segments
+  | directly from CDN/storage, and switches resolution adaptively
+  | as bandwidth changes — mid-stream, no new API calls needed.

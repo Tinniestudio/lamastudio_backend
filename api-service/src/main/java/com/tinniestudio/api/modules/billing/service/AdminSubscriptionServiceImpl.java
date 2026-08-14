@@ -80,6 +80,15 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
         log.info("Admin soft-deleted subscription plan '{}' (id={})", plan.getName(), planId);
     }
 
+    @Override
+    @Transactional
+    public void restorePlan(UUID planId) {
+        SubscriptionPlan plan  = findOrThrow(planId);
+        plan.setIsActive(true);
+        planRepository.save(plan);
+        log.info("Admin restored subscription plan '{}' (id={})", plan.getName(), planId);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private SubscriptionPlan findOrThrow(UUID planId) {

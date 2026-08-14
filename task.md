@@ -1,697 +1,337 @@
-# TinnieStudio — Master Task & Context Document
-> Last updated: 2026-07-08
-> Purpose: Full context restoration for Claude across sessions. Read this before any implementation session.
-
----
-
-## 1. What Is TinnieStudio
-
-A Netflix-like video streaming platform. Users subscribe to a plan, browse content (movies/series), and stream via adaptive HLS. Partners upload and publish content. Admins moderate the platform.
-
-**Two runtime services — one repo:**
-- `api-service` — REST API for frontend clients
-- `media-worker` — Async video transcoding (FFmpeg + RabbitMQ)
-
-Both deploy independently via Docker. Both share the same PostgreSQL database.
-
----
-
-## 2. Architecture Decisions (locked in)
-
-| Decision | Choice | Notes |
-|----------|--------|-------|
-| Build system | Gradle multi-project | Migrating from Maven |
-| Services | api-service + media-worker | Same repo, separate JARs |
-| Root package (API) | `com.tinniestudio.api` | Renaming from `com.tinniestudio.backend` |
-| Root package (Worker) | `com.tinniestudio.worker` | New |
-| Repo layout | Monorepo | `api-service/`, `media-worker/`, `docker-compose.yml` at root |
-| Dockerfiles | One per service | `api-service/Dockerfile`, `media-worker/Dockerfile` |
-| Database | PostgreSQL 16 + Flyway | Migrations owned by api-service only |
-| Cache | Redis 7 (Lettuce) | Key prefix: `tinnie:{module}:{key}` |
-| Queue | RabbitMQ 3.x + Spring AMQP | `QueuePublisher` interface + `RabbitQueuePublisher` done (api-service) |
-| Storage | S3-compatible via `StorageService` interface | `MinioStorageService` done (MINIO provider); NoOp fallback; `StorageException` wrapping |
-| Email | Resend SDK | `ResendEmailService` done |
-| Auth | JWT (access body + refresh HttpOnly cookie) | Dual JWT: user + admin separate secrets |
-| OAuth2 | Google | Done |
-| Payment | Stripe | Done (not Paystack) |
-| Rate limiting | Redis token bucket via AOP `@RateLimit` | Done |
-
----
-
-## 3. Repository Layout (Target State after Migration)
-
-```
-/server (repo root)
-├── settings.gradle
-├── build.gradle                    ← dependency versions only (no plugins applied here)
-├── gradlew / gradlew.bat
-├── gradle/wrapper/
-├── docker-compose.yml              ← brings up: postgres, redis, rabbitmq, minio, api-service, media-worker
-├── .env / .env.prod
-├── task.md                         ← this file
-├── BATCH-PLAN.md
-│
-├── api-service/
-│   ├── build.gradle
-│   ├── Dockerfile
-│   └── src/
-│       ├── main/java/com/tinniestudio/api/
-│       │   ├── ApiServiceApplication.java
-│       │   ├── shared/
-│       │   │   ├── config/         ← AppProperties, SecurityConfig, RedisConfig, etc.
-│       │   │   ├── entity/         ← BaseEntity, User, UserProfile, Content, etc.
-│       │   │   ├── exception/      ← GlobalExceptionHandler, AppException hierarchy
-│       │   │   ├── web/            ← ApiResponse, SuccessResponseWrapper
-│       │   │   ├── cache/          ← CacheService, RedisCacheService
-│       │   │   ├── email/          ← ResendEmailService
-│       │   │   ├── ratelimit/      ← @RateLimit, RateLimiterService
-│       │   │   ├── security/       ← JWT filters, OAuth2 handlers
-│       │   │   ├── storage/        ← StorageService interface + implementations
-│       │   │   ├── jobs/           ← Scheduled jobs
-│       │   │   └── util/
-│       │   └── modules/
-│       │       ├── auth/           ← AuthController, AuthService, admin auth
-│       │       ├── billing/        ← SubscriptionController, StripeService, CouponService
-│       │       ├── category/       ← CategoryService (no controller yet)
-│       │       ├── content/        ← ContentService (no controller yet)
-│       │       ├── notification/   ← NotificationService (no controller yet)
-│       │       ├── upload/         ← UploadService (no controller yet)
-│       │       ├── user/           ← UserProfileController, UserProfileService
-│       │       └── role/           ← RoleRepository
-│       ├── main/resources/
-│       │   ├── application.yml
-│       │   ├── application.dev.yml
-│       │   ├── application.prod.yml
-│       │   └── db/migration/       ← Flyway V1–V13 (api-service owns ALL migrations)
-│       └── test/
-│
-└── media-worker/
-    ├── build.gradle
-    ├── Dockerfile                  ← installs FFmpeg + FFprobe
-    └── src/
-        ├── main/java/com/tinniestudio/worker/
-        │   ├── MediaWorkerApplication.java
-        │   ├── config/             ← RabbitMQ, DB, Storage config
-        │   ├── consumer/           ← @RabbitListener for media.video.process
-        │   ├── processor/          ← VideoProcessingService, pipeline stages
-        │   ├── ffmpeg/             ← FFmpegRunner, FFprobeRunner
-        │   └── storage/            ← worker-side StorageService impl
-        └── main/resources/
-            └── application.yml
-```
-
----
-
-## 4. Current Implementation Status
-
-### DONE ✅
-
-**Auth module** (`modules/auth/`)
-- Register: email validation, BCrypt (strength 12), PENDING_VERIFICATION status
-- Login: password verify, JWT access token + refresh cookie, Redis refresh cache
-- Logout: revoke refresh token in DB + Redis + clear cookie
-- Token refresh: Redis fast-path + DB fallback, rotation
-- Email verification: token generation, expiry, resend with rate limit
-- Password reset: hash token, 1h TTL, revoke all sessions on reset
-- Admin auth: separate JWT secrets, separate filter chain, session management
-- Admin bootstrap: seed initial admin from env token
-- OAuth2: Google login via Spring Security OAuth2
-
-**User module** (`modules/user/`)
-- UserProfileController: GET/PATCH profile, PATCH notifications, PATCH password
-
-**Billing module** (`modules/billing/`)
-- SubscriptionController: GET plans, GET my subscription, POST checkout (Stripe), POST cancel
-- StripeWebhookController: payment event handling (HMAC signature validated)
-- AdminSubscriptionController: admin subscription management
-- CouponService: validate, redeem, redemption tracking
-- SubscriptionExpirationJob: daily cron — expires subscriptions past end_date
-- SubscriptionExpiryReminderJob: daily cron — notifies users 3 days before expiry
-- CapabilityService: checks user plan limits (device count, video quality)
-
-**Shared infrastructure**
-- Redis: CacheService + RedisCacheService (get/set/delete/exists/increment)
-- Rate limiting: @RateLimit AOP annotation, Redis token bucket
-- Email: ResendEmailService, EmailTemplates (HTML)
-- Security: JwtAuthenticationFilter, AdminJwtAuthenticationFilter, CookieFactory
-- Response envelope: ApiResponse, SuccessResponseWrapper, GlobalExceptionHandler
-- OpenAPI / Swagger UI
-- AsyncConfig: async executor
-- **RabbitMQ publisher** (2026-07-08): `QueuePublisher` interface, `RabbitQueuePublisher` (RabbitTemplate-backed, JSON), `QueueMessage<T>` envelope (messageId/type/publishedAt/attempt/version/payload), `RabbitConfig` (exchange `tinniestudio.direct` + 5 queues with DLX wiring). `RabbitTemplate` confined to `RabbitQueuePublisher` only.
-- **StorageService** (2026-07-08): `MinioStorageService` (AWS SDK v2, path-style for MinIO, S3Client+S3Presigner constructor-injected), `StorageServiceConfig` (@ConditionalOnProperty MINIO / @ConditionalOnMissingBean NoOp), `StorageProperties` (@ConfigurationProperties prefix=app.storage), `StorageException` wraps SDK types. S3Client/S3Presigner confined to infra layer only. `copyObject` + `getMetadata` deferred to Batch 7.
-
-**Entities** (JPA — tables created via Flyway)
-- User, UserProfile, UserSubscription, SubscriptionPlan, Payment, Coupon, CouponRedemption
-- Content, Season, Episode, Category
-- VideoAsset, VideoVariant, UploadSession, Subtitle
-- WatchProgress, Notification
-
-**Flyway migrations**
-- V1: users, roles, refresh_tokens, email_verification_tokens, password_reset_tokens
-- V2: seed roles (USER, PARTNER, ADMIN, SUPER_ADMIN)
-- V3: admin tables (admins, admin_sessions)
-- V4: user_sessions
-- V5: subscription_plans, user_subscriptions
-- V6: coupons, coupon_redemptions
-- V7: subscription fields (trial_ends_at, auto_renew, etc.)
-- V8: remove admin roles from users table
-- V9: user_profiles
-- V10: payments
-- V11: subscription cancelled_at column
-- V12: user_subscription max_devices
-- V13: update subscription plan prices
-
----
-
-### ENTITIES EXIST BUT NO CONTROLLERS / BUSINESS LOGIC YET ⚠️
-
-| Entity/Area | File exists | Controller | Service | Status |
-|---|---|---|---|---|
-| Content (CRUD, status workflow) | ✅ entity | ❌ | partial | Not built |
-| Category (CRUD, Redis cache) | ✅ entity | ❌ | partial | Not built |
-| Season + Episode | ✅ entity | ❌ | ❌ | Not built |
-| Upload session (presigned URL) | ✅ entity | ❌ | partial | Not built |
-| Notification (in-app) | ✅ entity | ❌ | partial | Not built |
-
----
-
-### NOT STARTED ❌
-
-| Batch | Feature |
-|---|---|
-| Batch 3 | Category API controllers + homepage discovery |
-| Batch 4 | Content API (CRUD, status workflow: DRAFT→REVIEW→PUBLISHED→ARCHIVED) |
-| Batch 5 | Episode + Series API |
-| Batch 6 | Upload session API (presigned URL flow, complete, status) |
-| Batch 7 | **Media Worker** — FFprobe metadata, FFmpeg HLS transcoding, retry logic |
-| Batch 8 | Playback system — manifest delivery, subscription enforcement, watch progress |
-| Batch 9 | Search + Discovery (PostgreSQL FTS, recommendations) |
-| Batch 10 | Favorites + Watch History APIs |
-| Batch 11 | Ratings + Reviews + aggregate scoring |
-| Batch 13 | Partner Portal (dashboard, analytics, upload management) |
-| Batch 14 | Admin Moderation (user management, content queue, audit log) |
-| Batch 15 | Notification system (queue consumer, email + in-app delivery) |
-| Batch 16 | Analytics system (event ingestion, daily aggregation) |
-| Batch 17 | Full background job suite |
-| Batch 18 | Observability, structured JSON logging, security hardening |
-
----
-
-## 5. Immediate Task: Gradle Migration (In Progress)
-
-### Goal
-Convert the single Maven project into a Gradle multi-project build with two deployable subprojects: `api-service` and `media-worker`.
-
-### Decision
-- Option A: In-place migration on a feature branch
-- Package rename: `com.tinniestudio.backend` → `com.tinniestudio.api`
-
-### Step-by-Step Checklist
-
-- [ ] **Step 1 — Gradle wrapper**
-  - Run `gradle wrapper --gradle-version 8.8` at repo root (or download wrapper files manually)
-  - Files: `gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar`, `gradle/wrapper/gradle-wrapper.properties`
-
-- [ ] **Step 2 — Root build files**
-  - Create `settings.gradle` — defines `rootProject.name = 'tinniestudio'`, includes `api-service` and `media-worker`
-  - Create root `build.gradle` — shared version catalog / `ext {}` block for dependency versions only
-
-- [ ] **Step 3 — Create api-service subproject**
-  - Create `api-service/` directory
-  - Move `src/` → `api-service/src/`
-  - Move `src/main/resources/` → `api-service/src/main/resources/` (includes application.yml, Flyway migrations)
-  - Create `api-service/build.gradle` — all current `pom.xml` dependencies translated to Gradle syntax
-
-- [ ] **Step 4 — Package rename (api-service)**
-  - Rename all `.java` files: `com.tinniestudio.backend` → `com.tinniestudio.api`
-  - Rename package directories accordingly
-  - Update `LamaStudioApplication.java` → `ApiServiceApplication.java`
-  - Update `application.yml`: `spring.application.name: tinniestudio-api`
-  - Update logging config: `com.tinniestudio` instead of `com.tinniestudio`
-  - Update `@SpringBootApplication` scan annotation if needed
-
-- [ ] **Step 5 — api-service Dockerfile**
-  - Create `api-service/Dockerfile`
-  - Multi-stage: build stage (`./gradlew :api-service:bootJar`), runtime stage (JRE 21 slim)
-  - EXPOSE 8080
-
-- [ ] **Step 6 — Create media-worker subproject scaffold**
-  - Create `media-worker/` directory with full package structure:
-    ```
-    media-worker/src/main/java/com/tinniestudio/worker/
-      MediaWorkerApplication.java
-      config/RabbitConfig.java (stub)
-      consumer/VideoProcessingConsumer.java (stub)
-      processor/VideoProcessingService.java (stub)
-      ffmpeg/FFmpegRunner.java (stub)
-      ffmpeg/FFprobeRunner.java (stub)
-    media-worker/src/main/resources/application.yml
-    ```
-  - Create `media-worker/build.gradle` — Spring Boot + AMQP + JPA + PostgreSQL driver
-
-- [ ] **Step 7 — media-worker Dockerfile**
-  - Multi-stage build + runtime stage installs `ffmpeg` and `ffprobe` via apt
-  - EXPOSE 8081 (or no port — worker has no HTTP listeners)
-
-- [ ] **Step 8 — Update docker-compose.yml**
-  - Replace single `app` service with `api-service` + `media-worker`
-  - Add missing infrastructure services: `redis`, `rabbitmq`, `minio`
-  - Keep `db` (postgres)
-  - All services on shared `tinniestudio-network`
-
-- [ ] **Step 9 — Delete pom.xml**
-
-- [ ] **Step 10 — Verify**
-  - `./gradlew :api-service:build` — all tests pass
-  - `./gradlew :media-worker:build` — compiles clean
-  - `docker-compose build` — both images build
-
----
-
-## 6. docker-compose.yml Target (after migration)
-
-```yaml
-services:
-  api-service:
-    build: ./api-service
-    container_name: tinniestudio-api
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    env_file: .env
-    environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: tinniestudio_db
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_HOST: rabbitmq
-    depends_on: [db, redis, rabbitmq]
-    networks: [tinniestudio-network]
-
-  media-worker:
-    build: ./media-worker
-    container_name: tinniestudio-worker
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: tinniestudio_db
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      RABBITMQ_HOST: rabbitmq
-    depends_on: [db, rabbitmq]
-    networks: [tinniestudio-network]
-
-  db:
-    image: postgis/postgis:16-3.4
-    container_name: tinniestudio-db
-    restart: always
-    environment:
-      POSTGRES_DB: tinniestudio_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    networks: [tinniestudio-network]
-
-  redis:
-    image: redis:7-alpine
-    container_name: tinniestudio-redis
-    restart: always
-    ports:
-      - "6379:6379"
-    networks: [tinniestudio-network]
-
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: tinniestudio-rabbitmq
-    restart: always
-    ports:
-      - "5672:5672"
-      - "15672:15672"   # management UI
-    networks: [tinniestudio-network]
-
-  minio:
-    image: minio/minio:latest
-    container_name: tinniestudio-minio
-    restart: always
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"   # MinIO console
-    volumes:
-      - minio_data:/data
-    networks: [tinniestudio-network]
-
-networks:
-  tinniestudio-network:
-    driver: bridge
-
-volumes:
-  db_data:
-  minio_data:
-```
-
----
-
-## 7. Queue Topology (RabbitMQ — to be wired in Batch 6/7)
-
-```
-Exchange: tinniestudio.direct
-
-Queues:
-  media.video.process     → DLX: media.video.failed        (publisher: api-service, consumer: media-worker)
-  media.video.retry       → TTL + re-routes to process     (publisher/consumer: media-worker)
-  media.video.failed      → dead letters, manual review    (consumer: none — admin notification only)
-  notifications.send      → event-driven delivery          (publisher: both, consumer: api-service)
-  analytics.ingest        → event ingestion                (publisher: api-service, consumer: api-service)
-```
-
-**Message envelope (all messages):**
-```json
-{
-  "messageId": "uuid",
-  "type": "VIDEO_PROCESSING_JOB",
-  "publishedAt": "2026-01-01T00:00:00Z",
-  "attempt": 1,
-  "version": 1,
-  "payload": {}
-}
-```
-
----
-
-## 8. DB Write Ownership (enforced by architecture)
-
-| Tables | Owner |
-|--------|-------|
-| users, user_profiles, user_subscriptions, coupons, payments, sessions | api-service ONLY |
-| contents, seasons, episodes, categories | api-service ONLY |
-| upload_sessions, media_files | api-service ONLY |
-| video_assets.processing_status, processing_error, manifest_key | media-worker ONLY |
-| video_variants, processing_jobs | media-worker ONLY |
-
----
-
-## 9. Redis Key Namespacing
-
-```
-tinnie:auth:refresh:{userId}:{tokenId}     TTL 7d
-tinnie:auth:otp:{email}                    TTL 10min
-tinnie:rate:{ip}:{endpoint}                token bucket counter
-tinnie:upload:{sessionId}                  upload state, TTL 30min
-tinnie:playback:{contentId}:{userId}       signed URL cache, TTL 5min
-tinnie:home:sections                       homepage sections, TTL 5min
-tinnie:category:list                       category list, TTL 10min
-tinnie:content:{slug}                      content detail, TTL 2min
-tinnie:lock:{jobName}                      distributed job lock
-```
-
----
-
-## 10. API Endpoint Master Reference
-
-### Base path: `/api/v1`
-
-#### Auth (DONE ✅)
-```
-POST /auth/register
-POST /auth/login
-POST /auth/logout
-POST /auth/refresh
-POST /auth/verify-email
-POST /auth/resend-verification
-POST /auth/forgot-password
-POST /auth/reset-password
-GET  /auth/me
-GET  /auth/oauth2/callback/google
-```
-
-#### Users / Profile (DONE ✅)
-```
-GET    /users/me
-PATCH  /users/me
-PATCH  /users/me/notifications
-PATCH  /users/me/password
-PATCH  /users/me/avatar
-```
-
-#### Subscriptions / Billing (DONE ✅)
-```
-GET   /subscriptions/plans
-POST  /subscriptions/checkout
-GET   /subscriptions/me
-PATCH /subscriptions/cancel
-POST  /subscriptions/apply-coupon
-POST  /webhooks/payment
-```
-
-#### Categories (NOT BUILT ❌)
-```
-GET    /categories
-GET    /categories/:slug
-POST   /admin/categories
-PATCH  /admin/categories/:id
-DELETE /admin/categories/:id
-```
-
-#### Content (NOT BUILT ❌)
-```
-GET    /contents
-GET    /contents/:slug
-POST   /partner/contents
-PATCH  /partner/contents/:id
-DELETE /partner/contents/:id
-PATCH  /partner/contents/:id/publish
-PATCH  /partner/contents/:id/unpublish
-PATCH  /admin/contents/:id/approve
-PATCH  /admin/contents/:id/reject
-PATCH  /admin/contents/:id/feature
-```
-
-#### Seasons + Episodes (NOT BUILT ❌)
-```
-GET    /contents/:contentId/seasons
-POST   /partner/contents/:contentId/seasons
-PATCH  /partner/seasons/:seasonId
-DELETE /partner/seasons/:seasonId
-GET    /seasons/:seasonId/episodes
-POST   /partner/seasons/:seasonId/episodes
-PATCH  /partner/episodes/:id
-DELETE /partner/episodes/:id
-PATCH  /partner/seasons/:seasonId/episodes/reorder
-```
-
-#### Upload Sessions (NOT BUILT ❌)
-```
-POST /uploads/sessions
-POST /uploads/:sessionId/complete
-GET  /uploads/:sessionId/status
-```
-
-#### Playback (NOT BUILT ❌)
-```
-GET  /playback/:contentId/access
-GET  /playback/:contentId/manifest
-GET  /playback/episode/:episodeId/manifest
-POST /playback/progress
-GET  /playback/continue-watching
-```
-
-#### Discovery + Search (NOT BUILT ❌)
-```
-GET /discover/home
-GET /discover/featured
-GET /discover/trending
-GET /discover/new-releases
-GET /discover/recommended
-GET /search
-```
-
-#### Favorites + History (NOT BUILT ❌)
-```
-GET    /favorites
-POST   /favorites/:contentId
-DELETE /favorites/:contentId
-GET    /history
-DELETE /history/:id
-DELETE /history
-```
-
-#### Reviews (NOT BUILT ❌)
-```
-GET    /contents/:contentId/reviews
-POST   /contents/:contentId/reviews
-PATCH  /reviews/:id
-DELETE /reviews/:id
-PATCH  /admin/reviews/:id/status
-```
-
-#### Notifications (NOT BUILT ❌)
-```
-GET   /notifications
-PATCH /notifications/:id/read
-PATCH /notifications/read-all
-```
-
-#### Partner (NOT BUILT ❌)
-```
-GET /partner/dashboard
-GET /partner/analytics
-GET /partner/uploads
-GET /partner/contents
-GET /partner/revenue
-```
-
-#### Admin (PARTIAL ⚠️)
-```
-GET   /admin/dashboard                  ← not built
-GET   /admin/users                      ← not built
-PATCH /admin/users/:id/status           ← not built
-GET   /admin/uploads/processing         ← not built
-GET   /admin/analytics/platform         ← not built
-GET   /admin/categories (see above)     ← not built
-GET   /admin/contents/* (see above)     ← not built
-POST  /admin/auth/login                 ← DONE ✅
-POST  /admin/auth/logout                ← DONE ✅
-POST  /admin/auth/refresh               ← DONE ✅
-```
-
----
-
-## 11. Media Worker — Processing Pipeline Reference
-
-When a `RAW_VIDEO` upload is completed via `/uploads/:sessionId/complete`, the api-service:
-1. Creates a `VideoAsset` (status=PENDING)
-2. Publishes a `MediaProcessingJob` message to `media.video.process`
-
-The worker then runs:
-```
-VALIDATING → DOWNLOADING → PROBING (FFprobe) → TRANSCODING (FFmpeg HLS) 
-→ THUMBNAIL_GENERATION → UPLOADING_OUTPUT → FINALIZING → CLEANUP
-```
-
-**FFmpeg HLS output per resolution:**
-| Resolution | Video bitrate | Audio |
-|------------|--------------|-------|
-| 1080p | 5000k | 192k |
-| 720p | 2800k | 128k |
-| 480p | 1400k | 128k |
-| 360p | 800k | 96k |
-
-Output path in storage: `processed/{videoAssetId}/{resolution}/`
-Master manifest: `processed/{videoAssetId}/master.m3u8`
-
-Retry: max 3 attempts. Attempt 2 after 1 min, attempt 3 after 5 min (via `media.video.retry` TTL queue). After 3 failures → route to `media.video.failed`.
-
----
-
-## 12. Response Envelope (ALL endpoints)
-
-```json
-{
-  "success": true,
-  "data": {},
-  "error": null,
-  "meta": { "page": 1, "limit": 20, "total": 100 }
-}
-```
-
-Error shape:
-```json
-{
-  "success": false,
-  "data": null,
-  "error": { "code": "NOT_FOUND", "message": "Content not found", "details": null }
-}
-```
-
-Machine-readable codes: `NOT_FOUND`, `UNAUTHORIZED`, `FORBIDDEN`, `CONFLICT`, `VALIDATION_FAILED`, `UPGRADE_REQUIRED`, `RATE_LIMIT_EXCEEDED`
-
----
-
-## 13. Role Hierarchy
-
-```
-SUPER_ADMIN > ADMIN > PARTNER > USER
-```
-
-Security guard summary:
-- `/auth/*`, `GET /contents`, `GET /categories`, `/discover/*`, `/search` — Public
-- `/playback/*`, `/favorites/*`, `/history/*`, `/reviews/*` — USER+
-- `/uploads/sessions`, `/partner/*` — PARTNER+
-- `/admin/*` — ADMIN+
-- `/webhooks/*` — Public (signature validated internally)
-
----
-
-## 14. Environment Variables Required
-
-```
-# Database
-DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
-
-# Redis
-REDIS_URL
-
-# JWT (user)
-JWT_ACCESS_SECRET, JWT_ACCESS_EXPIRATION_MS
-JWT_REFRESH_SECRET, JWT_REFRESH_EXPIRATION_MS
-
-# JWT (admin)
-JWT_ADMIN_ACCESS_SECRET, JWT_ADMIN_ACCESS_EXPIRATION_MS
-JWT_ADMIN_REFRESH_SECRET, JWT_ADMIN_REFRESH_EXPIRATION_MS
-
-# OAuth2
-GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
-
-# App
-APP_BASE_URL, FRONTEND_URL
-ADMIN_BOOTSTRAP_TOKEN
-FREE_TIER_CONTENT_LIMIT
-COOKIE_SECURE, COOKIE_SAME_SITE, COOKIE_DOMAIN
-
-# Stripe
-STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
-CDN_BASE_URL
-
-# Email
-RESEND_API_KEY, RESEND_BASE_URL, RESEND_FROM_EMAIL
-
-# Storage (to be added)
-STORAGE_PROVIDER (S3 | R2 | MINIO)
-STORAGE_BUCKET, STORAGE_REGION, STORAGE_ENDPOINT
-AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
-
-# RabbitMQ (to be added)
-RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASSWORD
-```
-
----
-
-## 15. Architecture Drift — Forbidden Patterns
-
-These are hard violations (not code review comments — blocking):
-
-| Rule | Violation |
-|------|-----------|
-| No direct infra in domain services | `AuthService` injecting `RedisTemplate` directly |
-| No storage SDK outside `StorageService` | `S3Client` in `UploadService` |
-| No `RabbitTemplate` outside `QueuePublisher` | `rabbitTemplate.convertAndSend()` in `ContentService` |
-| No FFmpeg/FFprobe outside media-worker | API service calling ProcessBuilder("ffprobe") |
-| No business logic in controllers | Subscription check inside `@RestController` method body |
-| No cross-domain repository injection | `AuthService` injecting `ContentRepository` |
-| No `@Value` in service/use-case classes | `@Value("${jwt.secret}")` in `AuthService` |
-| No `System.getenv()` in application code | Anywhere outside bootstrap config |
-
----
-
-*Read BATCH-PLAN.md for full batch specifications including DB schemas, flows, and completion gates.*
+Findings — Notification Module (api-service)
+NotificationServiceImpl.java:31-50 — sendNotification never consults NotificationPreferenceRepository — spec-conformance / data-integrity (critical). Batch 15 #4/#6 require per-channel preferences to actually gate delivery, but notification_preferences is written to (via updatePreference) and read only for the GET/PUT /preferences endpoints — it is never checked before a notification row is created. A user who disables an event type or channel still receives (and is still counted as unread for) that notification. Confirmed by NotificationServiceTest: the preference repo mock is wired only for the update-preference test, never asserted against sendNotification. This makes the entire preferences feature cosmetic.
+
+NotificationServiceImpl.java (whole class) / NotificationConsumer.java:52-57 — Only CONTENT_PROCESSED is ever actually triggered — spec-conformance (critical). DomainEnums.NotificationEventType defines CONTENT_APPROVED, CONTENT_REJECTED, APPLICATION_APPROVED, APPLICATION_REJECTED, ACCOUNT_SUSPENDED, ACCOUNT_BANNED, and templates can be created for them, but a repo-wide grep shows NotificationService/sendNotification is referenced only inside the notification module itself. Content moderation (Batch 14) and partner-application approval (Batch 13/14 #4) never call it, so those "completed" flows produce no user-facing notification despite the event types existing specifically for them.
+
+No NotificationChannel/NotificationSender abstraction exists — spec-conformance. Batch 15 #8 asks for a clean abstraction so more delivery channels can be added later. Today channel is just a stored enum value (IN_APP/EMAIL) on Notification/NotificationTemplate; sendNotification performs one action (persist a row) regardless of channel — an EMAIL-channel template silently produces only an in-app DB row, no actual email dispatch, no interface to plug a mailer into. There's nothing to "add a channel to" without touching NotificationServiceImpl directly.
+
+NotificationRepository.java:27-30 / NotificationCleanupJob.java:26-37 — 90-day cleanup is a single unbounded DELETE FROM Notification n WHERE n.createdAt < :cutoff — data-integrity. On a large notifications table this is a long-running, lock-heavy transaction (no batching/LIMIT/chunking), which contradicts the "batched safely" expectation in the review checklist and risks blocking concurrent inserts/reads (e.g. markAllReadForUser, unread-count reads) during the nightly run.
+
+Notification.retryCount is a dead column — quality / spec-conformance (minor). It satisfies Batch 17 #3 ("add a tracking column") at the schema level, but nothing in NotificationServiceImpl or NotificationConsumer ever increments or reads it — there is no retry mechanism for failed deliveries, so the column doesn't yet do the "easy tracking" it was added for.
+
+NotificationTemplateServiceImpl.java:23-26 — create() checks existsByEventType then inserts, without @Transactional isolation guarantees against a concurrent duplicate create — data-integrity (minor). The event_type column has a UNIQUE constraint in V39 so a race would surface as an unhandled DataIntegrityViolationException (500) rather than the intended BadRequestException (400); worth a catch/translate.
+
+NotificationTemplateService has no getById — quality. Update/delete operate by id but there's no single-template read; admin UI must filter the full list() client-side. Minor but inconsistent CRUD surface for "full CRUD" (Batch 15 #3).
+
+Positive/no-finding confirmations (for completeness, not defects): migration V39 correctly models three tables with per-channel preference uniqueness (user_id, channel, event_type) — Batch 15 #1/#4 satisfied at schema level. GET /notifications/unread-count is a genuinely separate endpoint (Batch 15 #5) satisfied. markRead/getPreferences/updatePreference all correctly scope by userId (via findByIdAndUserId / findByUserId) — no IDOR found; a user cannot read/mark another user's notification by guessing an id. Admin template CRUD is @PreAuthorize("hasRole('ADMIN')")-gated correctly. DI is clean throughout (@Service, constructor injection via @RequiredArgsConstructor, interfaces used at call sites) — no wiring violations found. NotificationCleanupJob exists in modules/jobs (Batch 15 #9) — no gap to hand off to the jobs reviewer.
+
+Note for jobs/media-worker reviewers: item 2 above overlaps their slices — worth confirming with them whether moderation/partner-approval code paths were expected to call NotificationService directly or whether that wiring was deferred to a later batch.
+
+Findings:
+
+1. Soft-delete on Content: No dedicated soft-delete field. Content (api-service/src/main/java/com/tinniestudio/api/shared/entity/Content.java, extends BaseEntity) has no deletedAt/isDeleted column. BaseEntity (.../shared/entity/BaseEntity.java) only has id, createdAt, updatedAt. Content only has a status enum field (ContentStatus status, line 46), with values DRAFT, REVIEW, PROCESSING, PUBLISHED, REJECTED, ARCHIVED (DomainEnums.java lines 23-30) — no DELETED/soft-delete state.
+
+2. Search methods (ContentRepository.java lines 41-159): searchByRelevance, searchByLatest, searchByPopular are all @Query(nativeQuery = true) with matching countQuery. All filter WHERE c.status = 'PUBLISHED' and additionally c.search_vector @@ plainto_tsquery('english', :q). All parameters (:q, :type, :language, :country, :categorySlug) are named bind params via @Param — no string concatenation of user input into SQL. Only differ in ORDER BY: relevance uses ts_rank(...), latest uses c.published_at DESC NULLS LAST, popular uses c.view_count DESC.
+
+3. No @Where/@SQLDelete/@Filter/SQLRestriction annotations found anywhere in shared/entity/ or modules/content/ (grep returned nothing). So findAllById, existsById, etc. have no automatic soft-delete filtering — they return content of any status, including DRAFT/ARCHIVED/REJECTED.
+
+4. FavoriteRepository / WatchHistoryRepository: Neither joins to contents; both only query their own tables by userId/contentId (e.g., FavoriteRepository.findByUserIdOrderByCreatedAtDesc, WatchHistoryRepository.findByUserIdOrderByWatchedAtDesc). Content is fetched separately: FavoriteServiceImpl.java:70 and WatchHistoryServiceImpl.java:39 call contentRepo.findAllById(contentIds); FavoriteServiceImpl.java:43 calls contentRepo.existsById(contentId). Since there's no soft-delete filter (finding #3), findAllById/existsById return content regardless of status (no exclusion of ARCHIVED/REJECTED/etc.).
+
+5. V30__add_search_vector.sql: Adds search_vector tsvector column, a GIN index, and a trigger (update_content_search_vector) that populates it from title(weight A)/short_description(B)/description(C) via to_tsvector. Search queries use real Postgres full-text search (@@ plainto_tsquery/ts_rank), not LIKE/ILIKE.
+
+
+
+
+## Ranked Findings — Analytics & Playback Modules (Batch 16 spec)
+1. AnalyticsConsumer.java:42-53 — @Transactional on handleViewEvent/handleProgressTracked is a no-op due to self-invocation — data-integrity. handleAnalyticsEvent (the @RabbitListener method) calls handleViewEvent(message) via plain this. self-invocation within the same class. Spring's proxy-based @Transactional never intercepts self-invoked calls, so the annotation is silently ignored. contentRepo.incrementViewCount(...) and dailyRepo.upsertViewEvent(...) (lines 50-51) each run in their own independent transaction instead of one atomic unit — if the second call throws, contents.view_count is incremented but content_analytics_daily is not (or vice versa), causing permanent drift between the two view counters.
+
+2. Batch 16 #4 not implemented — AnalyticsServiceImpl never touches the payment/subscription table — spec-conformance. api-service/src/main/java/com/tinniestudio/api/modules/analytics/service/AnalyticsServiceImpl.java (whole file) has no revenue/payment query at all — no PaymentRepository/UserSubscriptionRepository import, no revenue field anywhere in the module. Spec item 4 required reuse of the existing payment table for revenue analytics; it's simply absent, not just "removed for partners" — the admin path has nothing either.
+
+3. Batch 16 #7 violated — anonymous view tracking is unreachable — spec-conformance/security. SecurityConfig.java:113-171 (PUBLIC_ENDPOINTS) does not include /playback/**, and PlaybackController.java:68-71 (userId() helper) throws AuthenticationCredentialsNotFoundException when principal == null. Since the only VIEW_EVENT publishers are PlaybackServiceImpl.getContentManifest/getEpisodeManifest (lines 91-100, 131-140), an unauthenticated user can never reach this code path, so user=null anonymous tracking described in the spec never fires in practice.
+
+4. Batch 16 #6 not implemented — no weekly (Mon-Sun) aggregation exists anywhere — spec-conformance. grep for "week" across modules/analytics returns nothing. Only daily rows exist (ContentAnalyticsDaily, ContentAnalyticsDailyRepository); there's no rollup job, view, or query producing one point per calendar week, so this requirement is entirely unmet, not just misaligned on Mon/Sun boundary.
+
+5. content_analytics_daily.unique_viewers and watch_time_seconds are permanently dead columns — data-integrity. ContentAnalyticsDailyRepository.java:27-35 (upsertViewEvent) and :43-51 (upsertCompletionEvent) never update these fields after initial insert (0), and no other code path writes them. AnalyticsServiceImpl.toSummary (lines 96-109) computes totalUniqueViewers and avgWatchTimeSeconds from data that is always zero — the API silently returns misleading zeros to admins/partners rather than an error, masking the missing feature.
+
+6. analytics.ingest queue has no DLQ/retry, and the consumer swallows all exceptions — data-integrity. RabbitConfig.java (analyticsIngestQueue() bean) omits the x-dead-letter-exchange arguments used by the video queues, and AnalyticsConsumer.handleAnalyticsEvent:33-35 catches Exception broadly and only logs it. A poison message or transient DB error means the event is acked and lost forever with no recovery path — silent analytics data loss under load or bad input.
+
+7. Batch 16 #2 naming mismatch — event type is PROGRESS_TRACKED, not PROGRESS_UPDATE — spec-conformance (minor). PlaybackServiceImpl.java:212 publishes "type", "PROGRESS_TRACKED" directly to QUEUE_ANALYTICS_INGEST (good: it is published directly as required), but the semantic event name diverges from the spec's PROGRESS_UPDATE, which could break integration with Batch 15/17 consumers expecting that exact type string.
+
+8. N+1-style query pattern in partner analytics — quality/performance. AnalyticsServiceImpl.java:44-56 and :72-83 (getPartnerAnalytics/exportPartnerAnalyticsCsv) fetch all of a partner's Content rows then issue one dailyRepo.find... query per content ID in a flatMap. A partner with hundreds of titles triggers hundreds of queries; should be one findByContentIdInAndAnalyticsDateBetween.
+
+9. Dead userId field in VIEW_EVENT message — quality. PlaybackServiceImpl.java:94-96/134-136 sends userId but AnalyticsConsumer.handleViewEvent:43-53 never reads it — combined with finding #5, this confirms unique-viewer tracking was scaffolded but never finished.
+
+10. Duplicated ownership/CSV-branching logic — quality. AnalyticsController.java:31-55 and :60-81 duplicate the "csv".equalsIgnoreCase(format) branch pattern, and AnalyticsServiceImpl duplicates the 404-based ownership check between getContentAnalytics/exportContentAnalyticsCsv. Per Batch 13 #8's "merge into one flexible endpoint" precedent, these four near-identical methods (single-content vs partner-wide × json vs csv) are a candidate for consolidation into one parameterized endpoint/service method.
+
+No violations found for: constructor injection/DI hygiene (both *ServiceImpl classes correctly implement their *Service interfaces and are injected via @RequiredArgsConstructor); incrementViewCount uses an atomic UPDATE ... SET x = x+1 (no lost-update race); no gross-revenue leakage to partner-scoped responses (no revenue field exists at all, per finding #2); ownership scoping for getContentAnalytics correctly 404s non-owners.
+
+
+## Findings (ranked, most severe first)
+api-service/src/main/java/com/tinniestudio/api/modules/content/service/ContentService.java:54-66 — public detail endpoints leak unmoderated/rejected content — security. getBySlug/getById call contentRepository.findBySlug/findById with zero status filter, and are exposed unauthenticated via ContentController (/contents/{slug}, /contents/id/{id}). Anyone who guesses or scrapes a slug/UUID can read full DRAFT, REVIEW, PROCESSING, REJECTED or ARCHIVED content — directly contradicts Batch 14 #1/#10 (moderation must gate public visibility).
+
+api-service/src/main/java/com/tinniestudio/api/modules/content/controller/AdminContentController.java:30,57-63,73-77 — no partner ownership scoping — security. Class-level @PreAuthorize("hasRole('ADMIN') or hasRole('PARTNER')") lets any partner call update()/submit() on any content ID; ContentService.update/transitionStatus never check content.getCreatedBy() against the caller. Partner A can silently overwrite or resubmit Partner B's title, description, categories — an IDOR that defeats the partner-isolation intent behind Batch 13 #7.
+
+api-service/src/main/java/com/tinniestudio/api/modules/season/controller/SeasonController.java:24-32, episode/controller/EpisodeController.java:24-31 — season/episode browsing bypasses content moderation entirely — security. Both are fully public with no reference back to the parent Content.status. Combined with #1, a DRAFT/REJECTED title's full season/episode metadata (titles, descriptions, thumbnails) is browsable once the contentId/seasonId is known.
+
+api-service/src/main/java/com/tinniestudio/api/modules/discover/service/DiscoverService.java:63-68 — comingSoon() uses isViewable() (excludes only ARCHIVED/REJECTED) instead of isPublished(). Any DRAFT/REVIEW/PROCESSING content flagged comingSoon=true appears on the public /discover/coming-soon feed and homepage before it clears moderation — security/spec-conformance, direct Batch 14 gap.
+
+ContentService.java (whole file) + content/repository/ContentRepository.java:38-39 — incrementViewCount is defined but never invoked anywhere in the content read path (getBySlug, getById, ContentController). Batch 16 #1 requires async view-count increments on read; this is currently dead code, so contents.views_count never moves through the content module — spec-conformance.
+
+shared/entity/Content.java (no partner_id/ownership column) — grep of the whole codebase confirms no partners/contents endpoint and no partner-scoped column on Content; ownership is only inferable via createdBy. Batch 13 #7's scalable partner-content endpoint is entirely unimplemented in this slice — spec-conformance.
+
+shared/entity/Content.java:88-92 + ContentService.java:118-121 — @OneToMany(cascade=CascadeType.ALL, orphanRemoval=true) on seasons/videoAssets combined with a hard contentRepository.delete(content) (no soft-delete field anywhere in BaseEntity/Content). Deleting content permanently cascades away all seasons/episodes/video assets and loses the byte-tracking Batch 14 #8/Batch 17 rely on — data-integrity, and contradicts the platform-wide soft-delete direction.
+
+api-service/src/main/java/com/tinniestudio/api/modules/season/dto/SeasonResponse.java:29 + SeasonService.listByContent — s.getEpisodes().size() on a FetchType.LAZY collection (Season.episodes, default lazy @OneToMany) fires one extra query per season just to get a count. Listing seasons for a show with 10 seasons costs 11 queries — data-integrity/quality (N+1).
+
+discover/service/DiscoverService.java:81-98 — home() iterates active sections and calls section.getCategory().getSlug() on a FetchType.LAZY @ManyToOne (HomepageSection.category) with no fetch-join in HomepageSectionRepository.findByIsActiveTrueOrderByDisplayOrderAsc() — N+1 on every cache-miss homepage build.
+
+season/service/SeasonService.java:32-37 — getById(id) ignores the contentId path variable entirely (no parent-match check), unlike EpisodeService.getById which correctly validates episode.getSeason().getId().equals(seasonId). Inconsistent, and technically returns a season regardless of the contentId in the URL — quality.
+
+content/service/ContentService.java:110-112 — update() treats req.categoryIds() null-vs-empty inconsistently: passing an explicit empty list wipes all categories silently. Combined with finding #2 (any partner can call update), this amplifies blast radius for a compromised partner account — quality/security compounding.
+
+category/service/CategoryService.java:95-104 — poster upload reads the whole file into memory (poster.getBytes()) and uploads synchronously via StorageService.uploadFile, diverging from the presigned-upload pattern Batch 13 #3 mandates for partner logo uploads; worth aligning for consistency ahead of the S3 migration (Batch 14 #8) — quality/spec-conformance.
+
+Wiring hygiene (@Service + constructor injection via @RequiredArgsConstructor) is clean across all classes in this slice — no violations found there.
+
+
+
+## Findings (ranked, most severe first)
+api-service/src/main/java/com/tinniestudio/api/modules/jobs/FailedVideoAssetCleanupJob.java:33 and VideoAssetRepository.java:48-53 — deletes only the DB row for 7-day-old FAILED assets, never calls storageService.deleteObject(...). — spec-conformance. Batch 17 #5 explicitly requires storage cleanup here (opposite of #2's upload-session DB-only rule, which is correctly implemented). As written, orphaned raw video files accumulate forever in the bucket, unlike the resumable-upload case where retention is intentional.
+
+api-service/src/main/java/com/tinniestudio/api/modules/jobs/StaleVideoAssetJob.java:36-42 — no audit_log entry or admin notification on recovery/failure. — spec-conformance. Batch 17 #6 requires both. JobLogger only writes to job_execution_log; there's no AuditLogService/NotificationService call anywhere in this class or FailedVideoAssetCleanupJob, so admins have no visibility into stuck-asset failures beyond querying job logs manually.
+
+api-service/src/main/java/com/tinniestudio/api/modules/jobs/StaleVideoAssetJob.java:34-42 — read-then-write recovery with no optimistic lock or conditional UPDATE. — data-integrity. VideoAsset (shared/entity/VideoAsset.java) has no @Version field. Between the SELECT ... WHERE processingStatus='PROCESSING' and the subsequent save(), the media-processing worker could legitimately transition the same asset to COMPLETED/FAILED; the job's blind overwrite would clobber that update. Should use a single conditional UPDATE ... WHERE processing_status='PROCESSING' AND updated_at < :cutoff (as FailedVideoAssetCleanupJob does) instead of load+mutate+save.
+
+api-service/src/main/java/com/tinniestudio/api/modules/auth/admin/repository/AdminSessionRepository.java — AdminSession has an expires_at column (AdminSession.java:42-43) but no scheduled cleanup job exists in modules/jobs for it; only ExpiredSessionCleanupJob cleans user_sessions. — spec-conformance. Batch 17 #7 asks for expiry cleanup on token-like tables generally; admin sessions are left to grow unbounded (mitigated somewhat by revoked flag but rows are never purged).
+
+api-service/src/main/java/com/tinniestudio/api/shared/entity/Notification.java:46 (retryCount) — the Batch 17 #3 "tracking column" is present on Notification, but nothing in modules/jobs (specifically NotificationCleanupJob.java) reads or increments it. — spec-conformance. If this field is meant to track delivery attempts for a retry/dead-letter job, that job either doesn't exist or lives outside this slice; worth confirming it's wired up somewhere in modules/notification, since within modules/jobs it's dead weight.
+
+api-service/src/main/java/com/tinniestudio/api/modules/jobs/JobLogger.java:34-51 / all job run() methods — success/failure logging is via explicit try/catch, not try/finally. — quality/data-integrity. If jobLogger.success(...) itself throws (e.g., DB hiccup) after the main work succeeded, the catch block never fires and the log row stays stuck at RUNNING forever since success() already consumed the try block. Low likelihood but leaves job_execution_log rows in a permanently-inconsistent state with no retry/timeout reconciliation. All four jobs share this pattern — consistent, but consistently fragile.
+
+api-service/src/main/java/com/tinniestudio/api/modules/upload/repository/MediaFileRepository.java — plain JpaRepository, no @Repository-interface pairing issue but note it lacks the Service/ServiceImpl split entirely; UploadService is a concrete @Service class with no interface. — wiring. Minor per project convention (checklist wants *Service/*ServiceImpl split with constructor injection for testability/mocking); not a bug, but inconsistent with the review checklist's stated pattern and worth flagging for consistency across modules.
+
+api-service/src/main/java/com/tinniestudio/api/modules/upload/service/UploadService.java:117-118 — completeSession sets fileSizeBytes from expectedMaxSizeBytes (client-declared) rather than an actual verified size from storage (e.g., HEAD object content-length). — data-integrity/quality. Since objectExists only checks presence, not size, a client could declare a small size but upload a much larger object (or vice versa), skewing storage-byte tracking referenced in Batch 14 #8 ("keep track of the bytes in db on upload completion"). Not part of Batch 17 but adjacent and affects billing/quota accuracy.
+
+api-service/src/main/java/com/tinniestudio/api/modules/jobs/StaleVideoAssetJob.java:38-43 — the recovery loop calls videoAssetRepo.save(asset) once per stale asset inside a non-@Transactional method. — quality/data-integrity. Each save auto-commits independently; if the loop throws partway through (e.g., item 50 of 200), items 1-49 are already committed as FAILED but jobLogger.failure() reports the whole run failed with itemsProcessed never recorded — the log entry is misleading (says FAILED with 0 processed, but partial work happened). A batch/transactional wrapper or accumulating counter before calling success/failure would give an accurate picture.
+
+ShedLock coverage — verified all five scheduled jobs (ExpiredSessionCleanupJob, ExpiredUploadSessionCleanupJob, FailedVideoAssetCleanupJob, NotificationCleanupJob, StaleVideoAssetJob) carry @SchedulerLock with sane lockAtMostFor/lockAtLeastFor values, and SchedulingConfig wires a JDBC LockProvider against the V41 shedlock table. No @Scheduled methods exist outside modules/jobs in the codebase. — spec-conformance (positive). Batch 17 #1 is satisfied; no gaps found here.
+
+Additional notes (not top-15 but worth a mention): security/authz on UploadService (api-service/.../upload/service/UploadService.java:83-86,159-161) correctly enforces session.getUserId().equals(userId) on both completeSession and getStatus, preventing IDOR via session-ID guessing; presigned URLs are time-limited (PRESIGNED_URL_TTL = 30 min) and MIME/size-restricted via UploadConfig. job_execution_log (V41) is written by all five jobs via the shared JobLogger — Batch 17 #8 is satisfied structurally, modulo the try/catch-vs-finally fragility noted in #6 above.
+
+
+## Findings (ranked, most severe first)
+api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java:308 — IDOR in verifyPayment: looks up payment via unscoped paymentRepository.findByProviderReference(paymentReference) with no check that payment.getUserId() == userId. — security — Any authenticated user who learns/guesses another user's Stripe checkout-session or payment-intent reference can trigger activateSubscription for that payment, or force it into FAILED status (in the non-paid branches), denying the real owner a legitimate retry. PaymentRepository.findByIdAndUserId(id, userId) already exists (line 21) but is never called anywhere in the codebase — it's dead code that should have been the fix here.
+
+api-service/src/main/java/com/tinniestudio/api/modules/billing/service/CouponServiceImpl.java:62-83 — Coupon max_uses race condition: redeemCoupon reads usesCount, increments in Java, and saves — no @Version on Coupon, no pessimistic lock, no atomic UPDATE ... SET uses_count = uses_count + 1 WHERE uses_count < max_uses. — data-integrity — Two concurrent redemptions by different users can both pass the validateCoupon limit-reached check before either commits, allowing a coupon capped at N uses to be redeemed N+k times (lost-update). The per-user duplicate is caught by the UNIQUE(coupon_id,user_id) constraint, but the aggregate max_uses cap is not DB-enforced.
+
+api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java:150-212 — Webhook idempotency TOCTOU: activateSubscription does existsByProviderReferenceAndStatus(ref, SUCCESSFUL) then, in a separate step, creates a new UserSubscription/updates Payment — no row lock (SELECT ... FOR UPDATE) between check and act. — data-integrity — Stripe retries webhook deliveries and the controller also handles both checkout.session.completed and payment_intent.succeeded for the same purchase (see #4); two near-simultaneous deliveries can both pass the idempotency check and create two UserSubscription rows / double-send activation emails for one payment.
+
+api-service/src/main/java/com/tinniestudio/api/modules/billing/controller/StripeWebhookController.java:41-53 vs specs/002-user-profile-billing/contracts/api-contracts.md:486-497 — spec only documents payment_intent.succeeded/payment_intent.payment_failed, but the implementation also handles checkout.session.completed, calling the same activateSubscription path with different id combinations. — spec-conformance — Undocumented dual activation path increases the double-processing surface described in #3 and isn't reflected in the design docs, so anyone validating against the spec (e.g., the analytics reviewer looking at payment state transitions) will miss this trigger.
+
+api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java:140 vs specs/.../data-model.md:42 and api-contracts.md:352 — spec defines providerReference as the Stripe PaymentIntent ID (pi_..., the idempotency key) and the checkout response example shows "paymentReference": "pi_3Qx...", but CheckoutResponse.paymentReference is set from checkout.checkoutSessionId() (cs_...), not the PaymentIntent id. — spec-conformance — Client-facing paymentReference doesn't match documented shape/idempotency semantics; combined with the fallback lookups in activateSubscription (lines 159-161) trying both paymentIntentId and checkoutSessionId, this signals the "providerReference" column is overloaded with two different Stripe ID types rather than the single PI-id contract the analytics/payment table consumers (Batch 16 #4) will assume.
+
+api-service/src/main/java/com/tinniestudio/api/modules/billing/service/StripeServiceImpl.java:53,73 — Stripe errors wrapped in raw RuntimeException rather than a project exception type (BadRequestException, or a dedicated PaymentProviderException). — quality — Falls through to the generic 500 handler, leaking the raw Stripe exception message to API responses and losing any chance of a distinguishing HTTP status (e.g., 502/503) for retry-aware clients.
+
+api-service/src/main/java/com/tinniestudio/api/modules/billing/service/CapabilityServiceImpl.java:41-52 — Redis quota cache (tinnie:content_quota:*) is seeded with a flat 30-day TTL uncoupled from the subscription's actual billing-period boundaries, and is only invalidated on recordWatch, never on subscription renewal/expiry. — quality/data-integrity (minor) — If a FREE-tier user's subscription period rolls over without an explicit recordWatch call in between, the cached used count can persist stale across periods, under- or over-counting the quota depending on timing.
+
+api-service/src/main/resources/db/migration/V7__add_subscription_fields.sql:1 — Header comment says -- V6__add_subscription_fields.sql but the file is V7__.... — quality — Harmless to Flyway (filename is authoritative) but misleading for anyone auditing migration history/diffing against the spec's migration table.
+
+api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java:199-205 — Coupon redemption failure inside activateSubscription is caught and only logged (log.warn), silently leaving the subscription active but the coupon unredeemed. — quality — Acceptable as a deliberate "don't block activation on coupon bookkeeping" choice, but there's no compensating job/alert to reconcile the missed redemption, so uses_count/redemption records can silently drift from actual usage.
+
+No wiring violations found: all billing *ServiceImpl classes carry @Service, all controllers/services inject the *Service interface via constructor (@RequiredArgsConstructor), and AdminSubscriptionController/AdminSubscriptionServiceImpl are properly role-gated (@PreAuthorize). Webhook signature verification is implemented and enforced (Webhook.constructEvent with stripeProperties.getWebhookSecret()), and Stripe keys are sourced from @ConfigurationProperties(prefix="stripe"), not hardcoded. PaymentRepository.sumAmountAfter (gross revenue) is used only by AdminDashboardServiceImpl, consistent with Batch 13 #5/#6 ("only admin own that").
+
+Findings (ranked, most severe first)
+api-service/src/main/java/com/tinniestudio/api/modules/library/service/FavoriteServiceImpl.java:43 and :70 — Favorites/watch-history never filter by content status — spec-conformance/data-integrity. add() only calls contentRepo.existsById(contentId) (any status), and list() (line 70) plus WatchHistoryServiceImpl.java:39 fetch via contentRepo.findAllById(ids) with no status = 'PUBLISHED' filter. Content has no dedicated soft-delete column (confirmed: no deletedAt, only a status enum with DRAFT/REVIEW/PROCESSING/PUBLISHED/REJECTED/ARCHIVED), and ContentRepository applies no @Where/Hibernate filter. Meanwhile SearchServiceImpl's native queries correctly gate on c.status = 'PUBLISHED'. Net effect: a user can favorite/have-in-history a DRAFT or REJECTED content ID (e.g., guessed or leaked via another endpoint), and once content is ARCHIVED it keeps showing indefinitely in a user's favorites/watch history — the "exclude soft-deleted/unpublished content" convention used elsewhere is not applied here.
+
+api-service/src/main/java/com/tinniestudio/api/modules/reviews/service/ReviewServiceImpl.java:36-40 — TOCTOU race on duplicate review creation, uncaught constraint violation — data-integrity. create() does existsByUserIdAndContentId then save(); two concurrent submissions from the same user can both pass the check and race to insert. The DB uq_review_user_content unique constraint (V33) will reject the second, but nothing catches DataIntegrityViolationException, so the user gets a raw 500 instead of the intended 409 "already reviewed" response.
+
+api-service/src/main/java/com/tinniestudio/api/modules/reviews/service/ReviewServiceImpl.java:36 — no content-existence/status check before creating a review — spec-conformance. Unlike FavoriteServiceImpl.add(), create() never verifies contentId exists or is PUBLISHED; an invalid ID relies on the FK constraint to fail, producing an unhandled 500 rather than a clean 404, and a valid-but-unpublished/archived content ID can still receive a review.
+
+api-service/src/main/resources/db/migration/V34__add_review_aggregate.sql:5-36 — good pattern worth confirming, no fix needed: the average-rating/review-count recalculation is done via a Postgres trigger (AFTER INSERT OR UPDATE OR DELETE) rather than app-layer read-then-write, so it is race-free under concurrent review submissions — this correctly avoids the exact hazard the checklist asked about.
+
+api-service/src/main/java/com/tinniestudio/api/modules/library/service/FavoriteServiceImpl.java:38 — TOCTOU on MAX_FAVORITES limit — data-integrity (low severity). countByUserId(userId) >= MAX_FAVORITES then save() is not atomic; concurrent add requests from the same user could slightly exceed 500. Low impact given it's a soft business limit, not a security boundary.
+
+api-service/src/main/java/com/tinniestudio/api/modules/search/controller/SearchController.java:26 and SearchServiceImpl.java:25-31 — unbounded, unauthenticated @Cacheable keyed on raw user input, no rate limit on /search — security/quality. Every distinct q/filter combination becomes a new cache entry with no eviction policy visible here and no @RateLimit/bucket4j annotation on the endpoint (grep confirms none), unlike the CLAUDE.md Batch 18 #4 intent ("rate limit where needed to ... prevent bot spamming"). An attacker can cheaply generate unbounded unique queries to grow the cache (memory pressure) or hammer the DB before caching kicks in.
+
+api-service/src/main/java/com/tinniestudio/api/modules/reviews/service/ReviewServiceImpl.java:59-65 — update() unconditionally sets status = PENDING even when both rating and body are null (no-op edit) — quality. A no-change PATCH still forces a review back into moderation queue, needlessly hiding an already-approved review and creating churn for admins.
+
+api-service/src/main/java/com/tinniestudio/api/modules/library/repository/WatchHistoryRepository.java:23-26 — deleteAllByUserId is @Modifying without clearAutomatically = true — quality. Bulk JPQL delete bypasses the persistence context; any WatchHistory entities already loaded in the same transaction/session remain stale, risking phantom reads if later code in the same request re-touches them.
+
+Wiring/DI across FavoriteServiceImpl, WatchHistoryServiceImpl, ReviewServiceImpl, SearchServiceImpl — all correctly use @Service + constructor injection via @RequiredArgsConstructor against interface types (FavoriteService, WatchHistoryService, ReviewService, SearchService), no manual new ...Impl() instantiation found. No violations — flagged only for completeness of the checklist.
+
+IDOR checks — ReviewServiceImpl.update/delete use findByIdAndUserId(reviewId, userId) (repository-level ownership filter) and WatchHistoryServiceImpl.delete uses findByIdAndUserId(historyId, userId) — both correct, no cross-user access possible by ID manipulation. Favorites are keyed by (userId, contentId) composite lookups, also correctly scoped. No findings here, confirming these paths are sound.
+
+api-service/src/main/resources/db/migration/V32__add_watch_history.sql — content_id FK has no ON DELETE clause (defaults to NO ACTION), while favorites/content_reviews use ON DELETE CASCADE — spec-conformance (minor inconsistency). If content is ever hard-deleted while watch-history rows reference it, the delete will fail with a raw FK violation; given the codebase's stated soft-delete convention this is probably moot in practice, but the inconsistency across the three tables (CASCADE vs NO ACTION) is worth normalizing.
+
+Not in scope but noted: WatchHistoryServiceImpl/FavoriteService write-paths (WatchHistoryRepository.save) are actually invoked from PlaybackServiceImpl (outside this slice), which is where new watch-history rows get created — confirmed no duplicate/parallel write path exists inside the reviewed modules.
+
+I have enough to compile a ranked findings list.
+
+Findings (media-worker/, ranked by severity)
+processor/VideoProcessingService.java:42-153 — @Transactional wraps the entire multi-minute ffmpeg pipeline, and on any exception the whole transaction rolls back, undoing markFailed()'s own writes — data-integrity (critical). When a RetryableProcessingException propagates (line 149), Spring rolls back the whole method including the job.setStatus("FAILED")/asset.setProcessingStatus("FAILED") saves that just executed inside markFailed(). The asset reverts to whatever status it had before process() started (not FAILED, not PROCESSING-post-attempt) — so the Batch-17 stale-job recovery job (which scans for PROCESSING + stale updatedAt) can never find it, and the asset is silently stuck outside any recoverable state.
+
+processor/VideoProcessingService.java:23-39 + RabbitMQ default config — poison-message infinite loop — data-integrity/spec-conformance (critical). application.yml never sets spring.rabbitmq.listener.simple.default-requeue-rejected: false (Spring AMQP defaults this to true). When RetryPublisher.MaxAttemptsExceededException is rethrown out of the listener (VideoProcessingConsumer.java:37), the container requeues the message back onto the same queue instead of routing it via the DLX to media.video.failed as the code comment implies ("routing to failed queue"). Combined with finding #1's rollback, a permanently-bad video causes an endless re-download/re-transcode loop, never landing in the failed queue and never recorded as terminal.
+
+processor/VideoProcessingService.java:42 — long-running I/O and subprocess work held inside a single DB transaction — data-integrity/quality. Downloading, ffmpeg transcoding of multiple tiers, and S3 uploads (potentially minutes) all execute while holding a DB connection/transaction open, risking pool exhaustion under concurrency (concurrency="1-2" × long transactions) and lock contention with ProcessingJob/VideoAsset rows other services may read.
+
+ffmpeg/SystemProcessRunner.java:13-27 — no timeout on process.waitFor() — data-integrity/spec-conformance. A hung/misbehaving ffmpeg invocation (corrupt input causing infinite loop, or blocking on stdin) blocks forever; there's no waitFor(timeout, unit) + process.destroyForcibly(). This is exactly the "no timeout on ffmpeg invocation" scenario flagged in the Batch 17 review guidance and directly causes an asset to sit in PROCESSING indefinitely (only the external 60-min stale-job scan in api-service would eventually catch it, wasting a worker slot the whole time).
+
+entity/VideoAsset.java:36 + processor/VideoProcessingService.java — fileSizeBytes never set — spec-conformance (Batch 18 #8). The entity has a fileSizeBytes column but grep confirms it's never assigned anywhere in media-worker. Neither download()/upload() in MinioWorkerStorageService.java nor applyMetadataToAsset() (line 171) captures processed output size, so "track bytes on upload completion" is unimplemented.
+
+config/StorageConfig.java:25 — .forcePathStyle(true) hardcoded — spec-conformance (Batch 18 #8). Path-style is a MinIO-friendly default but is not universally desirable on real AWS S3 (deprecated for many bucket/region combos); it should be a StorageProperties toggle (default true for MinIO dev, overridable via env for prod S3) rather than compiled in, per the explicit "avoid hardcoding MinIO-specific assumptions" instruction.
+
+processor/VideoProcessingService.java:130-139 — notification publish happens inside the same try block and same @Transactional scope, and a failure there is treated identically to a transcoding failure — spec-conformance/data-integrity. If rabbitTemplate.convertAndSend throws (broker hiccup) after processing fully succeeded, the catch-all at line 146 calls markFailed (flipping a successfully-processed, uploaded asset to FAILED) and rethrows for retry — causing a full needless re-transcode of an already-ready asset, and (per #1) even that FAILED marker gets rolled back.
+
+processor/VideoProcessingService.java:47-51 — idempotency check only covers DONE/FAILED, not in-flight PROCESSING — data-integrity. A redelivered message for a job already mid-flight (e.g., broker requeues due to a transient consumer restart) isn't detected, risking two concurrent workers processing the same videoAssetId and double-uploading/overwriting variants (VideoVariantRepository has no unique constraint check visible on (videoAssetId, resolution)).
+
+storage/MinioWorkerStorageService.java:51-60 / VideoProcessingService.java:100-105 — no verification that payload.getStorageKey() belongs to the claimed videoAssetId/uploader — security. The consumer trusts the queue payload entirely; there's no cross-check against VideoAsset.rawStorageKey before calling storageService.download(), so a compromised/buggy publisher could point the worker at an arbitrary key in the same bucket (IDOR-style read, not path traversal since S3 keys are flat, but still an authorization gap worth a defense-in-depth check).
+
+config/WorkerProperties.java:17 vs consumer/VideoProcessingConsumer.java:19 — worker.processing.max-job-concurrency is defined and set in application.yml (max-job-concurrency: 2) but @RabbitListener(concurrency = "1-2") hardcodes the value instead of reading the property — quality. Dead configuration; changing the property in ops has no effect, which will confuse whoever tunes concurrency later.
+
+ffmpeg/FFmpegRunner.java:64-66 — parseBitrateKbps does Integer.parseInt(bitrate.replace("k","")) with no try/catch — quality. Currently fed only from the internal ResolutionLadder constants (safe today), but it's a latent NPE/NumberFormatException surface if bitrate strings ever become configurable/external without a matching format guard.
+
+ffmpeg/FFprobeRunner.java:60-62 — rejects any video with no audio stream as a ValidationException — spec-conformance/quality. This is a strict, silent business rule (silent videos are unsupported) with no configuration flag; worth confirming product intent, since it will hard-fail a class of legitimate uploads (e.g., ASMR/no-narration timelapse clips) with a somewhat cryptic error message.
+
+consumer/VideoProcessingConsumer.java:21-24 — malformed-message handling only checks payload == null, not jobId/videoAssetId null — quality/security. If payload.getVideoAssetId() is null, VideoProcessingService.process() throws NullPointerException from videoAssetRepo.findById(null) deep in the transactional method rather than being rejected cleanly at the consumer boundary before any ProcessingJob row is created.
+
+Positive note: MinioWorkerStorageService already uses the AWS SDK v2 S3Client (not a MinIO-specific client) and ProcessBuilder with a List<String> args array (no shell), so there's no command-injection risk in SystemProcessRunner, and the S3 abstraction itself is migration-friendly aside from finding #6.
+
+
+## Findings (ranked, most severe first)
+No admin path exists to manage/unverify an existing partner — api-service/src/main/java/com/tinniestudio/api/modules/admin/ (no AdminPartnerController/service) — spec-conformance. Batch13#4 requires "admin can still update [verification] using the endpoint, for partner that violate regulation," but there is zero code that lets admin read or PATCH a PartnerProfile (verify/unverify, adjust revenue_share_percentage, edit logo/company). Once a partner is created via approval, admin has no way to act on them short of banning the whole user account.
+
+No "appeal" mechanism for suspended accounts — searched whole api-service tree, no appeal anywhere — spec-conformance. Batch14#2 explicitly requires suspended accounts be recoverable via appeal; only a raw PATCH /admin/users/{id}/status exists (admin-initiated), with no user-facing appeal/request-review flow or intake queue.
+
+PartnerApplicationServiceImpl.approve()/reject() don't guard current status — api-service/src/main/java/com/tinniestudio/api/modules/admin/service/PartnerApplicationServiceImpl.java:57-97 — data-integrity. Neither method checks app.getStatus() == PENDING before transitioning. An admin (or a retried request) can call approve on an already-REJECTED/APPROVED application, re-adding the role, writing duplicate PARTNER_APPLICATION_APPROVED audit rows, and producing confusing reviewedAt overwrites. Not idempotent.
+
+Only the apply→approve path exists; no direct admin-promote path — api-service/src/main/java/com/tinniestudio/api/modules/admin/service/AdminUserServiceImpl.java + AdminUserController.java — spec-conformance. Batch13#1/Batch14#4 call for two paths: admin directly promoting a user, and self-service apply→approve→complete-profile. Only the second exists (PartnerApplicationServiceImpl.approve); there's no admin action to grant ROLE_PARTNER + create a PartnerProfile without a pre-existing application.
+
+PartnerDashboardResponse surfaces audit_logs data directly to partner-facing API — api-service/src/main/java/com/tinniestudio/api/modules/partner/service/PartnerServiceImpl.java:34,81-84 — security/spec-conformance. PartnerServiceImpl injects AuditLogRepository (the raw JPA repo, bypassing AuditLogService entirely) and returns AuditLogResponse rows in the partner dashboard's recentActivity. Batch13#9 says audit_log should not be in partner scope; this both violates that intent and breaks module boundaries (partner module reaching into admin's repository instead of a service abstraction). In practice it's currently a dead feature since nothing ever writes an audit_log row with actor_id = <partner userId>, but it's a live landmine — the moment any code logs a partner action with their own id as actor, admin-only audit data starts leaking into the partner API.
+
+accountStatus and deletedAt can desync — api-service/src/main/java/com/tinniestudio/api/modules/admin/service/AdminUserServiceImpl.java:54-69 vs shared/entity/User.java:127-130 — data-integrity. updateStatus() lets admin set status=DELETED via /admin/users/{id}/status without ever touching deletedAt (only User.softDelete() sets both). Other queries (findByEmailVerificationToken, findByPasswordResetToken) filter on deletedAt IS NULL, not accountStatus, so a user marked DELETED-via-status-endpoint would still pass those checks — two divergent "deleted" signals with no single source of truth.
+
+/partners/contents is not the "big flexible" endpoint the decision calls for — api-service/src/main/java/com/tinniestudio/api/modules/partner/controller/PartnerController.java:95-104 — spec-conformance/quality. Batch13#7/#8 ask for a scalable, flexible content endpoint; the implementation is a bare GET /partners/contents with no status/search/sort params, and there is no partner-facing create/update-content endpoint anywhere (ContentController at /contents has no POST/PATCH at all) — content management appears to be admin-exclusive with partners limited to read-only listing plus separate upload/logo flows.
+
+Revenue exclusion is incidental, not structurally enforced — api-service/src/main/java/com/tinniestudio/api/modules/content/dto/ContentResponse.java reused verbatim by both AdminContentController and PartnerController.getContents — security (latent). No separate partner-scoped content DTO exists (Batch13#10 "separate field"); today ContentResponse happens to carry no revenue field, but since admin and partner share the exact same mapper/response type, any future revenue/cost field added for admin's content view would automatically leak to /partners/contents with no compile-time or review signal.
+
+PartnerApplicationServiceImpl.apply() doesn't check for existing partner role — PartnerApplicationServiceImpl.java:34-44 — spec-conformance/minor. Only blocks a second PENDING application; a user already holding ROLE_PARTNER can still submit a new application.
+
+PartnerService.getDashboard does 5 sequential round-trips — PartnerServiceImpl.java:71-87 — quality. Could be one aggregate query; not N+1 per se but avoidable latency on a hot dashboard endpoint.
+
+Positives confirmed: /status vs /{id} separation (Batch14#3) is correctly enforced; suspend/ban is genuinely enforced per-request via UserDetailsServiceImpl.validateAccountActive() re-checked on every JWT filter pass (Batch14#5), not just at login; soft-delete + admin content endpoint separation (Batch14#9/#10) are correct; all reviewed *ServiceImpl classes are properly @Service-annotated and interface-injected (no DI hygiene violations found except item 5's repo-bypass).
+
+Sufficient evidence collected. Final report:
+
+Documentation Review Findings (ranked, most severe first)
+README.md:1-380 — Root README is an entirely stale/generic template — readme-accuracy. It says "LamaStudio", instructs mvn clean install / mvn spring-boot:run with a pom.xml, but the repo is Gradle (build.gradle, gradlew, no pom.xml at root). Project structure section (flat controller/service/model) doesn't match the actual modules/* architecture. A new dev following this README literally cannot build the project.
+
+README.md:82-101 — Documents ddl-auto: update, but commit 3b11e19 explicitly set ddl-auto: none because Flyway owns schema — readme-accuracy. Following the README would silently let Hibernate try to alter the schema, contradicting a deliberate recent fix.
+
+specs/001-auth-architecture-refactor/contracts/api-contracts.md:5 — States envelope format is { success, data, error } — spec-drift. The actual ApiResponse record (api-service/src/main/java/com/tinniestudio/api/shared/web/ApiResponse.java:10-14) and spec 003 both define { success, message, data, meta } — no error field, plus a message field spec 001 never mentions. Spec 001 was never updated after 003 landed, so anyone reading 001's contracts for the /auth/me response shape gets a wrong envelope.
+
+CLAUDE.md Batch 13 #8 ("merge both into a big and flexible endpoint") — claude-md-ambiguity. Doesn't say which two endpoints are "both" (partner content CRUD? partner profile+content?). A reviewer/implementer must guess; two different implementers could merge different endpoint pairs.
+
+CLAUDE.md Batch 13 #9 ("remove payment event, audit_log") — claude-md-ambiguity. Unclear whether this means removing the payment_event table/entity entirely, removing only a partner-facing audit trail, or removing specific fields from a partner response DTO. Given AuditLogController.java exists and Batch 14 #6 says admin can query audit_log, this bullet directly conflicts with keeping audit_log — worth flagging as an internal contradiction, not just ambiguity.
+
+CLAUDE.md Batch 13 #10 ("separate field") — claude-md-ambiguity. No object/context given — separate what field, from what, for what purpose. Effectively unactionable as written; any implementation is a guess.
+
+CLAUDE.md Batch 13 #6 ("depend on question 5") — claude-md-ambiguity. Circular/self-referential — #5 says "remove gross revenue, only admin owns that," but #6 doesn't state what specifically depends on it (an endpoint? a permission check? a DTO field?), so the dependency is untraceable without more context.
+
+CLAUDE.md Batch 16 #3 ("check batch 13 8") — claude-md-ambiguity. References the already-ambiguous Batch 13 #8, compounding rather than resolving the ambiguity for analytics-endpoint merging decisions.
+
+CLAUDE.md Batch 16 #9 — the bullet is truncated/malformed as a run-on question ("Should analytics API responses always read from content_analytics_daily (up to 1 hour stale)") with no explicit yes/no answer recorded — claude-md-ambiguity. Code confirms content_analytics_daily is the actual table used (ContentAnalyticsDaily.java:11,15), but the source note itself never states the decision, only poses the question — a documentation gap in the planning artifact itself.
+
+api-service/.../analytics/controller/AnalyticsController.java — only 2 @Operation/@ApiResponse/@Schema annotations across 4 endpoints — api-docs. Thinnest Swagger coverage of the sampled controllers (partner 7/14, notification 6/12, billing 6/12, admin-user 5/10, upload 3/6) — analytics endpoints would render in Swagger UI with little more than method signatures.
+
+api-service/src/main/resources/db/migration/ — 42 migrations, no ERD or consolidated schema doc anywhere in the repo — docs gap. specs/001 and specs/002 each have a partial data-model.md covering only their own feature's tables, but nothing documents the full current schema (partner, notification, analytics, jobs tables from batches 13-18 aren't covered by any data-model.md).
+
+load-test/ and observability/ directories — no README — readme-accuracy. load-test/k6-smoke.js and k6-api-load.js have no documented invocation command (env vars, target host, expected thresholds); observability/prometheus.yml/Grafana provisioning has no note on default credentials or how to bring the stack up (docker-compose service names aren't cross-referenced).
+
+OpenApiConfig.java:57,60,93 — title/description still say "LamaStudio API" / "LamaStudio Team" — api-docs. Cosmetic but visible to every API consumer via Swagger UI; same stale branding as the root README.
+
+CLAUDE.md Batch 15 #6 ("it should be in notification preference") answers an unstated question with no antecedent visible in the file — claude-md-ambiguity — minor, but combined with #3's template-CRUD note, unclear whether "channel" preference includes template-level opt-out granularity.
+
+No CHANGELOG file exists anywhere in the repo despite 18+ batches of substantial schema/behavior change — general docs gap, lower severity since docs/superpowers/plans/*.md informally serves this purpose per-batch but isn't linked from any top-level README.
+
+## Code Review Findings — auth / user / role modules
+1. AdminUserServiceImpl.java:56-69 (updateStatus) — FK/data-integrity bug on the DELETED path — data-integrity
+UpdateUserStatusRequest.status accepts any AccountStatus including DELETED, but updateStatus() only calls user.setAccountStatus(...); it never sets deletedAt (only User.softDelete() at shared/entity/User.java:127 does that). This creates two divergent "delete" paths: DELETE /admin/users/{id} (correct, sets deletedAt) vs PATCH /admin/users/{id}/status with status=DELETED (status flips but deletedAt stays null). Worse, TOKEN_REVOKE_STATUSES (line 27-28) only contains SUSPENDED and BAN — not DELETED — so an admin "deleting" a user via the status endpoint leaves all their sessions/tokens live, directly contradicting Batch 14 #5/#9. Fix: either reject DELETED in this DTO, or route it through the same soft-delete + revoke path.
+
+2. PartnerApplicationServiceImpl.java:57-83 + V36__add_partner_applications.sql:9 — reviewed_by FK targets the wrong table — data-integrity
+reviewed_by UUID REFERENCES users(id), but AdminPartnerApplicationController.approve/reject (lines 41-54) pass UUID.fromString(principal.getUsername()), which for admin principals is an admins.id (per AdminUserDetailsServiceImpl.java:51, admin auth is isolated per V8 migration). Saving app.setReviewedBy(adminId) will violate the FK constraint against users(id) almost every time, since admin UUIDs essentially never exist in the users table. This makes /admin/partner-applications/{id}/approve and /reject fail at runtime. Compare with V4__add_user_sessions.sql:15, revoked_by_admin_id UUID REFERENCES admins(id), which gets it right — the migration should match that pattern.
+
+3. PartnerServiceImpl.java:59-69 (uploadLogo) — bypasses the presign upload flow — spec-conformance/security
+Batch 13 #3 requires partner logo upload to "follow same presign upload" as everything else (see UserProfileServiceImpl.initiateAvatarUpload/confirmAvatarUpload, user/service/UserProfileServiceImpl.java:111-149, which validates MIME type and 10 MB cap before issuing a presigned URL). Instead, uploadLogo takes a raw MultipartFile, calls file.getBytes() unboundedly (no size/type check) and does a direct server-side storageService.uploadFile(...). This is inconsistent with the established pattern, risks large in-memory buffering (relevant to Batch 18 #4's overload-prevention goal), and skips MIME validation entirely.
+
+4. Missing "admin directly promotes user to partner" endpoint — spec-conformance
+Batch 13 #1 calls for admin to promote a user to partner directly. The only code path that grants ROLE_PARTNER is PartnerApplicationServiceImpl.approve() (admin/service/PartnerApplicationServiceImpl.java:56-83), which requires a prior self-service application (Batch 14 #4's flow). AdminUserController/AdminUserService have no promote/grant-role endpoint. The two batch items describe two distinct flows; only one is built.
+
+5. Session-specific revocation not enforced on access tokens — security
+SessionServiceImpl.revokeSession/revokeAllExcept (auth/user/service/SessionServiceImpl.java:100-138) mark a session revoked in DB/cache, but JwtAuthenticationFilter.doFilterInternal (shared/security/jwt/JwtAuthenticationFilter.java:53-57) validates access tokens purely via userDetailsService.loadUserById(userId), which only checks user.isActive() — it never checks whether the specific session tied to the token was revoked. So logging out one device, or a password change revoking other sessions (UserProfileServiceImpl.changePassword, line 166), leaves the old access token usable elsewhere for up to its 15-minute lifetime. (Full account suspension/ban is still immediate, since that's account-wide.)
+
+6. No admin endpoint to un-verify a partner — spec-conformance
+PartnerProfile.isVerified defaults true on approval (Batch 13 #4's "verification automatic" half is satisfied via the DB default). But the second half — "admin can still update ... for partner that violate regulation" — has no implementation: AdminUserController only edits email/emailVerified on User, nothing touches PartnerProfile.isVerified.
+
+7. UserRepository.existsByEmail/findByEmail (user/repository/UserRepository.java:21,25) ignore deletedAt — quality/data-integrity
+Unlike findByEmailVerificationToken/findByPasswordResetToken, which filter deletedAt IS NULL, these two don't. A soft-deleted user's email permanently blocks re-registration (AuthService.register uses existsByEmail), an unintended side effect of soft-delete not scoped in these queries.
+
+8. AdminUserServiceImpl.update() (line 46-52) skips email normalization/uniqueness checks — quality/data-integrity
+Unlike AuthService.normalizeEmail (lowercase+trim), admin's direct user.setEmail(req.getEmail()) takes the raw string, risking case-duplicate emails and an unhandled constraint-violation exception instead of a clean conflict response.
+
+Files reviewed: api-service/src/main/java/com/tinniestudio/api/modules/{auth,user,role,admin,partner}/**, and migrations V4, V8, V9, V35, V36, V37.
+
+
+## Findings (ranked, most severe first)
+1. api-service/src/main/java/com/tinniestudio/api/shared/config/SecurityConfig.java (whole file) + api-service/src/main/resources/application.yml:193-211 — actuator has no security split at all — security/spec-conformance. management.server.port: 8081 differs from server.port, so Actuator runs in a separate child web context that neither of SecurityConfig's two SecurityFilterChain beans (@Order(1)/@Order(2)) ever touches — the /actuator/health entry in PUBLIC_ENDPOINTS (line 162) is dead code for this reason. With exposure.include: health,info,prometheus,metrics, the metrics/prometheus endpoints get no authentication or role-gate whatsoever, only whatever Boot's default management-security backoff leaves. The only real protection is docker-compose.yml:12 binding 127.0.0.1:8081:8081 — an infra-level mitigation, not the "admin-only" requirement Batch 18 #2 asks for, and it disappears for any non-containerized deployment or SSH-tunneled loopback access.
+
+2. api-service/.../ratelimit/RateLimitAspect.java:32,38,84 vs AuthController.java:72-78 and AdminAuthController.java:51-53 — rate-limit key collision — security/data-integrity. buildRateLimitKey uses only pjp.getSignature().getName() (bare method name), not a fully-qualified path. Both the user login (10 req/15min) and admin login (5 req/15min) methods share the literal key login:ip:<ip>, so the two independently-configured quotas are actually one shared Redis counter — heavy user login traffic from a shared IP/NAT can lock out admin login attempts from the same address, or vice versa, defeating the intent of separate limits.
+
+3. api-service/.../auth/controller/AuthController.java:53-56 (register) and :189-193 (resetPassword) — no @RateLimit — spec-conformance/security. Login, forgot-password, and resend-verification are all throttled but registration (classic bot/fake-account target) and the password-reset submission (token-guessing target) are not, directly contradicting Batch 18 #4's explicit call-out of signup and password-reset as high-risk endpoints.
+
+4. api-service/.../reviews/controller/ReviewController.java:39-40 — create review endpoint has no @RateLimit — spec-conformance. Review submission was named explicitly in the checklist as a spam vector; nothing throttles it.
+
+5. api-service/.../ratelimit/RedisRateLimiterService.java:40-44 — non-atomic INCR+EXPIRE — data-integrity. If the process dies/exception occurs between increment and expire (line 43-44), the key is left without a TTL. Since the "set TTL" branch only fires when count==1, that key never gets a TTL again and the counter never resets — effectively a permanent lockout for that identity until manual Redis intervention. A Lua script (or SET key 1 EX n NX + INCR) would make this atomic as the task's checklist flags.
+
+6. RedisRateLimiterService.java:55-59 — blanket fail-open on catch (Exception e) — security/quality. Any error (not just connectivity loss — e.g. serialization bugs) silently disables rate limiting and returns true. Combined with RedisConfig's deliberate graceful-degradation design, a Redis outage (which an attacker could try to induce) removes all brute-force/bot protection on login, register, forgot-password, uploads, etc., with no differentiated alerting.
+
+7. api-service/.../db/migration/V42__add_missing_indexes.sql (whole file) vs Batch 18 #5 — spec-conformance. V42 covers upload_sessions, video_assets, user_sessions, watch_history, content_analytics_daily but never touches audit_logs. V37 already indexes actor_id, (target_type,target_id), created_at — adequate for current AuditLogRepository queries — but the spec explicitly calls for audit_log indexes to be added here, and no composite/action index exists for future admin dashboard filtering (Batch 14 #6).
+
+8. docker-compose.yml:24-25,31-32,61-62,66-67 — hardcoded DB_PASSWORD: ultimate and RABBITMQ_USER/PASSWORD: guest as literal environment: values — security. Because environment: entries override env_file: .env for the same variable name, these hardcoded literals win even if ops rotates credentials in .env — the opposite of "avoid hardcoding" (Batch 14 #8) and a committed plaintext production DB password.
+
+9. RateLimitAspect.java:101-111 getAuthenticatedUserId — only recognizes UserDetails principals, so OAuth2-authenticated users (Google login) fall through to null and get IP-keyed limiting instead of per-user under USER_OR_IP — quality/data-integrity. Silently degrades granularity for the whole OAuth2 user base sharing an IP/NAT.
+
+10. StripeProperties.java:20-23 — @PostConstruct sets Stripe.apiKey = secretKey unconditionally; if STRIPE_SECRET_KEY is unset (default "" per application.yml:154), it fails silently at call time rather than fast at startup — quality.
+
+Auth/Identity review found a likely runtime bug: PartnerApplicationServiceImpl saves reviewed_by from the admin principal's ID, but the FK column references users(id) while admin IDs live in a separate admins table — approve/reject would throw an FK violation. One agent left (cross-cutting observability), then I'll compile everything into a single report.
+
+
+Tier 1 — Critical (would break at runtime or is a live security hole)
+PartnerApplicationServiceImpl.approve/reject (admin/service/PartnerApplicationServiceImpl.java:57-83) — saves reviewed_by from the admin principal's ID, but the FK (V36__add_partner_applications.sql:9) references users(id), while admin auth IDs come from the separate admins table (per V8 migration). Approve/reject will throw an FK violation almost every time — this endpoint likely doesn't work at all today.
+AnalyticsConsumer.handleAnalyticsEvent (analytics/service/AnalyticsConsumer.java:42-53) — calls handleViewEvent/handleProgressTracked via plain this., so @Transactional never applies (Spring proxy can't intercept self-invocation). contents.view_count and content_analytics_daily update in separate transactions and can permanently drift apart.
+VideoProcessingService.process (media-worker, processor/VideoProcessingService.java:42-153) — @Transactional wraps the entire ffmpeg pipeline, so on failure the rollback undoes markFailed()'s own writes. Assets end up in neither PROCESSING nor FAILED — invisible to the Batch 17 stale-job scanner, stuck forever.
+Unmoderated content is publicly readable — ContentService.getBySlug/getById (content/service/ContentService.java:54-66) apply zero status filtering and are exposed unauthenticated; SeasonController/EpisodeController don't check parent content status either. Anyone who finds a slug/ID can read DRAFT/REJECTED/ARCHIVED titles. DiscoverService.comingSoon() also uses the wrong visibility check (isViewable() instead of isPublished()), so unmoderated content can appear on the public homepage.
+Cross-partner content IDOR — AdminContentController (content/controller/AdminContentController.java:30,57-77) role-gates ADMIN or PARTNER but never checks content ownership. Any partner can edit or resubmit any other partner's content.
+Payment verification IDOR — SubscriptionServiceImpl.verifyPayment (billing/service/SubscriptionServiceImpl.java:308) looks up a payment by raw reference with no owner check; a scoped findByIdAndUserId already exists in the repo but is never called. Anyone who learns another user's payment reference can activate or fail their subscription.
+Actuator has no real access control — management.server.port: 8081 runs Actuator in a child context neither SecurityFilterChain bean touches, so /actuator/metrics and /actuator/prometheus are wide open at the app level; the only protection is docker-compose binding the port to loopback — an infra mitigation, not the admin-only gate Batch 18 #2 asked for.
+Rate-limit key collision — RateLimitAspect.buildRateLimitKey keys only on bare method name, so user login and admin login (both named login) share one Redis counter. Traffic on one can lock out the other from the same IP.
+Hardcoded credentials in docker-compose — DB_PASSWORD: ultimate and RabbitMQ guest/guest are literal environment: values, which override anything set in .env for the same key.
+Notification preferences are cosmetic — NotificationServiceImpl.sendNotification never consults NotificationPreferenceRepository before creating a notification, and only CONTENT_PROCESSED is ever actually triggered — content-moderation and partner-application decisions never send a notification despite the event types existing specifically for them.
+Poison-message loop in media-worker — Spring AMQP's default requeue-rejected: true is never overridden, so a permanently-failing message never reaches the intended media.video.failed DLQ; combined with #3, a bad video can loop forever.
+Tier 2 — High (spec gaps / data integrity)
+Coupon max_uses has a lost-update race (read-then-increment, no atomic UPDATE or lock) — CouponServiceImpl.java:62-83.
+StaleVideoAssetJob recovers via read-then-save with no optimistic lock, risking clobbering a legitimate concurrent worker update.
+FailedVideoAssetCleanupJob deletes only the DB row for 7-day-old failed assets — Batch 17 #5 requires deleting the storage object too (opposite of the upload-session case, which is correctly DB-only).
+No admin endpoint exists to un-verify/manage an existing partner (Batch 13 #4's second half is unimplemented), and no direct admin-promotes-to-partner path exists separate from apply→approve (only one of the two required flows is built).
+No appeal mechanism for suspended accounts anywhere in the codebase (Batch 14 #2).
+Analytics: payment-table revenue reuse (Batch 16 #4) is entirely unimplemented; weekly Mon–Sun rollups (#6) don't exist; anonymous view tracking (#7) is unreachable because /playback/** isn't public and the controller throws on a null principal.
+JWT access tokens aren't session-scoped — revoking one session/logging out one device doesn't invalidate that device's still-valid access token for up to 15 minutes.
+Favorites/watch-history never filter by content status — users can favorite DRAFT/REJECTED content, and ARCHIVED content stays in favorites/history forever.
+UserRepository.existsByEmail/findByEmail ignore deletedAt — a soft-deleted user's email permanently blocks re-registration.
+AdminUserServiceImpl.updateStatus with status=DELETED doesn't set deletedAt and isn't in TOKEN_REVOKE_STATUSES — tokens stay live, contradicting Batch 14 #5/#9.
+RedisRateLimiterService: non-atomic INCR+EXPIRE can strand a key without a TTL (permanent lockout), and a blanket catch (Exception) fail-open silently disables all rate limiting on any error, not just Redis being down.
+Missing rate limits on registration, password-reset submission, and review creation — all three explicitly named as bot/spam targets.
+media-worker: no timeout on the ffmpeg subprocess (can hang forever), fileSizeBytes is never recorded anywhere (Batch 18 #8), and .forcePathStyle(true) is hardcoded rather than configurable ahead of the S3 migration.
+Tier 3 — Medium (quality/robustness)
+PartnerServiceImpl bypasses AuditLogService and reaches into AuditLogRepository directly, leaking audit rows into the partner dashboard response type — dormant today, but a live landmine (violates Batch 13 #9's intent).
+N+1 patterns: partner analytics per-content query loop, season→episode count, homepage→category lazy loads.
+ReviewServiceImpl: TOCTOU on duplicate reviews (raw 500 instead of 409), no content existence/status check before accepting a review.
+Several scheduled jobs log success/failure in try/catch rather than try/finally, so a failure inside the success-logging call itself leaves job_execution_log rows stuck at RUNNING forever.
+StripeServiceImpl wraps Stripe errors in raw RuntimeException, leaking the message through the generic 500 handler.
+Notification 90-day cleanup is one unbounded DELETE, not batched.
+UploadService.completeSession trusts the client-declared file size instead of a verified size from storage — affects the byte-tracking Batch 14 #8 wants.
+Documentation
+Root README.md is a stale template (still says "LamaStudio," gives Maven/pom.xml instructions for a Gradle project, describes a flat package layout that doesn't match the actual modules/* structure, and documents ddl-auto: update despite a recent commit explicitly disabling it).
+specs/001-auth-architecture-refactor documents a different response envelope ({success,data,error}) than what's actually implemented and than what spec 003 defines ({success,message,data,meta}).
+CLAUDE.md Batch 13 #6, #8, #9, #10 and Batch 16 #3, #9 are genuinely ambiguous or self-contradictory as written (e.g., #9 says remove audit_log while Batch 14 #6 says admin should query it) — worth clarifying before they get referenced in more implementation work.
+No ERD/schema doc across 42 migrations; thin Swagger coverage on analytics endpoints; OpenApiConfig still branded "LamaStudio."
+That's the full picture — no code has been touched. Before we go anywhere near fixes, Grafana/Prometheus setup, or seeding test data, I'd like to brainstorm prioritization with you:

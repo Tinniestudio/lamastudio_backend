@@ -195,7 +195,8 @@
       const r = await call('/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: $('loginEmail').value, password: $('loginPassword').value })
+        body: JSON.stringify({ email: $('loginEmail').value, password: $('loginPassword').value }),
+        credentials: 'include'
       });
       show($('loginOut'), r.body);
       if (r.ok) {

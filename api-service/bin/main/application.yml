@@ -92,6 +92,7 @@ app:
     allowed-origins:
       - ${FRONTEND_URL:http://localhost:3000}
       - ${APP_BASE_URL:http://localhost:8080}
+      - ${LOCAL_DEV_URL:http://localhost:5500}
     allowed-origin-patterns:
       - https://*.tinniestudio.com
       - https://tinniestudio.com
@@ -142,10 +143,23 @@ app:
     base-url: ${CDN_BASE_URL:http://localhost:3000}
 
   storage:
-    provider: ${STORAGE_PROVIDER:NOOP}
+    # MINIO is the default/fallback when STORAGE_PROVIDER isn't set — matches the other
+    # storage.* defaults below (a local MinIO on :9000 with the stock minioadmin creds), so a
+    # fresh dev checkout with a MinIO container running just works instead of silently falling
+    # back to NoOpStorageService and returning fake https://noop.storage/... URLs that were never
+    # actually written anywhere. Set STORAGE_PROVIDER=NOOP explicitly if you want that stub
+    # behavior (e.g. running the app with no object storage available at all).
+    provider: ${STORAGE_PROVIDER:MINIO}
     bucket: ${STORAGE_BUCKET:tinniestudio}
     region: ${STORAGE_REGION:us-east-1}
+    # `endpoint` is what THIS SERVER uses to reach storage — in Docker, override it to an
+    # internal-only hostname (e.g. host.docker.internal) via STORAGE_ENDPOINT. `public-endpoint`
+    # is what gets baked into URLs handed back to callers (browsers, other services); it defaults
+    # to matching `endpoint`, but MUST be overridden separately whenever the API's own network
+    # view of storage differs from its callers' (the Docker case above being the common one) — see
+    # StorageProperties.getEffectivePublicEndpoint().
     endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:9000}
     access-key: ${STORAGE_ACCESS_KEY:minioadmin}
     secret-key: ${STORAGE_SECRET_KEY:minioadmin}
     presigned-url-ttl-seconds: ${STORAGE_PRESIGNED_TTL:3600}
@@ -172,6 +186,10 @@ logging:
   level:
     com.tinniestudio: DEBUG
     org.springframework.security: INFO
+    # SQL + bound-parameter logging — the single most useful thing missing from DEBUG-on-our-own-
+    # package-only: without it, tracking down a query bug means adding temporary log statements.
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
 
 springdoc:
   api-docs:

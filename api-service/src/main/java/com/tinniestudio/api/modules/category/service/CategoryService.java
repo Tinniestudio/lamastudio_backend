@@ -53,7 +53,8 @@ public class CategoryService {
         category.setName(req.name());
         category.setDescription(req.description());
         category.setDisplayOrder(req.displayOrder() != null ? req.displayOrder() : 0);
-        if (poster != null && !poster.isEmpty()) {
+        category.setSlug(generateSlug(req.name()));
+        if (poster != null && !poster.isEmpty() && req.name() != null) {
             category.setPosterUrl(uploadPoster(poster, req.name()));
         }
         try {
@@ -74,7 +75,10 @@ public class CategoryService {
         if (req.description() != null)  category.setDescription(req.description());
         if (req.displayOrder() != null) category.setDisplayOrder(req.displayOrder());
         if (req.isActive() != null)     category.setIsActive(req.isActive());
-        if (poster != null && !poster.isEmpty()) {
+        if (category.getSlug() == null || (req.name() != null && !req.name().equals(category.getName()))) {
+            category.setSlug(generateSlug(category.getName()));
+        }
+        if (poster != null && !poster.isEmpty() && category.getName() != null) {
             category.setPosterUrl(uploadPoster(poster, category.getName()));
         }
         return CategoryResponse.from(categoryRepository.save(category));
@@ -99,7 +103,7 @@ public class CategoryService {
             String sanitizedName = categoryName.toLowerCase().replaceAll("[^a-z0-9]", "-");
             String ext = getExtension(poster.getOriginalFilename());
             String key = "posters/categories/" + sanitizedName + "." + ext;
-            String contentType = poster.getContentType() != null ? poster.getContentType() : "application/octet-stream";
+            String contentType = poster.getContentType() != null ? poster.getContentType() : "application/json";
             return storageService.uploadFile(key, poster.getBytes(), contentType);
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to upload category poster");
@@ -109,5 +113,9 @@ public class CategoryService {
     private String getExtension(String filename) {
         if (filename == null || !filename.contains(".")) return "jpg";
         return filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
+    }
+
+    private String generateSlug(String name) {
+        return name.toLowerCase().replaceAll("[^a-z0-9]", "-");
     }
 }
