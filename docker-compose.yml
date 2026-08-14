@@ -6,7 +6,7 @@ services:
       dockerfile: api-service/Dockerfile
       network: host
     container_name: tinniestudio-api
-    restart: unless-stopped
+    restart: no
     ports:
       - "8080:8080"
       - "127.0.0.1:8081:8081"
@@ -31,7 +31,13 @@ services:
       # RabbitMQ: internal Docker service
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      # MinIO: uses canotices_minio (0.0.0.0:9000 on host)
+      # MinIO: uses canotices_minio (0.0.0.0:9000 on host). STORAGE_ENDPOINT is what THIS
+      # container uses to reach MinIO — host.docker.internal, since "localhost" from inside a
+      # container means the container itself. STORAGE_PUBLIC_ENDPOINT (left unset here, so it
+      # falls through to .env / the http://localhost:9000 default) is what gets baked into
+      # presigned/uploaded URLs handed back to callers outside Docker (browsers) — it must stay
+      # host-reachable, NOT host.docker.internal, or every returned upload/download URL is
+      # unreachable from the client that's supposed to use it.
       STORAGE_ENDPOINT: http://host.docker.internal:9000
     depends_on:
       redis:
@@ -47,7 +53,7 @@ services:
       dockerfile: media-worker/Dockerfile
       network: host
     container_name: tinniestudio-worker
-    restart: unless-stopped
+    restart: no
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -78,14 +84,14 @@ services:
   redis:
     image: redis:7-alpine
     container_name: tinniestudio-redis
-    restart: always
+    restart: no
     networks:
       - tinniestudio-network
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: tinniestudio-rabbitmq
-    restart: always
+    restart: no
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -100,7 +106,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: tinniestudio-prometheus
-    restart: always
+    restart: no
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       # See observability/secrets/README.md — must match PROMETHEUS_SCRAPE_PASSWORD in .env.
@@ -113,7 +119,7 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: tinniestudio-grafana
-    restart: always
+    restart: no
     ports:
       - "3001:3000"
     environment:

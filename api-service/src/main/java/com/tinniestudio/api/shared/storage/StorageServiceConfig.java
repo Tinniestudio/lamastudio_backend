@@ -34,11 +34,19 @@ public class StorageServiceConfig {
                 .build();
     }
 
+    // Deliberately built against the PUBLIC endpoint, not props.getEndpoint(). AWS SigV4 signs
+    // the Host header as part of a presigned URL's signature — you cannot generate a URL against
+    // one host and hand it to a caller expecting to hit a different one; the signature simply
+    // won't validate (confirmed empirically: MinIO returns "MissingFields"/signature errors on a
+    // presigned URL whose host was swapped post-signing). Presigning is pure local cryptography
+    // with no network call, so the presigner never actually needs to reach this endpoint — it
+    // only needs to match what the eventual caller (a browser, outside this container in the
+    // Docker case) will use to reach storage.
     @Bean
     @ConditionalOnProperty(name = "app.storage.provider", havingValue = "MINIO")
     public S3Presigner minioS3Presigner(StorageProperties props) {
         return S3Presigner.builder()
-                .endpointOverride(URI.create(props.getEndpoint()))
+                .endpointOverride(URI.create(props.getEffectivePublicEndpoint()))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(props.getAccessKey(), props.getSecretKey())))
                 .region(Region.of(props.getRegion()))

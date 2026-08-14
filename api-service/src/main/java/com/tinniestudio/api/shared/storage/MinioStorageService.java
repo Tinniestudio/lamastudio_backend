@@ -24,6 +24,11 @@ import java.time.Duration;
 public class MinioStorageService implements StorageService {
 
     private final S3Client s3Client;
+    // Injected already configured against the PUBLIC endpoint (see StorageServiceConfig) — AWS
+    // SigV4 signs the Host header into a presigned URL, so it must be built against the host the
+    // eventual caller will actually use, not rewritten afterward (rewriting the host post-sign
+    // invalidates the signature). presigned.url() below is therefore already the correct,
+    // externally-usable URL as-is.
     private final S3Presigner presigner;
     private final StorageProperties props;
 
@@ -127,9 +132,9 @@ public class MinioStorageService implements StorageService {
                     .build(),
                 RequestBody.fromBytes(content)
             );
-            String endpoint = props.getEndpoint().endsWith("/")
-                ? props.getEndpoint().substring(0, props.getEndpoint().length() - 1)
-                : props.getEndpoint();
+            String endpoint = props.getEffectivePublicEndpoint().endsWith("/")
+                ? props.getEffectivePublicEndpoint().substring(0, props.getEffectivePublicEndpoint().length() - 1)
+                : props.getEffectivePublicEndpoint();
             return endpoint + "/" + props.getBucket() + "/" + key;
         } catch (SdkException e) {
             throw new StorageException("Failed to upload file for key=" + key, e);

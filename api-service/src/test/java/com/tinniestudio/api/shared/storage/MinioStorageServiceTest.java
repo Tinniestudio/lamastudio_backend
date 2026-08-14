@@ -107,6 +107,27 @@ class MinioStorageServiceTest {
             ).isInstanceOf(StorageException.class)
              .hasMessageContaining("raw/abc/original.mp4");
         }
+
+        @Test
+        @DisplayName("returns the presigner's URL verbatim — never rewritten post-signing")
+        void returnsPresignerUrlUnmodified() throws MalformedURLException {
+            // AWS SigV4 signs the Host header into a presigned URL's signature, so the URL must
+            // come back exactly as the presigner produced it. The internal-vs-public endpoint
+            // split (see StorageServiceConfig.minioS3Presigner) is handled by configuring the
+            // S3Presigner itself against the public endpoint — not by rewriting its output here.
+            PresignedPutObjectRequest presignedRequest = mock(PresignedPutObjectRequest.class);
+            when(presignedRequest.url()).thenReturn(
+                new URL("http://localhost:9000/tinniestudio/raw/abc/original.mp4?X-Amz-Signature=sig123"));
+            when(presignedRequest.expiration()).thenReturn(Instant.now().plusSeconds(3600));
+            when(presigner.presignPutObject(any(PutObjectPresignRequest.class))).thenReturn(presignedRequest);
+
+            PresignedUploadResult result = service.generateUploadUrl(
+                "raw/abc/original.mp4", "video/mp4", 1024L, Duration.ofHours(1)
+            );
+
+            assertThat(result.uploadUrl())
+                .isEqualTo("http://localhost:9000/tinniestudio/raw/abc/original.mp4?X-Amz-Signature=sig123");
+        }
     }
 
     @Nested
@@ -247,6 +268,18 @@ class MinioStorageServiceTest {
                 service.uploadFile("posters/categories/action.jpg", new byte[]{1}, "image/jpeg")
             ).isInstanceOf(StorageException.class)
              .hasMessageContaining("posters/categories/action.jpg");
+        }
+
+        @Test
+        @DisplayName("returns a URL built from publicEndpoint, not the internal endpoint, when publicEndpoint is set")
+        void returnsPublicEndpointUrlWhenSet() {
+            props.setEndpoint("http://host.docker.internal:9000");
+            props.setPublicEndpoint("http://localhost:9000");
+            MinioStorageService svc = new MinioStorageService(s3Client, presigner, props);
+
+            String url = svc.uploadFile("partner-logos/abc/logo.png", new byte[]{1, 2, 3}, "image/png");
+
+            assertThat(url).isEqualTo("http://localhost:9000/tinniestudio/partner-logos/abc/logo.png");
         }
     }
 }
