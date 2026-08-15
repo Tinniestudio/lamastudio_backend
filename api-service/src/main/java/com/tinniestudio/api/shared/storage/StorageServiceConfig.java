@@ -1,0 +1,75 @@
+package com.tinniestudio.api.shared.storage;
+
+import com.tinniestudio.api.shared.config.StorageProperties;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+
+import java.net.URI;
+
+@Slf4j
+@Configuration
+@EnableConfigurationProperties(StorageProperties.class)
+public class StorageServiceConfig {
+
+    @Bean
+    @ConditionalOnProperty(name = "app.storage.provider", havingValue = "MINIO")
+    public S3Client minioS3Client(StorageProperties props) {
+        log.info("Configuring MinIO S3Client at endpoint={}", props.getEndpoint());
+        return S3Client.builder()
+                .endpointOverride(URI.create(props.getEndpoint()))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(props.getAccessKey(), props.getSecretKey())))
+                .region(Region.of(props.getRegion()))
+                .serviceConfiguration(pathStyleS3Config())
+                .build();
+    }
+
+    // Deliberately built against the PUBLIC endpoint, not props.getEndpoint(). AWS SigV4 signs
+    // the Host header as part of a presigned URL's signature — you cannot generate a URL against
+    // one host and hand it to a caller expecting to hit a different one; the signature simply
+    // won't validate (confirmed empirically: MinIO returns "MissingFields"/signature errors on a
+    // presigned URL whose host was swapped post-signing). Presigning is pure local cryptography
+    // with no network call, so the presigner never actually needs to reach this endpoint — it
+    // only needs to match what the eventual caller (a browser, outside this container in the
+    // Docker case) will use to reach storage.
+    @Bean
+    @ConditionalOnProperty(name = "app.storage.provider", havingValue = "MINIO")
+    public S3Presigner minioS3Presigner(StorageProperties props) {
+        return S3Presigner.builder()
+                .endpointOverride(URI.create(props.getEffectivePublicEndpoint()))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(props.getAccessKey(), props.getSecretKey())))
+                .region(Region.of(props.getRegion()))
+                .serviceConfiguration(pathStyleS3Config())
+                .build();
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "app.storage.provider", havingValue = "MINIO")
+    public StorageService minioStorageService(S3Client minioS3Client, S3Presigner minioS3Presigner,
+                                              StorageProperties props) {
+        log.info("Using MinioStorageService for bucket={}", props.getBucket());
+        return new MinioStorageService(minioS3Client, minioS3Presigner, props);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(StorageService.class)
+    public StorageService noOpStorageService() {
+        log.warn("Using NoOpStorageService — set app.storage.provider=MINIO to enable real object storage.");
+        return new NoOpStorageService();
+    }
+
+    private S3Configuration pathStyleS3Config() {
+        return S3Configuration.builder().pathStyleAccessEnabled(true).build();
+    }
+}

@@ -9,7 +9,7 @@
 
 ### `ApiResponse<T>`
 
-**Location**: `com.lamastudio.backend.shared.web.ApiResponse`  
+**Location**: `com.tinniestudio.backend.shared.web.ApiResponse`  
 **Type**: Java record  
 **Purpose**: Standard envelope for all 2xx JSON success responses
 
@@ -51,7 +51,7 @@ paginated endpoints exist — this is designed for future list endpoints.
 
 ### `SuccessResponseWrapper`
 
-**Location**: `com.lamastudio.backend.shared.web.SuccessResponseWrapper`  
+**Location**: `com.tinniestudio.backend.shared.web.SuccessResponseWrapper`  
 **Type**: Spring `@RestControllerAdvice` implementing `ResponseBodyAdvice<Object>`  
 **Purpose**: Intercepts all 2xx JSON responses and wraps them in `ApiResponse`
 
@@ -77,7 +77,7 @@ SuccessResponseWrapper
 
 ### `@SkipResponseWrapper`
 
-**Location**: `com.lamastudio.backend.shared.web.SkipResponseWrapper`  
+**Location**: `com.tinniestudio.backend.shared.web.SkipResponseWrapper`  
 **Type**: Java annotation  
 **Purpose**: Marks a controller class to be bypassed by `SuccessResponseWrapper`
 

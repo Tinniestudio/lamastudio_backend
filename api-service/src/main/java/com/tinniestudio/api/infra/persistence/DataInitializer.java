@@ -1,0 +1,33 @@
+package com.tinniestudio.api.infra.persistence;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.tinniestudio.api.modules.role.repository.RoleRepository;
+import com.tinniestudio.api.shared.entity.Role;
+import com.tinniestudio.api.shared.entity.RoleName;
+
+import java.util.Arrays;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class DataInitializer implements ApplicationRunner {
+
+    private final RoleRepository roleRepository;
+
+    @Override
+    @Transactional
+    public void run(ApplicationArguments args) {
+        Arrays.stream(RoleName.values()).forEach(roleName -> {
+            if (roleRepository.findByName(roleName).isEmpty()) {
+                roleRepository.save(new Role(roleName));
+                log.info("Seeded role: {}", roleName);
+            }
+        });
+    }
+}

@@ -48,7 +48,7 @@ RESEND_API_KEY=...
 ### User Profile Module
 
 ```
-src/main/java/com/lamastudio/backend/
+src/main/java/com/tinniestudio/backend/
 ├── modules/user/
 │   ├── controller/
 │   │   └── UserProfileController.java        # GET/PATCH /users/me, avatar, password, notifications
@@ -71,7 +71,7 @@ src/main/java/com/lamastudio/backend/
 ### Billing Module
 
 ```
-src/main/java/com/lamastudio/backend/
+src/main/java/com/tinniestudio/backend/
 ├── modules/billing/
 │   ├── controller/
 │   │   ├── SubscriptionController.java       # /subscriptions/*

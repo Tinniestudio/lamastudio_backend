@@ -1,0 +1,23 @@
+package com.tinniestudio.api.modules.billing.service;
+
+import com.tinniestudio.api.modules.billing.dto.AdminPlanRequest;
+import com.tinniestudio.api.modules.billing.dto.AdminPlanResponse;
+
+import java.util.List;
+import java.util.UUID;
+
+public interface AdminSubscriptionService {
+
+    List<AdminPlanResponse> getAllPlans();
+
+    AdminPlanResponse getPlan(UUID planId);
+
+    AdminPlanResponse createPlan(AdminPlanRequest request);
+
+    AdminPlanResponse updatePlan(UUID planId, AdminPlanRequest request);
+
+    /** Soft delete — sets isActive = false. Never removes the row. */
+    void deletePlan(UUID planId);
+
+    void restorePlan(UUID planId);
+}

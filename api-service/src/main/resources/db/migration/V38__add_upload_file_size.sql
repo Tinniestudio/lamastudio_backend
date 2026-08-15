@@ -1,0 +1,2 @@
+ALTER TABLE upload_sessions
+    ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT NOT NULL DEFAULT 0;

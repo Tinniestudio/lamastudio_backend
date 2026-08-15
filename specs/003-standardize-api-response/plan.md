@@ -26,7 +26,7 @@ JUnit 5, Mockito, Spring Boot Test
 
 **Target Platform**: Linux server — Spring Boot embedded Tomcat
 
-**Project Type**: REST API web service — `com.lamastudio.backend`
+**Project Type**: REST API web service — `com.tinniestudio.backend`
 
 **Performance Goals**: Zero overhead on non-intercepted paths; envelope serialization adds
 < 1ms per response (no DB or cache access in wrapper)
@@ -76,14 +76,14 @@ specs/003-standardize-api-response/
 ### Source Code (repository root)
 
 ```text
-src/main/java/com/lamastudio/backend/
+src/main/java/com/tinniestudio/backend/
 └── shared/
     └── web/
         ├── RootController.java              (existing — unchanged)
         ├── ApiResponse.java                 (NEW — envelope record)
         └── SuccessResponseWrapper.java      (NEW — ResponseBodyAdvice)
 
-src/test/java/com/lamastudio/backend/
+src/test/java/com/tinniestudio/backend/
 └── web/
     ├── SuccessResponseWrapperTest.java      (NEW — unit tests for wrapper logic)
     └── ApiResponseEnvelopeIT.java           (NEW — integration tests for key endpoints)

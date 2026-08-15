@@ -1,48 +1,143 @@
 services:
-  app:
-    build: .
-    container_name: lamastudio-app
-    restart: unless-stopped
+
+  api-service:
+    build:
+      context: .
+      dockerfile: api-service/Dockerfile
+      network: host
+    container_name: tinniestudio-api
+    restart: no
     ports:
       - "8080:8080"
-    # Prefer a local .env for development. See .env.example for values.
-    env_file:
-      - .env
+      - "127.0.0.1:8081:8081"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file: .env
     environment:
-      # Database connection variables expected by application.yml
-      DB_HOST: db
+      # Postgres: uses canotices_postgres (0.0.0.0:5432 on host)
+      DB_HOST: host.docker.internal
       DB_PORT: 5432
-      DB_NAME: lamastudio_db
+      DB_NAME: tinniestudio_db
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      # DB_PASSWORD, RABBITMQ_USER, RABBITMQ_PASSWORD are intentionally NOT set here —
+      # `environment:` takes precedence over `env_file: .env` for the same key, so
+      # hardcoding credentials here would silently override any rotation done via .env.
+      # They come from .env via env_file below.
+      # Redis: internal Docker service (system redis is loopback-only)
+      REDIS_URL: redis://redis:6379
+      # RabbitMQ: internal Docker service
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      # MinIO: uses canotices_minio (0.0.0.0:9000 on host). STORAGE_ENDPOINT is what THIS
+      # container uses to reach MinIO — host.docker.internal, since "localhost" from inside a
+      # container means the container itself. STORAGE_PUBLIC_ENDPOINT (left unset here, so it
+      # falls through to .env / the http://localhost:9000 default) is what gets baked into
+      # presigned/uploaded URLs handed back to callers outside Docker (browsers) — it must stay
+      # host-reachable, NOT host.docker.internal, or every returned upload/download URL is
+      # unreachable from the client that's supposed to use it.
+      STORAGE_ENDPOINT: http://host.docker.internal:9000
     depends_on:
-      - db
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
     networks:
-      - lamastudio-network
+      - tinniestudio-network
 
-  db:
-    image: postgis/postgis:16-3.4
-    container_name: lamastudio-db
-    restart: always
+  media-worker:
+    build:
+      context: .
+      dockerfile: media-worker/Dockerfile
+      network: host
+    container_name: tinniestudio-worker
+    restart: no
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file: .env
     environment:
-      POSTGRES_DB: lamastudio_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      # Postgres: uses canotices_postgres (0.0.0.0:5432 on host)
+      DB_HOST: host.docker.internal
+      DB_PORT: 5432
+      DB_NAME: tinniestudio_db
+      DB_USER: postgres
+      # DB_PASSWORD, RABBITMQ_USER, RABBITMQ_PASSWORD come from .env via env_file below —
+      # not hardcoded here, since `environment:` would otherwise silently override .env.
+      # RabbitMQ: internal Docker service
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      # MinIO: uses canotices_minio (0.0.0.0:9000 on host)
+      STORAGE_ENDPOINT: http://host.docker.internal:9000
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - tinniestudio-network
+
+  # Redis runs in Docker — system redis is loopback-only and unreachable from bridge networks.
+  # No host port binding avoids conflict with system redis on 127.0.0.1:6379.
+  redis:
+    image: redis:7-alpine
+    container_name: tinniestudio-redis
+    restart: no
+    networks:
+      - tinniestudio-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: tinniestudio-rabbitmq
+    restart: no
     ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
+      - "5672:5672"
+      - "15672:15672"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - lamastudio-network
+      - tinniestudio-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: tinniestudio-prometheus
+    restart: no
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # See observability/secrets/README.md — must match PROMETHEUS_SCRAPE_PASSWORD in .env.
+      - ./observability/secrets/prometheus_scrape_password:/run/secrets/prometheus_scrape_password:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - tinniestudio-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: tinniestudio-grafana
+    restart: no
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - tinniestudio-network
+    depends_on:
+      - prometheus
 
 networks:
-  lamastudio-network:
+  tinniestudio-network:
     driver: bridge
 
 volumes:
-  db_data:
+  grafana_data:

@@ -511,7 +511,7 @@ Speckit run failures are not bugs to work around. If a batch cannot pass its com
 
 ---
 
-# BATCH 0 — CORE FOUNDATION
+# BATCH 0 [X] — CORE FOUNDATION
 > **Goal:** Lay the entire architectural skeleton before any business logic.
 > Both services must compile, start, and connect to all infrastructure before Batch 1 begins.
 
@@ -819,7 +819,7 @@ Examples:
 
 ---
 
-# BATCH 1 — AUTHENTICATION + USER SYSTEM
+# BATCH 1 [X] — AUTHENTICATION + USER SYSTEM
 > **Service:** API Service only
 > **Goal:** Identity, session, and email verification foundation.
 
@@ -1013,7 +1013,7 @@ GET  /auth/me                   Authenticated
 
 ---
 
-# BATCH 2 — USER PROFILE + SETTINGS
+# BATCH 2 [X] — USER PROFILE + SETTINGS
 > **Service:** API Service
 > **Goal:** User identity, preferences, avatar.
 
@@ -1106,7 +1106,7 @@ PATCH  /users/me/avatar           Authenticated
 ---
 
 
-# BATCH 12 — SUBSCRIPTION + BILLING
+# BATCH 12 [X] — SUBSCRIPTION + BILLING
 > **Service:** API Service
 > **Goal:** Monetization layer with plan management and payment integration.
 
@@ -1244,7 +1244,7 @@ POST /webhooks/payment              Public (signature validated)
 ---
 
 
-# BATCH 3 — CATEGORY + DISCOVERY FOUNDATION
+# BATCH 3 [X] — CATEGORY + DISCOVERY FOUNDATION
 > **Service:** API Service
 > **Goal:** Content taxonomy and homepage configuration system.
 
@@ -1326,7 +1326,7 @@ GET /discover/new-releases          Public
 
 ---
 
-# BATCH 4 — CONTENT CORE SYSTEM
+# BATCH 4 [X] — CONTENT CORE SYSTEM
 > **Service:** API Service
 > **Goal:** Primary content domain (Movies, Series, Documentaries).
 
@@ -1467,7 +1467,7 @@ PATCH /admin/contents/:id/feature     Admin
 
 ---
 
-# BATCH 5 — EPISODES + SERIES SYSTEM
+# BATCH 5 [X] — EPISODES + SERIES SYSTEM
 > **Service:** API Service
 > **Goal:** Season and episode hierarchy for Series content.
 
@@ -1565,7 +1565,7 @@ PATCH /partner/seasons/:seasonId/episodes/reorder Partner
 
 ---
 
-# BATCH 6 — UPLOAD SESSION SYSTEM
+# BATCH 6 [X] — UPLOAD SESSION SYSTEM
 > **Service:** API Service + minimal DB read in Worker
 > **Goal:** Secure direct-to-bucket upload pipeline.
 
@@ -1683,7 +1683,7 @@ GET  /uploads/:sessionId/status    Partner / Admin (owner)
 
 ---
 
-# BATCH 7 — MEDIA PROCESSING WORKER
+# BATCH 7 [X] — MEDIA PROCESSING WORKER
 > **Service:** Media Worker Service (standalone Spring Boot app)
 > **Goal:** Async FFmpeg pipeline consuming from RabbitMQ.
 
@@ -1902,7 +1902,7 @@ worker:
 
 ---
 
-# BATCH 8 — PLAYBACK SYSTEM
+# BATCH 8 [X] — PLAYBACK SYSTEM
 > **Service:** API Service
 > **Goal:** Secure adaptive streaming with subscription enforcement.
 
@@ -2002,7 +2002,7 @@ GET  /playback/continue-watching        Authenticated
 
 ---
 
-# BATCH 9 — SEARCH + DISCOVERY
+# BATCH 9 [X] — SEARCH + DISCOVERY
 > **Service:** API Service
 > **Goal:** Content discovery with full-text and filter-based search.
 
@@ -2075,7 +2075,7 @@ GET /discover/recommended Authenticated
 
 ---
 
-# BATCH 10 — FAVORITES + WATCH HISTORY
+# BATCH 10 [X] — FAVORITES + WATCH HISTORY
 > **Service:** API Service
 > **Goal:** User engagement and library.
 

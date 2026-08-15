@@ -1,0 +1,48 @@
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+  flyway:
+    enabled: true
+  data:
+    redis:
+      url: redis://localhost:6379
+
+app:
+  base-url: http://localhost:8080
+  frontend-url: http://localhost:3000
+  jwt:
+    issuer: tinniestudio-test
+    access-token:
+      secret: dGhpc2lzbG9uZ2FjY2Vzc3NlY3JldGtleTEyMzQ1Njc4OTA=
+      expiration-ms: 900000
+    refresh-token:
+      secret: dGhpc2lzcmVmcmVzaHNlY3JldGtleTEyMzQ1Njc4OTA=
+      expiration-ms: 604800000
+  admin-jwt:
+    access-token:
+      secret: dGhpc2lzYWRtaW5hY2Nlc3NzZWNyZXRrZXkxMjM0NTY3OA==
+      expiration-ms: 900000
+    refresh-token:
+      secret: dGhpc2lzYWRtaW5yZWZyZXNoc2VjcmV0a2V5MTIzNDU2Nzg=
+      expiration-ms: 604800000
+  admin-bootstrap-token: test-bootstrap-token-for-testing-only
+  free-tier-content-limit: 2
+  email-verification:
+    token-expiry-hours: 24
+  password-reset:
+    token-expiry-hours: 1
+  admin-password-reset:
+    token-expiry-minutes: 15
+  cdn:
+    base-url: http://localhost:3000
+  cookie:
+    secure: false
+    same-site: Lax
+
+server:
+  servlet:
+    context-path: /api/v1

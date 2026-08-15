@@ -23,7 +23,7 @@ This refactor evolves the TinnieStudio backend from a simple stateless JWT auth 
 
 ### New: Admin Auth Module
 ```
-src/main/java/com/lamastudio/backend/modules/auth/admin/
+src/main/java/com/tinniestudio/backend/modules/auth/admin/
 ├── controller/AdminAuthController.java     # /auth/admin/** endpoints
 ├── service/
 │   ├── AdminAuthService.java               # Login, logout, refresh, register
@@ -40,34 +40,34 @@ src/main/java/com/lamastudio/backend/modules/auth/admin/
 
 ### New: User Session Module
 ```
-src/main/java/com/lamastudio/backend/modules/auth/user/service/
+src/main/java/com/tinniestudio/backend/modules/auth/user/service/
 ├── SessionService.java                     # Create, revoke, query sessions
 └── AuthProfileService.java                 # /auth/me aggregation
-src/main/java/com/lamastudio/backend/modules/auth/user/dto/
+src/main/java/com/tinniestudio/backend/modules/auth/user/dto/
 ├── AuthProfileResponse.java                # Enriched /auth/me response
 └── SessionDto.java                         # Device info in session list
-src/main/java/com/lamastudio/backend/modules/auth/user/entity/
+src/main/java/com/tinniestudio/backend/modules/auth/user/entity/
 └── UserSession.java
 ```
 
 ### New: Capability & Coupon
 ```
-src/main/java/com/lamastudio/backend/modules/billing/service/
+src/main/java/com/tinniestudio/backend/modules/billing/service/
 ├── CapabilityService.java                  # canWatch() / recordWatch()
 └── CouponService.java                      # Validate + redeem coupons
-src/main/java/com/lamastudio/backend/shared/entity/
+src/main/java/com/tinniestudio/backend/shared/entity/
 ├── Coupon.java
 └── CouponRedemption.java
 ```
 
 ### Modified: JWT & Security
 ```
-src/main/java/com/lamastudio/backend/shared/security/jwt/
+src/main/java/com/tinniestudio/backend/shared/security/jwt/
 ├── JwtTokenProvider.java                   # Adds aud=user, sid claim
 ├── AdminJwtTokenProvider.java              # NEW — aud=admin, separate secret
 ├── JwtAuthenticationFilter.java            # Adds sid extraction for /auth/me
 └── AdminJwtAuthenticationFilter.java       # NEW — admin chain filter
-src/main/java/com/lamastudio/backend/shared/config/
+src/main/java/com/tinniestudio/backend/shared/config/
 └── SecurityConfig.java                     # Split into 2 SecurityFilterChains
 ```
 

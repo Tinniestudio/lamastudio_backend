@@ -1,0 +1,13 @@
+package com.tinniestudio.api.modules.episode.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import java.time.LocalDate;
+
+public record CreateEpisodeRequest(
+    Integer episodeNumber,
+    @NotBlank String title,
+    String description,
+    LocalDate releaseDate,
+    Integer durationSeconds,
+    String thumbnailUrl
+) {}

@@ -1,0 +1,121 @@
+package com.tinniestudio.api.modules.category.service;
+
+import com.tinniestudio.api.modules.category.dto.CategoryResponse;
+import com.tinniestudio.api.modules.category.dto.CreateCategoryRequest;
+import com.tinniestudio.api.modules.category.dto.UpdateCategoryRequest;
+import com.tinniestudio.api.modules.category.repository.CategoryRepository;
+import com.tinniestudio.api.shared.entity.Category;
+import com.tinniestudio.api.shared.storage.StorageService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+public class CategoryService {
+
+    private final CategoryRepository categoryRepository;
+    private final StorageService storageService;
+
+    @Cacheable("categories")
+    @Transactional(readOnly = true)
+    public List<CategoryResponse> listActive() {
+        return categoryRepository.findByIsActiveTrueOrderByDisplayOrderAsc()
+                .stream().map(CategoryResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<CategoryResponse> listAll() {
+        return categoryRepository.findAll().stream().map(CategoryResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public CategoryResponse getBySlug(String slug) {
+        return categoryRepository.findBySlug(slug)
+                .map(CategoryResponse::from)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found: " + slug));
+    }
+
+    @Transactional
+    @CacheEvict(value = "categories", allEntries = true)
+    public CategoryResponse create(CreateCategoryRequest req, MultipartFile poster) {
+        Category category = new Category();
+        category.setName(req.name());
+        category.setDescription(req.description());
+        category.setDisplayOrder(req.displayOrder() != null ? req.displayOrder() : 0);
+        category.setSlug(generateSlug(req.name()));
+        if (poster != null && !poster.isEmpty() && req.name() != null) {
+            category.setPosterUrl(uploadPoster(poster, req.name()));
+        }
+        try {
+            // saveAndFlush: see ContentService.create for why plain save() doesn't reliably
+            // surface the constraint violation inside this try/catch.
+            return CategoryResponse.from(categoryRepository.saveAndFlush(category));
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Category name already exists: " + req.name());
+        }
+    }
+
+    @Transactional
+    @CacheEvict(value = "categories", allEntries = true)
+    public CategoryResponse update(UUID id, UpdateCategoryRequest req, MultipartFile poster) {
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found: " + id));
+        if (req.name() != null)         category.setName(req.name());
+        if (req.description() != null)  category.setDescription(req.description());
+        if (req.displayOrder() != null) category.setDisplayOrder(req.displayOrder());
+        if (req.isActive() != null)     category.setIsActive(req.isActive());
+        if (category.getSlug() == null || (req.name() != null && !req.name().equals(category.getName()))) {
+            category.setSlug(generateSlug(category.getName()));
+        }
+        if (poster != null && !poster.isEmpty() && category.getName() != null) {
+            category.setPosterUrl(uploadPoster(poster, category.getName()));
+        }
+        return CategoryResponse.from(categoryRepository.save(category));
+    }
+
+    @Transactional
+    @CacheEvict(value = "categories", allEntries = true)
+    public void delete(UUID id) {
+        Category category = categoryRepository.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found: " + id));
+        try {
+            categoryRepository.delete(category);
+            categoryRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Category is referenced by one or more homepage sections and cannot be deleted");
+        }
+    }
+
+    private String uploadPoster(MultipartFile poster, String categoryName) {
+        try {
+            String sanitizedName = categoryName.toLowerCase().replaceAll("[^a-z0-9]", "-");
+            String ext = getExtension(poster.getOriginalFilename());
+            String key = "posters/categories/" + sanitizedName + "." + ext;
+            String contentType = poster.getContentType() != null ? poster.getContentType() : "application/json";
+            return storageService.uploadFile(key, poster.getBytes(), contentType);
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to upload category poster");
+        }
+    }
+
+    private String getExtension(String filename) {
+        if (filename == null || !filename.contains(".")) return "jpg";
+        return filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
+    }
+
+    private String generateSlug(String name) {
+        return name.toLowerCase().replaceAll("[^a-z0-9]", "-");
+    }
+}

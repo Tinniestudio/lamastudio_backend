@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TinnieStudio — Upload Flow Tester</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0f1216; --panel: #171b21; --border: #262c35; --text: #e6e9ef; --muted: #8b93a1;
+    --accent: #5b8cff; --ok: #3ecf8e; --err: #ff5d5d; --warn: #e8b93f; --code-bg: #0b0d10;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); padding: 24px; line-height: 1.5;
+  }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; font-size: 0.9rem; }
+  .wrap { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card h2 {
+    font-size: 0.95rem; margin: 0 0 14px; display: flex; align-items: center; gap: 8px;
+  }
+  .step-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: 50%; background: var(--accent);
+    color: #fff; font-size: 0.75rem; font-weight: 600; flex-shrink: 0;
+  }
+  .card.disabled { opacity: 0.45; pointer-events: none; }
+  label { display: block; font-size: 0.8rem; color: var(--muted); margin: 10px 0 4px; }
+  label:first-child { margin-top: 0; }
+  input, select {
+    width: 100%; padding: 8px 10px; background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 0.85rem; font-family: inherit;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .row { display: flex; gap: 10px; }
+  .row > div { flex: 1; }
+  button {
+    margin-top: 14px; padding: 9px 16px; background: var(--accent); color: #fff; border: none;
+    border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+  button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .status-pill {
+    display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.72rem;
+    font-weight: 600; margin-left: 8px; vertical-align: middle;
+  }
+  .status-pill.ok { background: rgba(62,207,142,0.15); color: var(--ok); }
+  .status-pill.err { background: rgba(255,93,93,0.15); color: var(--err); }
+  .status-pill.pending { background: rgba(139,147,161,0.15); color: var(--muted); }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; font-size: 0.75rem; overflow-x: auto; margin: 10px 0 0;
+    white-space: pre-wrap; word-break: break-all; max-height: 220px; overflow-y: auto;
+  }
+  .warn-box {
+    background: rgba(232,185,63,0.1); border: 1px solid rgba(232,185,63,0.35); color: var(--warn);
+    border-radius: 6px; padding: 8px 12px; font-size: 0.78rem; margin-top: 10px;
+  }
+  .hint { color: var(--muted); font-size: 0.78rem; margin-top: 4px; }
+  .file-info { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+  footer { text-align: center; color: var(--muted); font-size: 0.75rem; margin-top: 8px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>Upload Flow Tester</h1>
+    <p class="sub">Exercises the real presigned-upload flow end to end: create session → PUT bytes to storage → complete → poll status. Talks directly to <code id="apiBaseLabel"></code>.</p>
+  </div>
+
+  <div class="card" id="cfgCard">
+    <h2><span class="step-num">·</span> API base URL</h2>
+    <input id="apiBase" value="http://localhost:8080/api/v1">
+    <p class="hint">Same-origin cookies only work if this page is served from an origin your API's CORS allows (e.g. <code>http://localhost:3000</code>, which is FRONTEND_URL by default). Opening this file directly via <code>file://</code> will NOT be able to authenticate.</p>
+  </div>
+
+  <div class="card" id="loginCard">
+    <h2><span class="step-num">1</span> Log in <span id="loginStatus" class="status-pill pending">not logged in</span></h2>
+    <div class="row">
+      <div><label>Email</label><input id="loginEmail" value="viewer1+seed@tinniestudio.com"></div>
+      <div><label>Password</label><input id="loginPassword" type="password" value="SeedPass1!"></div>
+    </div>
+    <button id="btnLogin">Log in</button>
+    <pre id="loginOut" style="display:none"></pre>
+  </div>
+
+  <div class="card disabled" id="sessionCard">
+    <h2><span class="step-num">2</span> Create upload session <span id="sessionStatus" class="status-pill pending">waiting</span></h2>
+    <div class="row">
+      <div>
+        <label>Upload type</label>
+        <select id="uploadType">
+          <option value="RAW_VIDEO">RAW_VIDEO</option>
+          <option value="TRAILER">TRAILER</option>
+          <option value="THUMBNAIL">THUMBNAIL</option>
+          <option value="SUBTITLE">SUBTITLE</option>
+        </select>
+      </div>
+      <div>
+        <label>Target entity type</label>
+        <select id="targetEntityType">
+          <option value="CONTENT">CONTENT</option>
+          <option value="SEASON">SEASON</option>
+          <option value="EPISODE">EPISODE</option>
+        </select>
+      </div>
+    </div>
+    <label>Target entity id (optional UUID)</label>
+    <input id="targetEntityId" placeholder="3f3f46dc-b1e4-44e3-9781-148f01f47786">
+    <label>File</label>
+    <input id="fileInput" type="file">
+    <div class="file-info" id="fileInfo">No file selected — filename/type/size below are filled in automatically.</div>
+    <div class="row">
+      <div><label>Original filename</label><input id="originalFilename"></div>
+      <div><label>MIME type</label><input id="mimeType"></div>
+    </div>
+    <label>File size (bytes)</label>
+    <input id="fileSizeBytes" type="number">
+    <button id="btnCreateSession">Create session</button>
+    <pre id="sessionOut" style="display:none"></pre>
+  </div>
+
+  <div class="card disabled" id="putCard">
+    <h2><span class="step-num">3</span> PUT bytes directly to storage <span id="putStatus" class="status-pill pending">waiting</span></h2>
+    <p class="hint">Sends the selected file's raw bytes straight to the presigned <code>uploadUrl</code> from step 2 — the API server is not involved in this request.</p>
+    <div id="stubWarning" class="warn-box" style="display:none">
+      ⚠️ This presigned URL was issued by <strong>NoOpStorageService</strong> (contains <code>X-Amz-Signature=stub</code>) — the app's storage provider isn't configured to a real backend (<code>app.storage.provider</code> is unset/NOOP, not <code>MINIO</code>). This PUT is expected to fail or hit nothing real. Set <code>STORAGE_PROVIDER=MINIO</code> in the API's environment and point it at a running MinIO/S3 bucket to test a real upload end to end.
+    </div>
+    <button id="btnPutObject">PUT file to storage</button>
+    <pre id="putOut" style="display:none"></pre>
+  </div>
+
+  <div class="card disabled" id="completeCard">
+    <h2><span class="step-num">4</span> Complete session <span id="completeStatus" class="status-pill pending">waiting</span></h2>
+    <p class="hint">Tells the API the object should now exist in storage; it verifies the object, records file size, and (for RAW_VIDEO/TRAILER) creates a VideoAsset + queues processing.</p>
+    <button id="btnComplete">Complete upload</button>
+    <pre id="completeOut" style="display:none"></pre>
+  </div>
+
+  <div class="card disabled" id="statusCard">
+    <h2><span class="step-num">5</span> Check status <span id="pollStatus" class="status-pill pending">waiting</span></h2>
+    <button id="btnStatus">Get status</button>
+    <button id="btnPoll" class="secondary">Poll every 3s</button>
+    <pre id="statusOut" style="display:none"></pre>
+  </div>
+
+  <footer>Dev-only tool — not shipped in the production jar. Lives at <code>dev-tools/upload-test.html</code>.</footer>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const state = { sessionId: null, uploadUrl: null, storageKey: null, file: null };
+  let pollTimer = null;
+
+  $('apiBaseLabel').textContent = $('apiBase').value;
+  $('apiBase').addEventListener('input', () => { $('apiBaseLabel').textContent = $('apiBase').value; });
+
+  function api() { return $('apiBase').value.replace(/\/$/, ''); }
+
+  function show(el, obj) {
+    el.style.display = 'block';
+    el.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+  }
+
+  function setPill(id, kind, text) {
+    const el = $(id);
+    el.className = 'status-pill ' + kind;
+    el.textContent = text;
+  }
+
+  function unlock(cardId) {
+    $(cardId).classList.remove('disabled');
+  }
+
+  async function call(path, opts) {
+    const res = await fetch(api() + path, Object.assign({ credentials: 'include' }, opts));
+    let body;
+    const text = await res.text();
+    try { body = JSON.parse(text); } catch { body = text; }
+    return { status: res.status, ok: res.ok, body };
+  }
+
+  // ── Step 1: login ──────────────────────────────────────────────────────
+  $('btnLogin').addEventListener('click', async () => {
+    setPill('loginStatus', 'pending', 'logging in…');
+    try {
+      const r = await call('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: $('loginEmail').value, password: $('loginPassword').value }),
+        credentials: 'include'
+      });
+      show($('loginOut'), r.body);
+      if (r.ok) {
+        setPill('loginStatus', 'ok', 'logged in');
+        unlock('sessionCard');
+      } else {
+        setPill('loginStatus', 'err', 'HTTP ' + r.status);
+      }
+    } catch (e) {
+      setPill('loginStatus', 'err', 'network error');
+      show($('loginOut'), String(e) + '\n\nMost likely CORS/origin — see the API base note above.');
+    }
+  });
+
+  // ── File picker autofill ──────────────────────────────────────────────
+  $('fileInput').addEventListener('change', () => {
+    const f = $('fileInput').files[0];
+    state.file = f || null;
+    if (f) {
+      $('originalFilename').value = f.name;
+      $('mimeType').value = f.type || 'application/octet-stream';
+      $('fileSizeBytes').value = f.size;
+      $('fileInfo').textContent = f.name + ' — ' + f.type + ' — ' + f.size.toLocaleString() + ' bytes';
+    } else {
+      $('fileInfo').textContent = 'No file selected — filename/type/size below are filled in automatically.';
+    }
+  });
+
+  // ── Step 2: create upload session ─────────────────────────────────────
+  $('btnCreateSession').addEventListener('click', async () => {
+    setPill('sessionStatus', 'pending', 'creating…');
+    const payload = {
+      uploadType: $('uploadType').value,
+      targetEntityType: $('targetEntityType').value,
+      targetEntityId: $('targetEntityId').value || null,
+      originalFilename: $('originalFilename').value || (state.file ? state.file.name : 'test-file'),
+      mimeType: $('mimeType').value || (state.file ? state.file.type : 'application/octet-stream'),
+      fileSizeBytes: Number($('fileSizeBytes').value) || (state.file ? state.file.size : 1)
+    };
+    try {
+      const r = await call('/uploads/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      show($('sessionOut'), r.body);
+      if (r.ok) {
+        setPill('sessionStatus', 'ok', 'created');
+        state.sessionId = r.body.data.sessionId;
+        state.uploadUrl = r.body.data.uploadUrl;
+        state.storageKey = r.body.data.storageKey;
+        $('stubWarning').style.display = state.uploadUrl.includes('X-Amz-Signature=stub') ? 'block' : 'none';
+        unlock('putCard');
+        unlock('completeCard');
+        unlock('statusCard');
+      } else {
+        setPill('sessionStatus', 'err', 'HTTP ' + r.status);
+      }
+    } catch (e) {
+      setPill('sessionStatus', 'err', 'network error');
+      show($('sessionOut'), String(e));
+    }
+  });
+
+  // ── Step 3: PUT bytes directly to the presigned URL (no auth, no /api/v1) ──
+  $('btnPutObject').addEventListener('click', async () => {
+    setPill('putStatus', 'pending', 'uploading…');
+    if (!state.file) {
+      setPill('putStatus', 'err', 'no file selected');
+      show($('putOut'), 'Pick a file in step 2 before PUTting — the presigned URL still expects a body.');
+      return;
+    }
+    try {
+      const res = await fetch(state.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': $('mimeType').value || state.file.type || 'application/octet-stream' },
+        body: state.file
+      });
+      const text = await res.text();
+      show($('putOut'), 'HTTP ' + res.status + '\n' + (text || '(empty body)'));
+      setPill('putStatus', res.ok ? 'ok' : 'err', 'HTTP ' + res.status);
+    } catch (e) {
+      setPill('putStatus', 'err', 'request failed');
+      show($('putOut'), String(e) + '\n\nExpected if the storage provider is NOOP (see warning above) — there is nothing real listening at that URL.');
+    }
+  });
+
+  // ── Step 4: complete ───────────────────────────────────────────────────
+  $('btnComplete').addEventListener('click', async () => {
+    setPill('completeStatus', 'pending', 'completing…');
+    try {
+      const r = await call('/uploads/' + state.sessionId + '/complete', { method: 'POST' });
+      show($('completeOut'), r.body);
+      setPill('completeStatus', r.ok ? 'ok' : 'err', 'HTTP ' + r.status);
+    } catch (e) {
+      setPill('completeStatus', 'err', 'network error');
+      show($('completeOut'), String(e));
+    }
+  });
+
+  // ── Step 5: status / poll ──────────────────────────────────────────────
+  async function fetchStatus() {
+    setPill('pollStatus', 'pending', 'checking…');
+    try {
+      const r = await call('/uploads/' + state.sessionId + '/status', { method: 'GET' });
+      show($('statusOut'), r.body);
+      setPill('pollStatus', r.ok ? 'ok' : 'err', r.ok ? (r.body.data.processingStatus || r.body.data.uploadStatus || 'HTTP ' + r.status) : 'HTTP ' + r.status);
+    } catch (e) {
+      setPill('pollStatus', 'err', 'network error');
+      show($('statusOut'), String(e));
+    }
+  }
+  $('btnStatus').addEventListener('click', fetchStatus);
+  $('btnPoll').addEventListener('click', () => {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      $('btnPoll').textContent = 'Poll every 3s';
+      return;
+    }
+    $('btnPoll').textContent = 'Stop polling';
+    fetchStatus();
+    pollTimer = setInterval(fetchStatus, 3000);
+  });
+})();
+</script>
+</body>
+</html>

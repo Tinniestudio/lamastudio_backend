@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: tinniestudio-media-worker
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:tinniestudio_db}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        # Default is true, which would requeue a rejected message back onto the SAME
+        # queue instead of routing it to the DLX (media.video.failed) declared in
+        # RabbitConfig. false lets a rejected/exception-throwing delivery be
+        # dead-lettered instead of looping forever.
+        default-requeue-rejected: false
+
+  flyway:
+    enabled: false
+
+worker:
+  processing:
+    max-job-concurrency: 2
+    temp-dir: /tmp/tinniestudio
+    max-duration-seconds: 14400
+  ffmpeg:
+    path: /usr/local/bin/ffmpeg
+    ffprobe-path: /usr/local/bin/ffprobe
+    hls-segment-duration: 6
+    timeout-seconds: ${FFMPEG_TIMEOUT_SECONDS:1800}
+
+app:
+  storage:
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    bucket: ${STORAGE_BUCKET:tinniestudio}
+    region: ${STORAGE_REGION:us-east-1}
+    # Same STORAGE_ACCESS_KEY/STORAGE_SECRET_KEY var names as api-service (see
+    # api-service/src/main/resources/application.yml) — one set of storage credentials in .env
+    # covers both services. Previously named AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY here only,
+    # so setting STORAGE_ACCESS_KEY/STORAGE_SECRET_KEY (the name api-service actually reads) had
+    # no effect on the worker — it silently fell back to the minioadmin/minioadmin default and
+    # failed against any MinIO instance using different root credentials.
+    access-key: ${STORAGE_ACCESS_KEY:minioadmin}
+    # MinIO requires path-style URLs; real AWS S3 generally does not want this.
+    # Override to false via env var when pointing at production S3.
+    path-style-access: ${STORAGE_PATH_STYLE_ACCESS:true}
+    secret-key: ${STORAGE_SECRET_KEY:minioadmin}
+
+logging:
+  level:
+    com.tinniestudio: INFO

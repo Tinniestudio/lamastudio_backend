@@ -1,0 +1,239 @@
+spring:
+  devtools:
+    livereload:
+      enabled: true
+
+  config:
+    import: optional:file:.env[.properties]
+
+  application:
+    name: tinniestudio-api
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      initialization-fail-timeout: 60000
+      connection-timeout: 30000
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      connection-test-query: SELECT 1
+      keepalive-time: 30000
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+  data:
+    redis:
+      repositories:
+        enabled: true
+      url: ${REDIS_URL}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 5
+          min-idle: 1
+          max-wait: 1000ms          # don't block forever waiting for connection
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - openid
+              - profile
+              - email
+            # Updated to match application's context-path (/api/v1) and SecurityConfig redirectionEndpoint
+            redirect-uri: "${APP_BASE_URL:http://localhost:8080}/api/v1/auth/oauth2/callback/google"
+        provider:
+          google:
+            authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
+            token-uri: https://oauth2.googleapis.com/token
+            user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+            user-name-attribute: sub
+
+app:
+  base-url: ${APP_BASE_URL}
+  frontend-url: ${FRONTEND_URL}
+
+  resend:
+    api-key: ${RESEND_API_KEY:}
+    base-url: ${RESEND_BASE_URL:https://api.resend.com}
+    from-email: ${RESEND_FROM_EMAIL:no-reply@yourdomain.com}
+
+  cors:
+    allowed-origins:
+      - ${FRONTEND_URL:http://localhost:3000}
+      - ${APP_BASE_URL:http://localhost:8080}
+      - ${LOCAL_DEV_URL:http://localhost:5500}
+    allowed-origin-patterns:
+      - https://*.tinniestudio.com
+      - https://tinniestudio.com
+    allowed-methods:
+      - GET
+      - POST
+      - PUT
+      - PATCH
+      - DELETE
+      - OPTIONS
+    allowed-headers:
+      - "*"
+    allow-credentials: true
+    max-age: 3600
+
+  jwt:
+    access-token:
+      secret: ${JWT_ACCESS_SECRET}
+      expiration-ms: ${JWT_ACCESS_EXPIRATION_MS}        # 15 minutes
+    refresh-token:
+      secret: ${JWT_REFRESH_SECRET}
+      expiration-ms: ${JWT_REFRESH_EXPIRATION_MS}    # 7 days
+    issuer: tinniestudio
+
+  admin-jwt:
+    access-token:
+      secret: ${JWT_ADMIN_ACCESS_SECRET}
+      expiration-ms: ${JWT_ADMIN_ACCESS_EXPIRATION_MS:900000}   # 15 minutes
+    refresh-token:
+      secret: ${JWT_ADMIN_REFRESH_SECRET}
+      expiration-ms: ${JWT_ADMIN_REFRESH_EXPIRATION_MS:604800000} # 7 days
+
+  admin-bootstrap-token: ${ADMIN_BOOTSTRAP_TOKEN:}
+  free-tier-content-limit: ${FREE_TIER_CONTENT_LIMIT:2}
+
+  cookie:
+    secure: ${COOKIE_SECURE:true}
+    same-site: ${COOKIE_SAME_SITE:Lax}
+    domain: ${COOKIE_DOMAIN:}
+
+  email-verification:
+    token-expiry-hours: 24
+
+  password-reset:
+    token-expiry-hours: 1
+
+  cdn:
+    base-url: ${CDN_BASE_URL:http://localhost:3000}
+
+  storage:
+    # MINIO is the default/fallback when STORAGE_PROVIDER isn't set — matches the other
+    # storage.* defaults below (a local MinIO on :9000 with the stock minioadmin creds), so a
+    # fresh dev checkout with a MinIO container running just works instead of silently falling
+    # back to NoOpStorageService and returning fake https://noop.storage/... URLs that were never
+    # actually written anywhere. Set STORAGE_PROVIDER=NOOP explicitly if you want that stub
+    # behavior (e.g. running the app with no object storage available at all).
+    provider: ${STORAGE_PROVIDER:MINIO}
+    bucket: ${STORAGE_BUCKET:tinniestudio}
+    region: ${STORAGE_REGION:us-east-1}
+    # `endpoint` is what THIS SERVER uses to reach storage — in Docker, override it to an
+    # internal-only hostname (e.g. host.docker.internal) via STORAGE_ENDPOINT. `public-endpoint`
+    # is what gets baked into URLs handed back to callers (browsers, other services); it defaults
+    # to matching `endpoint`, but MUST be overridden separately whenever the API's own network
+    # view of storage differs from its callers' (the Docker case above being the common one) — see
+    # StorageProperties.getEffectivePublicEndpoint().
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:9000}
+    access-key: ${STORAGE_ACCESS_KEY:minioadmin}
+    secret-key: ${STORAGE_SECRET_KEY:minioadmin}
+    presigned-url-ttl-seconds: ${STORAGE_PRESIGNED_TTL:3600}
+
+  metrics:
+    scrape-username: ${PROMETHEUS_SCRAPE_USERNAME:}
+    scrape-password: ${PROMETHEUS_SCRAPE_PASSWORD:}
+
+stripe:
+  secret-key: ${STRIPE_SECRET_KEY:}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+  cdn-base-url: ${CDN_BASE_URL:http://localhost:9000}
+
+server:
+  forward-headers-strategy: framework
+  port: ${PORT:8080}
+  servlet:
+    context-path: /api/v1
+  error:
+    include-message: never
+    include-binding-errors: never
+
+logging:
+  level:
+    com.tinniestudio: DEBUG
+    org.springframework.security: INFO
+    # SQL + bound-parameter logging — the single most useful thing missing from DEBUG-on-our-own-
+    # package-only: without it, tracking down a query bug means adding temporary log statements.
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
+
+springdoc:
+  api-docs:
+    path: /api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    # Explicit URLs avoid the Petstore fallback when context-path (/api/v1) is set.
+    # Swagger UI resolves these as absolute paths from the server root.
+    config-url: /api/v1/api-docs/swagger-config
+    url: /api/v1/api-docs
+    disable-swagger-default-url: true
+    enabled: true
+    tags-sorter: alpha
+    operations-sorter: method
+    display-request-duration: true
+    try-it-out-enabled: true
+    filter: true
+    persist-authorization: true
+  show-actuator: false
+  default-produces-media-type: application/json
+
+management:
+  # No separate management.server.port: actuator must be served on the same context as the
+  # main application so that SecurityConfig's filter chains (and the explicit ADMIN-only
+  # matchers for /actuator/metrics and /actuator/prometheus) actually apply to it. A separate
+  # management port runs actuator in its own child web application context that Spring
+  # Security's filter chains never see — the only "protection" would then be infra-level port
+  # binding, which disappears outside of docker-compose (see Batch 18 #2).
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: tinniestudio-api

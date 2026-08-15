@@ -21,8 +21,8 @@ failing test. Tests MUST be confirmed failing before implementation begins.
 ## Path Conventions
 
 ```
-src/main/java/com/lamastudio/backend/   ← production code
-src/test/java/com/lamastudio/backend/   ← test code
+src/main/java/com/tinniestudio/backend/   ← production code
+src/test/java/com/tinniestudio/backend/   ← test code
 ```
 
 ---
@@ -34,8 +34,8 @@ any user story task begins.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [x] T001 Create `@SkipResponseWrapper` annotation (`@Retention(RUNTIME)`, `@Target(TYPE)`) in `src/main/java/com/lamastudio/backend/shared/web/SkipResponseWrapper.java`
-- [x] T002 [P] Create `ApiResponse<T>` record with `Meta` inner record and factory methods `ok(String message, T data)` / `ok(String message, T data, Meta meta)` in `src/main/java/com/lamastudio/backend/shared/web/ApiResponse.java`
+- [x] T001 Create `@SkipResponseWrapper` annotation (`@Retention(RUNTIME)`, `@Target(TYPE)`) in `src/main/java/com/tinniestudio/backend/shared/web/SkipResponseWrapper.java`
+- [x] T002 [P] Create `ApiResponse<T>` record with `Meta` inner record and factory methods `ok(String message, T data)` / `ok(String message, T data, Meta meta)` in `src/main/java/com/tinniestudio/backend/shared/web/ApiResponse.java`
 
 **Checkpoint**: `ApiResponse<T>` and `@SkipResponseWrapper` compile cleanly — user story phases can now begin.
 
@@ -52,14 +52,14 @@ outside the envelope.
 
 ### Tests for User Story 1 (TDD — write and confirm FAIL before T006)
 
-- [x] T003 [US1] Write failing unit tests in `src/test/java/com/lamastudio/backend/web/SuccessResponseWrapperTest.java` covering: (1) DTO body → wrapped in `data`, (2) `Map.of("message","text")` body → message extracted, `data: null`, (3) null body → null returned unchanged, (4) body already `ApiResponse` → not re-wrapped (idempotency), (5) controller annotated `@SkipResponseWrapper` → `supports()` returns false
-- [x] T004 [US1] Write failing integration tests in `src/test/java/com/lamastudio/backend/web/ApiResponseEnvelopeIT.java` covering: (1) `GET /subscriptions/plans` returns `{ success:true, message:"Retrieved successfully", data:[...] }`, (2) `POST /auth/logout` returns `{ success:true, message:"Logged out successfully", data:null }`, (3) `POST /auth/register` (valid body) returns `{ success:true, message:"Created successfully", data:{...} }`
+- [x] T003 [US1] Write failing unit tests in `src/test/java/com/tinniestudio/backend/web/SuccessResponseWrapperTest.java` covering: (1) DTO body → wrapped in `data`, (2) `Map.of("message","text")` body → message extracted, `data: null`, (3) null body → null returned unchanged, (4) body already `ApiResponse` → not re-wrapped (idempotency), (5) controller annotated `@SkipResponseWrapper` → `supports()` returns false
+- [x] T004 [US1] Write failing integration tests in `src/test/java/com/tinniestudio/backend/web/ApiResponseEnvelopeIT.java` covering: (1) `GET /subscriptions/plans` returns `{ success:true, message:"Retrieved successfully", data:[...] }`, (2) `POST /auth/logout` returns `{ success:true, message:"Logged out successfully", data:null }`, (3) `POST /auth/register` (valid body) returns `{ success:true, message:"Created successfully", data:{...} }`
 - [x] T005 [US1] Run T003 tests and confirm ALL FAIL: `./mvnw test -Dtest=SuccessResponseWrapperTest` — no `SuccessResponseWrapper` class exists yet, expect compilation or runtime failures
 
 ### Implementation for User Story 1
 
-- [x] T006 [US1] Implement `SuccessResponseWrapper` (`@RestControllerAdvice implements ResponseBodyAdvice<Object>`) with `supports()` excluding `StringHttpMessageConverter`, `@SkipResponseWrapper` controllers, and existing `ApiResponse` return types; `beforeBodyWrite()` resolving message via message-map extraction or HTTP-method default in `src/main/java/com/lamastudio/backend/shared/web/SuccessResponseWrapper.java`
-- [x] T007 [US1] Add `@SkipResponseWrapper` annotation to `StripeWebhookController` class declaration in `src/main/java/com/lamastudio/backend/modules/billing/controller/StripeWebhookController.java`
+- [x] T006 [US1] Implement `SuccessResponseWrapper` (`@RestControllerAdvice implements ResponseBodyAdvice<Object>`) with `supports()` excluding `StringHttpMessageConverter`, `@SkipResponseWrapper` controllers, and existing `ApiResponse` return types; `beforeBodyWrite()` resolving message via message-map extraction or HTTP-method default in `src/main/java/com/tinniestudio/backend/shared/web/SuccessResponseWrapper.java`
+- [x] T007 [US1] Add `@SkipResponseWrapper` annotation to `StripeWebhookController` class declaration in `src/main/java/com/tinniestudio/backend/modules/billing/controller/StripeWebhookController.java`
 - [x] T008 [US1] Run T003 unit tests and confirm ALL PASS: `./mvnw test -Dtest=SuccessResponseWrapperTest`
 - [x] T009 [US1] Run T004 integration tests and confirm ALL PASS: `./mvnw test -Dtest=ApiResponseEnvelopeIT`
 
@@ -80,11 +80,11 @@ pagination fields are present.
 
 ### Tests for User Story 2 (TDD — write and confirm FAIL before T011)
 
-- [x] T010 [US2] Write failing unit tests in `src/test/java/com/lamastudio/backend/web/SuccessResponseWrapperTest.java` covering: (1) `ApiResponse.ok("msg", data)` with no meta → serialized JSON has no `meta` key, (2) `ApiResponse.ok("msg", data, new Meta(47, 1, 20, 3))` → serialized JSON has `meta.total=47`, `meta.page=1`, `meta.size=20`, `meta.totalPages=3`
+- [x] T010 [US2] Write failing unit tests in `src/test/java/com/tinniestudio/backend/web/SuccessResponseWrapperTest.java` covering: (1) `ApiResponse.ok("msg", data)` with no meta → serialized JSON has no `meta` key, (2) `ApiResponse.ok("msg", data, new Meta(47, 1, 20, 3))` → serialized JSON has `meta.total=47`, `meta.page=1`, `meta.size=20`, `meta.totalPages=3`
 
 ### Implementation for User Story 2
 
-- [x] T011 [US2] Add `@JsonInclude(JsonInclude.Include.NON_NULL)` to `ApiResponse` record class (ensures `meta: null` is omitted from serialized JSON) in `src/main/java/com/lamastudio/backend/shared/web/ApiResponse.java`
+- [x] T011 [US2] Add `@JsonInclude(JsonInclude.Include.NON_NULL)` to `ApiResponse` record class (ensures `meta: null` is omitted from serialized JSON) in `src/main/java/com/tinniestudio/backend/shared/web/ApiResponse.java`
 - [x] T012 [US2] Run T010 tests and confirm ALL PASS: `./mvnw test -Dtest=SuccessResponseWrapperTest`
 
 **Checkpoint**: `meta` field is present only when populated. Non-paginated responses have no
@@ -103,7 +103,7 @@ with NO `data` field. Call `POST /webhooks/stripe` — response must be `{ recei
 
 ### Tests for User Story 3 (TDD — write and confirm FAIL if exclusions are not in place)
 
-- [x] T013 [US3] Add to `src/test/java/com/lamastudio/backend/web/ApiResponseEnvelopeIT.java`: (1) `POST /webhooks/stripe` (with mock valid Stripe-Signature) returns exactly `{ received: true }` with no `success`/`data`/`message` keys, (2) `POST /auth/login` with invalid credentials returns `{ success:false, error:{...}, status:401, path:..., timestamp:... }` — assert no `data` key present
+- [x] T013 [US3] Add to `src/test/java/com/tinniestudio/backend/web/ApiResponseEnvelopeIT.java`: (1) `POST /webhooks/stripe` (with mock valid Stripe-Signature) returns exactly `{ received: true }` with no `success`/`data`/`message` keys, (2) `POST /auth/login` with invalid credentials returns `{ success:false, error:{...}, status:401, path:..., timestamp:... }` — assert no `data` key present
 
 ### Verification for User Story 3
 
@@ -118,11 +118,11 @@ pre-feature behavior.
 
 **Purpose**: Update existing tests to use the new envelope structure and refresh API documentation.
 
-- [x] T015 [P] Update `AuthIntegrationTest` response assertions: change all top-level field accesses (e.g., `response.userId`) to access via `.data.{field}` (e.g., `response.data.userId`) in `src/test/java/com/lamastudio/backend/integration/AuthIntegrationTest.java`
-- [x] T016 [P] Update `UserProfileIntegrationTest` response assertions to use `.data.{field}` in `src/test/java/com/lamastudio/backend/user/UserProfileIntegrationTest.java`
+- [x] T015 [P] Update `AuthIntegrationTest` response assertions: change all top-level field accesses (e.g., `response.userId`) to access via `.data.{field}` (e.g., `response.data.userId`) in `src/test/java/com/tinniestudio/backend/integration/AuthIntegrationTest.java`
+- [x] T016 [P] Update `UserProfileIntegrationTest` response assertions to use `.data.{field}` in `src/test/java/com/tinniestudio/backend/user/UserProfileIntegrationTest.java`
 - [x] T017 Run full test suite and confirm all tests pass: `./mvnw test`
-- [x] T018 [P] Update OpenAPI `@ApiResponse` example values in `AuthController` and `AdminAuthController` to show envelope format `{ success:true, message:"...", data:{...} }` in `src/main/java/com/lamastudio/backend/modules/auth/controller/AuthController.java` and `src/main/java/com/lamastudio/backend/modules/auth/admin/controller/AdminAuthController.java`
-- [x] T019 [P] Update OpenAPI `@ApiResponse` example values in `UserProfileController` and `SubscriptionController` to show envelope format in `src/main/java/com/lamastudio/backend/modules/user/controller/UserProfileController.java` and `src/main/java/com/lamastudio/backend/modules/billing/controller/SubscriptionController.java`
+- [x] T018 [P] Update OpenAPI `@ApiResponse` example values in `AuthController` and `AdminAuthController` to show envelope format `{ success:true, message:"...", data:{...} }` in `src/main/java/com/tinniestudio/backend/modules/auth/controller/AuthController.java` and `src/main/java/com/tinniestudio/backend/modules/auth/admin/controller/AdminAuthController.java`
+- [x] T019 [P] Update OpenAPI `@ApiResponse` example values in `UserProfileController` and `SubscriptionController` to show envelope format in `src/main/java/com/tinniestudio/backend/modules/user/controller/UserProfileController.java` and `src/main/java/com/tinniestudio/backend/modules/billing/controller/SubscriptionController.java`
 
 **Checkpoint**: All 19 tasks complete. Full test suite green. API documentation reflects envelope.
 

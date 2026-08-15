@@ -3,6 +3,7 @@
 # =========================
 *.class
 *.jar
+!gradle/wrapper/gradle-wrapper.jar
 *.war
 *.ear
 *.nar
@@ -71,6 +72,8 @@ Thumbs.db
 .env.*
 application-local.yml
 application-dev.yml
+observability/secrets/*
+!observability/secrets/README.md
 
 # =========================
 # 🚫 Spring Boot
