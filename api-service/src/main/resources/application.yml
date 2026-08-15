@@ -143,13 +143,11 @@ app:
     base-url: ${CDN_BASE_URL:http://localhost:3000}
 
   storage:
-    # MINIO is the default/fallback when STORAGE_PROVIDER isn't set — matches the other
-    # storage.* defaults below (a local MinIO on :9000 with the stock minioadmin creds), so a
-    # fresh dev checkout with a MinIO container running just works instead of silently falling
-    # back to NoOpStorageService and returning fake https://noop.storage/... URLs that were never
-    # actually written anywhere. Set STORAGE_PROVIDER=NOOP explicitly if you want that stub
-    # behavior (e.g. running the app with no object storage available at all).
-    provider: ${STORAGE_PROVIDER:MINIO}
+    # No fallback default: MINIO (local dev / any S3-compatible endpoint) or S3 (production) are
+    # the only valid values — both wire the identical AWS-SDK client (StorageServiceConfig). If
+    # STORAGE_PROVIDER is unset or misspelled, no StorageService bean exists and the app refuses
+    # to start, rather than silently accepting uploads that go nowhere.
+    provider: ${STORAGE_PROVIDER:}
     bucket: ${STORAGE_BUCKET:tinniestudio}
     region: ${STORAGE_REGION:us-east-1}
     # `endpoint` is what THIS SERVER uses to reach storage — in Docker, override it to an
@@ -163,6 +161,9 @@ app:
     access-key: ${STORAGE_ACCESS_KEY:minioadmin}
     secret-key: ${STORAGE_SECRET_KEY:minioadmin}
     presigned-url-ttl-seconds: ${STORAGE_PRESIGNED_TTL:3600}
+    # true for MinIO/path-based setups; real AWS S3 typically wants virtual-hosted style (false) —
+    # see StorageProperties.pathStyleAccess.
+    path-style-access: ${STORAGE_PATH_STYLE_ACCESS:true}
 
   metrics:
     scrape-username: ${PROMETHEUS_SCRAPE_USERNAME:}

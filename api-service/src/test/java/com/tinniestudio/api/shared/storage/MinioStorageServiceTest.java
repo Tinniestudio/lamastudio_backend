@@ -113,7 +113,7 @@ class MinioStorageServiceTest {
         void returnsPresignerUrlUnmodified() throws MalformedURLException {
             // AWS SigV4 signs the Host header into a presigned URL's signature, so the URL must
             // come back exactly as the presigner produced it. The internal-vs-public endpoint
-            // split (see StorageServiceConfig.minioS3Presigner) is handled by configuring the
+            // split (see StorageServiceConfig.storageS3Presigner) is handled by configuring the
             // S3Presigner itself against the public endpoint — not by rewriting its output here.
             PresignedPutObjectRequest presignedRequest = mock(PresignedPutObjectRequest.class);
             when(presignedRequest.url()).thenReturn(

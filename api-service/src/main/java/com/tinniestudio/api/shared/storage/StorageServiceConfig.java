@@ -2,8 +2,7 @@ package com.tinniestudio.api.shared.storage;
 
 import com.tinniestudio.api.shared.config.StorageProperties;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,21 +15,31 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 import java.net.URI;
 
+/**
+ * Wires the single AWS-SDK-backed StorageService implementation whenever app.storage.provider is
+ * MINIO or S3 — both values activate identical beans; there's no behavioral difference, only a
+ * naming one so production config reads as "S3" rather than "MINIO" pointed at a real bucket.
+ * Deliberately no fallback bean for any other provider value (including unset): a misconfigured
+ * deployment must fail to start, not silently swap in fake storage URLs that write nothing.
+ */
 @Slf4j
 @Configuration
 @EnableConfigurationProperties(StorageProperties.class)
 public class StorageServiceConfig {
 
+    private static final String PROVIDER_CONDITION =
+        "'${app.storage.provider:}' == 'MINIO' or '${app.storage.provider:}' == 'S3'";
+
     @Bean
-    @ConditionalOnProperty(name = "app.storage.provider", havingValue = "MINIO")
-    public S3Client minioS3Client(StorageProperties props) {
-        log.info("Configuring MinIO S3Client at endpoint={}", props.getEndpoint());
+    @ConditionalOnExpression(PROVIDER_CONDITION)
+    public S3Client storageS3Client(StorageProperties props) {
+        log.info("Configuring S3Client (provider={}) at endpoint={}", props.getProvider(), props.getEndpoint());
         return S3Client.builder()
                 .endpointOverride(URI.create(props.getEndpoint()))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(props.getAccessKey(), props.getSecretKey())))
                 .region(Region.of(props.getRegion()))
-                .serviceConfiguration(pathStyleS3Config())
+                .serviceConfiguration(pathStyleS3Config(props))
                 .build();
     }
 
@@ -43,33 +52,26 @@ public class StorageServiceConfig {
     // only needs to match what the eventual caller (a browser, outside this container in the
     // Docker case) will use to reach storage.
     @Bean
-    @ConditionalOnProperty(name = "app.storage.provider", havingValue = "MINIO")
-    public S3Presigner minioS3Presigner(StorageProperties props) {
+    @ConditionalOnExpression(PROVIDER_CONDITION)
+    public S3Presigner storageS3Presigner(StorageProperties props) {
         return S3Presigner.builder()
                 .endpointOverride(URI.create(props.getEffectivePublicEndpoint()))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(props.getAccessKey(), props.getSecretKey())))
                 .region(Region.of(props.getRegion()))
-                .serviceConfiguration(pathStyleS3Config())
+                .serviceConfiguration(pathStyleS3Config(props))
                 .build();
     }
 
     @Bean
-    @ConditionalOnProperty(name = "app.storage.provider", havingValue = "MINIO")
-    public StorageService minioStorageService(S3Client minioS3Client, S3Presigner minioS3Presigner,
-                                              StorageProperties props) {
-        log.info("Using MinioStorageService for bucket={}", props.getBucket());
-        return new MinioStorageService(minioS3Client, minioS3Presigner, props);
+    @ConditionalOnExpression(PROVIDER_CONDITION)
+    public StorageService storageService(S3Client storageS3Client, S3Presigner storageS3Presigner,
+                                          StorageProperties props) {
+        log.info("Using MinioStorageService (provider={}) for bucket={}", props.getProvider(), props.getBucket());
+        return new MinioStorageService(storageS3Client, storageS3Presigner, props);
     }
 
-    @Bean
-    @ConditionalOnMissingBean(StorageService.class)
-    public StorageService noOpStorageService() {
-        log.warn("Using NoOpStorageService — set app.storage.provider=MINIO to enable real object storage.");
-        return new NoOpStorageService();
-    }
-
-    private S3Configuration pathStyleS3Config() {
-        return S3Configuration.builder().pathStyleAccessEnabled(true).build();
+    private S3Configuration pathStyleS3Config(StorageProperties props) {
+        return S3Configuration.builder().pathStyleAccessEnabled(props.isPathStyleAccess()).build();
     }
 }

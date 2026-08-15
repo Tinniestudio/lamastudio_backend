@@ -9,7 +9,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Setter
 public class StorageProperties {
 
-    private String provider = "NOOP";
+    // No default: an unset/unrecognized provider means no StorageService bean is created at all
+    // (see StorageServiceConfig) and the app fails to start — deliberately, so a misconfigured
+    // deployment fails loudly instead of silently serving fake storage URLs. Valid values: MINIO
+    // (local dev / any S3-compatible endpoint) or S3 (production) — both activate the same
+    // AWS-SDK-backed client, the distinction exists for config clarity, not different code paths.
+    private String provider;
     private String bucket;
     private String region = "us-east-1";
     // The endpoint the API server itself uses to reach storage (S3Client/S3Presigner
@@ -24,6 +29,11 @@ public class StorageProperties {
     private String accessKey;
     private String secretKey;
     private long presignedUrlTtlSeconds = 3600L;
+    // MinIO (and path-based local setups) need path-style requests (host/bucket/key); real AWS S3
+    // generally expects virtual-hosted style (bucket.host/key) for buckets created since 2020,
+    // though path-style still works for many regions/providers. Mirrors media-worker's
+    // StorageProperties.pathStyleAccess — override per-environment via STORAGE_PATH_STYLE_ACCESS.
+    private boolean pathStyleAccess = true;
 
     /**
      * The endpoint to hand back in URLs given to callers (browsers, other services outside the
