@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.billing.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.billing.dto.*;
 import com.tinniestudio.api.modules.billing.service.SubscriptionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,7 +35,7 @@ public class SubscriptionController {
             @AuthenticationPrincipal UserDetails principal,
             @Valid @RequestBody CouponValidationRequest request) {
         return ResponseEntity.ok(subscriptionService.validateCoupon(
-            request.getCode(), userId(principal), request.getPlanId()));
+            request.getCode(), CurrentUser.id(principal), request.getPlanId()));
     }
 
     @Operation(summary = "Initiate Stripe Checkout for a subscription plan")
@@ -42,22 +43,22 @@ public class SubscriptionController {
     public ResponseEntity<CheckoutResponse> checkout(
             @AuthenticationPrincipal UserDetails principal,
             @Valid @RequestBody CheckoutRequest request) {
-        return ResponseEntity.ok(subscriptionService.initiateCheckout(userId(principal), request));
+        return ResponseEntity.ok(subscriptionService.initiateCheckout(CurrentUser.id(principal), request));
     }
 
     @Operation(summary = "Get current user's subscription status and payment history")
     @GetMapping("/me")
     public ResponseEntity<SubscriptionStatusResponse> getStatus(
             @AuthenticationPrincipal UserDetails principal) {
-        return ResponseEntity.ok(subscriptionService.getSubscriptionStatus(userId(principal)));
+        return ResponseEntity.ok(subscriptionService.getSubscriptionStatus(CurrentUser.id(principal)));
     }
 
     @Operation(summary = "Cancel active subscription (access continues until end date)")
     @PatchMapping("/cancel")
     public ResponseEntity<SubscriptionStatusResponse> cancel(
             @AuthenticationPrincipal UserDetails principal) {
-        subscriptionService.cancelSubscription(userId(principal));
-        return ResponseEntity.ok(subscriptionService.getSubscriptionStatus(userId(principal)));
+        subscriptionService.cancelSubscription(CurrentUser.id(principal));
+        return ResponseEntity.ok(subscriptionService.getSubscriptionStatus(CurrentUser.id(principal)));
     }
 
     @Operation(summary = "Verify a pending payment against Stripe — use when webhook delivery was missed")
@@ -65,10 +66,7 @@ public class SubscriptionController {
     public ResponseEntity<SubscriptionStatusResponse> verifyPayment(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable String paymentReference) {
-        return ResponseEntity.ok(subscriptionService.verifyPayment(userId(principal), paymentReference));
+        return ResponseEntity.ok(subscriptionService.verifyPayment(CurrentUser.id(principal), paymentReference));
     }
 
-    private UUID userId(UserDetails principal) {
-        return UUID.fromString(principal.getUsername());
-    }
 }

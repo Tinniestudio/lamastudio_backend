@@ -97,6 +97,16 @@ class AuthControllerTest {
     }
 
     @Test
+    @DisplayName("POST /auth/refresh carries @RateLimit like every other public auth endpoint")
+    void refresh_isRateLimited() throws Exception {
+        var method = AuthController.class.getMethod("refresh",
+            jakarta.servlet.http.HttpServletRequest.class, jakarta.servlet.http.HttpServletResponse.class);
+        org.assertj.core.api.Assertions.assertThat(method.getAnnotation(com.tinniestudio.api.shared.ratelimit.RateLimit.class))
+            .as("refresh() must have @RateLimit — it's a public, DB-backed token-issuance endpoint")
+            .isNotNull();
+    }
+
+    @Test
     @DisplayName("POST /auth/login returns 200 on success")
     void login_success() throws Exception {
         LoginRequest req = new LoginRequest();

@@ -5,6 +5,7 @@ import com.tinniestudio.api.shared.entity.DomainEnums.ProcessingStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.VideoAssetType;
 import com.tinniestudio.api.shared.entity.User;
 import com.tinniestudio.api.shared.entity.VideoAsset;
+import com.tinniestudio.api.shared.entity.VideoVariant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -141,5 +142,33 @@ class VideoAssetRepositoryTest {
         assertThat(updatedCount).isEqualTo(0);
         VideoAsset reloaded = videoAssetRepository.findById(recentlyUpdated.getId()).orElseThrow();
         assertThat(reloaded.getProcessingStatus()).isEqualTo(ProcessingStatus.PROCESSING);
+    }
+
+    /**
+     * Regression test: VideoVariant used to map to storageKey/manifestUrl, columns that don't
+     * exist in video_variants (only manifest_key does, plus no storage_key at all). Since
+     * ddl-auto is none, that mismatch was invisible until something actually persisted a
+     * VideoVariant. This proves the fixed entity (manifestKey/segmentCount) round-trips against
+     * the real schema.
+     */
+    @Test
+    void videoVariant_persistsAndReloadsAgainstRealSchema() {
+        VideoAsset asset = seedAsset(ProcessingStatus.READY);
+
+        VideoVariant variant = new VideoVariant();
+        variant.setVideoAsset(asset);
+        variant.setResolution("720p");
+        variant.setWidth(1280);
+        variant.setHeight(720);
+        variant.setBitrate(2_500_000L);
+        variant.setManifestKey("processed/" + asset.getId() + "/720p/playlist.m3u8");
+        variant.setSegmentCount(42);
+        entityManager.persistAndFlush(variant);
+        entityManager.clear();
+
+        VideoVariant reloaded = entityManager.find(VideoVariant.class, variant.getId());
+        assertThat(reloaded.getManifestKey()).isEqualTo("processed/" + asset.getId() + "/720p/playlist.m3u8");
+        assertThat(reloaded.getSegmentCount()).isEqualTo(42);
+        assertThat(reloaded.getVideoAsset().getId()).isEqualTo(asset.getId());
     }
 }

@@ -3,7 +3,7 @@ package com.tinniestudio.api.modules.partner.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tinniestudio.api.modules.admin.dto.PartnerApplicationResponse;
 import com.tinniestudio.api.modules.admin.service.PartnerApplicationService;
-import com.tinniestudio.api.modules.content.repository.ContentRepository;
+import com.tinniestudio.api.modules.content.dto.CreateContentRequest;
 import com.tinniestudio.api.modules.partner.dto.*;
 import com.tinniestudio.api.modules.user.service.UserDetailsServiceImpl;
 import com.tinniestudio.api.shared.security.jwt.JwtAuthenticationFilter;
@@ -16,7 +16,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -40,7 +39,6 @@ class PartnerControllerTest {
     @Autowired ObjectMapper objectMapper;
     @MockBean PartnerService partnerService;
     @MockBean PartnerApplicationService applicationService;
-    @MockBean ContentRepository contentRepository;
     @MockBean JwtTokenProvider jwtTokenProvider;
     @MockBean JwtAuthenticationFilter jwtAuthenticationFilter;
     @MockBean UserDetailsServiceImpl userDetailsService;
@@ -118,12 +116,15 @@ class PartnerControllerTest {
 
     @Test
     @WithMockUser(username = PARTNER_ID, roles = "PARTNER")
-    void uploadLogo_returns200() throws Exception {
-        MockMultipartFile file = new MockMultipartFile("file", "logo.png", "image/png", "fake-png".getBytes());
-        when(partnerService.uploadLogo(any(), any())).thenReturn("https://cdn.test/logo.png");
-        when(partnerService.getProfile(any())).thenReturn(sampleProfile());
+    void updateProfile_withLogoUrl_returns200() throws Exception {
+        // Logo upload has no dedicated multipart endpoint anymore — the client completes the
+        // standard presigned-upload flow (uploadType=PARTNER_LOGO) and PATCHes the resulting
+        // URL here, same as Content.posterUrl/thumbnailUrl.
+        when(partnerService.updateProfile(any(), any())).thenReturn(sampleProfile());
 
-        mockMvc.perform(multipart("/partners/profile/logo").file(file))
+        mockMvc.perform(patch("/partners/profile")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"logoUrl\":\"https://cdn.test/logo.png\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.companyName").value("Acme Corp"));
     }
@@ -131,7 +132,7 @@ class PartnerControllerTest {
     @Test
     @WithMockUser(username = PARTNER_ID, roles = "PARTNER")
     void getDashboard_returns200() throws Exception {
-        PartnerDashboardResponse dashboard = new PartnerDashboardResponse(5L, 2L, 1L, 1000L, List.of());
+        PartnerDashboardResponse dashboard = new PartnerDashboardResponse(5L, 2L, 1L, 1000L);
         when(partnerService.getDashboard(any())).thenReturn(dashboard);
 
         mockMvc.perform(get("/partners/dashboard"))
@@ -156,11 +157,54 @@ class PartnerControllerTest {
     @Test
     @WithMockUser(username = PARTNER_ID, roles = "PARTNER")
     void getContents_returns200() throws Exception {
-        when(contentRepository.findByCreatedByOrderByCreatedAtDesc(any(), any()))
+        when(partnerService.listContents(any(), any(), any(), any()))
             .thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/partners/contents"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data").isArray());
+    }
+
+    @Test
+    @WithMockUser(username = PARTNER_ID, roles = "PARTNER")
+    void createContent_returns201() throws Exception {
+        PartnerContentResponse created = samplePartnerContent();
+        when(partnerService.createContent(any(), any())).thenReturn(created);
+
+        CreateContentRequest req = new CreateContentRequest(
+            "My Movie", com.tinniestudio.api.shared.entity.DomainEnums.ContentType.MOVIE,
+            null, null, null, null, null, null, null);
+
+        mockMvc.perform(post("/partners/contents")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.data.title").value("My Movie"));
+    }
+
+    @Test
+    @WithMockUser(username = PARTNER_ID, roles = "PARTNER")
+    void updateContent_returns200() throws Exception {
+        UUID contentId = UUID.randomUUID();
+        when(partnerService.updateContent(any(), org.mockito.ArgumentMatchers.eq(contentId), any()))
+            .thenReturn(samplePartnerContent());
+
+        mockMvc.perform(patch("/partners/contents/" + contentId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Updated Title\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.title").value("My Movie"));
+    }
+
+    private PartnerContentResponse samplePartnerContent() {
+        return new PartnerContentResponse(
+            UUID.randomUUID(), "My Movie", "my-movie", "desc", "short",
+            "MOVIE", "DRAFT", "NOT_RATED",
+            null, null, null,
+            false, false, 0L,
+            null, null, null,
+            BigDecimal.ZERO, 0,
+            List.of(), null
+        );
     }
 }

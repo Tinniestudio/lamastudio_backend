@@ -87,6 +87,7 @@ public class AuthController {
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class),
                 examples = @ExampleObject(value = "{\"status\":400,\"error\":\"Bad Request\",\"message\":\"Refresh token is missing or invalid\",\"path\":\"/api/v1/auth/refresh\",\"timestamp\":\"2024-11-01T12:00:00Z\"}")))
     })
+    @RateLimit(maxRequests = 20, windowMinutes = 15, keyStrategy = "IP_ONLY")
     @SecurityRequirements({})
     @PostMapping("/refresh")
     public ResponseEntity<AuthProfileResponse> refresh(HttpServletRequest request, HttpServletResponse response) {

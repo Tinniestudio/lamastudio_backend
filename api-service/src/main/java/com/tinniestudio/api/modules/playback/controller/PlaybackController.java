@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.playback.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.playback.dto.*;
 import com.tinniestudio.api.modules.playback.service.PlaybackService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -7,7 +8,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
@@ -29,7 +29,7 @@ public class PlaybackController {
     public ResponseEntity<AccessCheckResponse> checkAccess(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID contentId) {
-        return ResponseEntity.ok(playbackService.checkAccess(userId(principal), contentId));
+        return ResponseEntity.ok(playbackService.checkAccess(CurrentUser.id(principal), contentId));
     }
 
     @Operation(summary = "Get HLS manifest for a movie or standalone content")
@@ -37,7 +37,7 @@ public class PlaybackController {
     public ResponseEntity<PlaybackManifestResponse> getContentManifest(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID contentId) {
-        return ResponseEntity.ok(playbackService.getContentManifest(userId(principal), contentId));
+        return ResponseEntity.ok(playbackService.getContentManifest(CurrentUser.id(principal), contentId));
     }
 
     @Operation(summary = "Get HLS manifest for a specific episode")
@@ -45,7 +45,7 @@ public class PlaybackController {
     public ResponseEntity<PlaybackManifestResponse> getEpisodeManifest(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID episodeId) {
-        return ResponseEntity.ok(playbackService.getEpisodeManifest(userId(principal), episodeId));
+        return ResponseEntity.ok(playbackService.getEpisodeManifest(CurrentUser.id(principal), episodeId));
     }
 
     @Operation(summary = "Record or update watch progress for a content item or episode")
@@ -53,7 +53,7 @@ public class PlaybackController {
     public ResponseEntity<Object> recordProgress(
             @AuthenticationPrincipal UserDetails principal,
             @Valid @RequestBody ProgressRequest request) {
-        playbackService.recordProgress(userId(principal), request);
+        playbackService.recordProgress(CurrentUser.id(principal), request);
         return ResponseEntity.ok(Map.of("message", "Progress recorded successfully"));
     }
 
@@ -61,13 +61,6 @@ public class PlaybackController {
     @GetMapping("/continue-watching")
     public ResponseEntity<List<ContinueWatchingItem>> getContinueWatching(
             @AuthenticationPrincipal UserDetails principal) {
-        return ResponseEntity.ok(playbackService.getContinueWatching(userId(principal)));
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private UUID userId(UserDetails principal) {
-        if (principal == null) throw new AuthenticationCredentialsNotFoundException("No credentials");
-        return UUID.fromString(principal.getUsername());
+        return ResponseEntity.ok(playbackService.getContinueWatching(CurrentUser.id(principal)));
     }
 }

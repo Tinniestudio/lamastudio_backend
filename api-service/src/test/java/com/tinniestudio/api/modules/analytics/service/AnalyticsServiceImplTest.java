@@ -98,8 +98,8 @@ class AnalyticsServiceImplTest {
         content.setId(contentId);
         content.setCreatedBy(partnerId);
 
-        ContentAnalyticsWeekly w1 = weeklyRow(contentId, LocalDate.of(2026, 7, 6), 100L, 10L, 5L, 3600L);
-        ContentAnalyticsWeekly w2 = weeklyRow(contentId, LocalDate.of(2026, 7, 13), 50L, 5L, 2L, 1800L);
+        ContentAnalyticsWeekly w1 = weeklyRow(contentId, LocalDate.of(2026, 7, 6), 100, 10, 5, 3600L);
+        ContentAnalyticsWeekly w2 = weeklyRow(contentId, LocalDate.of(2026, 7, 13), 50, 5, 2, 1800L);
 
         when(contentRepo.findById(contentId)).thenReturn(java.util.Optional.of(content));
         when(weeklyRepo.findByContentIdAndWeekStartDateBetweenOrderByWeekStartDateAsc(any(), any(), any()))
@@ -131,8 +131,63 @@ class AnalyticsServiceImplTest {
                         contentId, LocalDate.now().minusWeeks(4), LocalDate.now(), partnerId, false));
     }
 
+    // ── Gap 3: partner analytics batch-fetch (regression guard against N+1) ──
+
+    @Test
+    @DisplayName("getPartnerAnalytics fetches all of a partner's content analytics in one batch query, not one-per-content")
+    void getPartnerAnalytics_usesSingleBatchQuery_notPerContentLoop() {
+        UUID content1 = UUID.randomUUID();
+        UUID content2 = UUID.randomUUID();
+        Content c1 = new Content(); c1.setId(content1);
+        Content c2 = new Content(); c2.setId(content2);
+        LocalDate from = LocalDate.of(2026, 7, 1);
+        LocalDate to = LocalDate.of(2026, 7, 31);
+
+        when(contentRepo.findByCreatedBy(partnerId)).thenReturn(List.of(c1, c2));
+        when(dailyRepo.findByContentIdInAndAnalyticsDateBetweenOrderByAnalyticsDateAsc(
+                List.of(content1, content2), from, to)).thenReturn(List.of());
+
+        AnalyticsSummaryResponse result = service.getPartnerAnalytics(partnerId, from, to);
+
+        assertThat(result).isNotNull();
+        // The old N+1 implementation called the single-content-id repo method once per content;
+        // that method must never be invoked from getPartnerAnalytics anymore.
+        org.mockito.Mockito.verify(dailyRepo, org.mockito.Mockito.never())
+                .findByContentIdAndAnalyticsDateBetweenOrderByAnalyticsDateAsc(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("getPartnerAnalyticsWeekly fetches all of a partner's content analytics in one batch query, not one-per-content")
+    void getPartnerAnalyticsWeekly_usesSingleBatchQuery_notPerContentLoop() {
+        UUID content1 = UUID.randomUUID();
+        Content c1 = new Content(); c1.setId(content1);
+        LocalDate from = LocalDate.of(2026, 7, 1);
+        LocalDate to = LocalDate.of(2026, 7, 31);
+
+        when(contentRepo.findByCreatedBy(partnerId)).thenReturn(List.of(c1));
+        when(weeklyRepo.findByContentIdInAndWeekStartDateBetweenOrderByWeekStartDateAsc(
+                List.of(content1), from, to)).thenReturn(List.of());
+
+        WeeklyAnalyticsSummaryResponse result = service.getPartnerAnalyticsWeekly(partnerId, from, to);
+
+        assertThat(result).isNotNull();
+        org.mockito.Mockito.verify(weeklyRepo, org.mockito.Mockito.never())
+                .findByContentIdAndWeekStartDateBetweenOrderByWeekStartDateAsc(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("getPartnerAnalytics returns empty summary without querying analytics tables when partner has no content")
+    void getPartnerAnalytics_noContent_returnsEmptyWithoutQuery() {
+        when(contentRepo.findByCreatedBy(partnerId)).thenReturn(List.of());
+
+        AnalyticsSummaryResponse result = service.getPartnerAnalytics(partnerId, LocalDate.now(), LocalDate.now());
+
+        assertThat(result.totalViews()).isZero();
+        org.mockito.Mockito.verifyNoInteractions(dailyRepo);
+    }
+
     private ContentAnalyticsWeekly weeklyRow(UUID contentId, LocalDate weekStart,
-                                              long views, long uniqueViewers, long completions, long watchTime) {
+                                              int views, int uniqueViewers, int completions, long watchTime) {
         ContentAnalyticsWeekly w = new ContentAnalyticsWeekly();
         w.setContentId(contentId);
         w.setWeekStartDate(weekStart);

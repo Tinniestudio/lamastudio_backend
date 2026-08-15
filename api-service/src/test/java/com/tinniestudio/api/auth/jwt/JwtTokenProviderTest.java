@@ -68,6 +68,26 @@ class JwtTokenProviderTest {
         assertThat(claims.getIssuer()).isEqualTo(props.getJwt().getIssuer());
     }
 
+    @Test
+    @DisplayName("validateAccessToken returns false (not a thrown exception) for a token with an invalid signature")
+    void tamperedSignatureAccessTokenIsInvalid_doesNotThrow() {
+        // Regression test: the original code caught `SecurityException` with only a wildcard
+        // `io.jsonwebtoken.*` import in scope, which silently resolved to java.lang.SecurityException
+        // instead of io.jsonwebtoken.security.SecurityException — so a real signature failure
+        // (io.jsonwebtoken.security.SignatureException) was never caught and propagated
+        // uncaught out of validateAccessToken() instead of returning false.
+        AppProperties signingProps = buildProps(900_000L, 604_800_000L);
+        JwtTokenProvider signer = new JwtTokenProvider(signingProps);
+        String token = signer.generateAccessToken(buildUser(), UUID.randomUUID());
+
+        AppProperties differentSecretProps = buildProps(900_000L, 604_800_000L);
+        differentSecretProps.getJwt().getAccessToken()
+                .setSecret("ZGlmZmVyZW50c2VjcmV0a2V5Zm9ydGFtcGVyaW5nMTIzNDU2");
+        JwtTokenProvider verifier = new JwtTokenProvider(differentSecretProps);
+
+        assertThat(verifier.validateAccessToken(token)).isFalse();
+    }
+
     private User buildUser() {
         User user = new User();
         user.setId(UUID.randomUUID());

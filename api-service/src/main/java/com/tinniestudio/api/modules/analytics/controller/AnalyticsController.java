@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.analytics.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.analytics.dto.AdminRevenueAnalyticsResponse;
 import com.tinniestudio.api.modules.analytics.dto.AnalyticsSummaryResponse;
 import com.tinniestudio.api.modules.analytics.dto.WeeklyAnalyticsSummaryResponse;
@@ -39,7 +40,7 @@ public class AnalyticsController {
 
         LocalDate effectiveFrom = from != null ? from : LocalDate.now().minusDays(30);
         LocalDate effectiveTo = to != null ? to : LocalDate.now();
-        UUID userId = UUID.fromString(principal.getUsername());
+        UUID userId = CurrentUser.id(principal);
         boolean isAdmin = principal.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
 
@@ -67,7 +68,7 @@ public class AnalyticsController {
 
         LocalDate effectiveFrom = from != null ? from : LocalDate.now().minusDays(30);
         LocalDate effectiveTo = to != null ? to : LocalDate.now();
-        UUID userId = UUID.fromString(principal.getUsername());
+        UUID userId = CurrentUser.id(principal);
 
         if ("csv".equalsIgnoreCase(format)) {
             String csv = analyticsService.exportPartnerAnalyticsCsv(userId, effectiveFrom, effectiveTo);
@@ -93,7 +94,7 @@ public class AnalyticsController {
 
         LocalDate effectiveFrom = from != null ? from : LocalDate.now().minusWeeks(12);
         LocalDate effectiveTo = to != null ? to : LocalDate.now();
-        UUID userId = UUID.fromString(principal.getUsername());
+        UUID userId = CurrentUser.id(principal);
         boolean isAdmin = principal.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
 
@@ -111,7 +112,7 @@ public class AnalyticsController {
 
         LocalDate effectiveFrom = from != null ? from : LocalDate.now().minusWeeks(12);
         LocalDate effectiveTo = to != null ? to : LocalDate.now();
-        UUID userId = UUID.fromString(principal.getUsername());
+        UUID userId = CurrentUser.id(principal);
 
         return ResponseEntity.ok(analyticsService.getPartnerAnalyticsWeekly(userId, effectiveFrom, effectiveTo));
     }

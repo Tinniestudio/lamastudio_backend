@@ -212,6 +212,37 @@ class MinioStorageServiceTest {
     }
 
     @Nested
+    @DisplayName("getObjectSize()")
+    class GetObjectSizeTests {
+
+        @Test
+        @DisplayName("returns the server-measured content length, not a caller-supplied value")
+        void returnsContentLength() {
+            when(s3Client.headObject(any(HeadObjectRequest.class)))
+                .thenReturn(HeadObjectResponse.builder().contentLength(123_456L).build());
+
+            long size = service.getObjectSize("raw/abc/original.mp4");
+
+            assertThat(size).isEqualTo(123_456L);
+            ArgumentCaptor<HeadObjectRequest> captor = ArgumentCaptor.forClass(HeadObjectRequest.class);
+            verify(s3Client).headObject(captor.capture());
+            assertThat(captor.getValue().bucket()).isEqualTo("tinniestudio");
+            assertThat(captor.getValue().key()).isEqualTo("raw/abc/original.mp4");
+        }
+
+        @Test
+        @DisplayName("wraps SdkException as StorageException")
+        void wrapsHeadObjectException() {
+            when(s3Client.headObject(any(HeadObjectRequest.class)))
+                .thenThrow(SdkException.builder().message("timeout").build());
+
+            assertThatThrownBy(() -> service.getObjectSize("raw/abc/original.mp4"))
+                .isInstanceOf(StorageException.class)
+                .hasMessageContaining("raw/abc/original.mp4");
+        }
+    }
+
+    @Nested
     @DisplayName("deleteObject()")
     class DeleteObjectTests {
 

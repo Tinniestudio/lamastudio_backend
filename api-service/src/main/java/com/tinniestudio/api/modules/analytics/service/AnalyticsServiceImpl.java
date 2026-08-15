@@ -52,16 +52,12 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     @Override
     @Transactional(readOnly = true)
     public AnalyticsSummaryResponse getPartnerAnalytics(UUID partnerId, LocalDate from, LocalDate to) {
-        List<Content> contents = contentRepo.findByCreatedBy(partnerId);
-        if (contents.isEmpty()) {
+        List<UUID> contentIds = contentRepo.findByCreatedBy(partnerId).stream().map(Content::getId).toList();
+        if (contentIds.isEmpty()) {
             return toSummary(List.of());
         }
-        List<ContentAnalyticsDaily> rows = contents.stream()
-                .map(Content::getId)
-                .flatMap(id -> dailyRepo
-                        .findByContentIdAndAnalyticsDateBetweenOrderByAnalyticsDateAsc(id, from, to)
-                        .stream())
-                .toList();
+        List<ContentAnalyticsDaily> rows =
+                dailyRepo.findByContentIdInAndAnalyticsDateBetweenOrderByAnalyticsDateAsc(contentIds, from, to);
         return toSummary(rows);
     }
 
@@ -82,13 +78,12 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     @Override
     @Transactional(readOnly = true)
     public String exportPartnerAnalyticsCsv(UUID partnerId, LocalDate from, LocalDate to) {
-        List<Content> contents = contentRepo.findByCreatedBy(partnerId);
-        List<ContentAnalyticsDaily> rows = contents.stream()
-                .map(Content::getId)
-                .flatMap(id -> dailyRepo
-                        .findByContentIdAndAnalyticsDateBetweenOrderByAnalyticsDateAsc(id, from, to)
-                        .stream())
-                .toList();
+        List<UUID> contentIds = contentRepo.findByCreatedBy(partnerId).stream().map(Content::getId).toList();
+        if (contentIds.isEmpty()) {
+            return toCsv(List.of());
+        }
+        List<ContentAnalyticsDaily> rows =
+                dailyRepo.findByContentIdInAndAnalyticsDateBetweenOrderByAnalyticsDateAsc(contentIds, from, to);
         return toCsv(rows);
     }
 
@@ -132,16 +127,12 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     @Override
     @Transactional(readOnly = true)
     public WeeklyAnalyticsSummaryResponse getPartnerAnalyticsWeekly(UUID partnerId, LocalDate from, LocalDate to) {
-        List<Content> contents = contentRepo.findByCreatedBy(partnerId);
-        if (contents.isEmpty()) {
+        List<UUID> contentIds = contentRepo.findByCreatedBy(partnerId).stream().map(Content::getId).toList();
+        if (contentIds.isEmpty()) {
             return toWeeklySummary(List.of());
         }
-        List<ContentAnalyticsWeekly> rows = contents.stream()
-                .map(Content::getId)
-                .flatMap(id -> weeklyRepo
-                        .findByContentIdAndWeekStartDateBetweenOrderByWeekStartDateAsc(id, from, to)
-                        .stream())
-                .toList();
+        List<ContentAnalyticsWeekly> rows =
+                weeklyRepo.findByContentIdInAndWeekStartDateBetweenOrderByWeekStartDateAsc(contentIds, from, to);
         return toWeeklySummary(rows);
     }
 

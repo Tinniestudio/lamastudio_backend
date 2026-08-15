@@ -26,7 +26,11 @@ public final class DomainEnums {
         PROCESSING,
         PUBLISHED,
         REJECTED,
-        ARCHIVED
+        ARCHIVED,
+        // Terminal state set only by ContentService.delete() (soft-delete). Not reachable through
+        // transitionStatus()/validateTransition() — moderation delete is a distinct action from
+        // the normal DRAFT→REVIEW→...→PUBLISHED lifecycle, not a transition within it.
+        DELETED
     }
 
     public enum MaturityRating {
@@ -98,13 +102,17 @@ public final class DomainEnums {
         THUMBNAIL,
         SUBTITLE,
         TRAILER,
-        RAW_VIDEO
+        RAW_VIDEO,
+        PARTNER_LOGO
     }
 
     public enum TargetEntityType {
         CONTENT,
         SEASON,
-        EPISODE
+        EPISODE,
+        // For UploadType.SUBTITLE: targetEntityId is the VideoAsset the subtitle track attaches
+        // to, not a Content/Season/Episode id.
+        VIDEO_ASSET
     }
 
     public enum UploadStatus {

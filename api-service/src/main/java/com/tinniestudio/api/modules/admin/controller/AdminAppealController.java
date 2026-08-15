@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.admin.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.admin.dto.RejectAppealRequest;
 import com.tinniestudio.api.modules.appeal.dto.AppealResponse;
 import com.tinniestudio.api.modules.appeal.service.AppealService;
@@ -41,7 +42,7 @@ public class AdminAppealController {
     public ResponseEntity<AppealResponse> approve(
             @PathVariable UUID id,
             @AuthenticationPrincipal UserDetails principal) {
-        return ResponseEntity.ok(appealService.approve(id, UUID.fromString(principal.getUsername())));
+        return ResponseEntity.ok(appealService.approve(id, CurrentUser.id(principal)));
     }
 
     @Operation(summary = "Reject an appeal")
@@ -50,6 +51,6 @@ public class AdminAppealController {
             @PathVariable UUID id,
             @Valid @RequestBody RejectAppealRequest req,
             @AuthenticationPrincipal UserDetails principal) {
-        return ResponseEntity.ok(appealService.reject(id, req, UUID.fromString(principal.getUsername())));
+        return ResponseEntity.ok(appealService.reject(id, req, CurrentUser.id(principal)));
     }
 }

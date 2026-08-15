@@ -90,4 +90,17 @@ public class Content extends BaseEntity {
 
     @OneToMany(mappedBy = "content", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<VideoAsset> videoAssets = new ArrayList<>();
+
+    /**
+     * Soft-delete timestamp. Null means not deleted. Mirrors User.deletedAt — moderation delete
+     * must be recoverable, so this is set (and status moved to ContentStatus.DELETED) instead of
+     * removing the row, which would otherwise cascade-destroy the entire seasons/episodes/
+     * video_assets/variants/subtitles tree via orphanRemoval + ON DELETE CASCADE.
+     */
+    private Instant deletedAt;
+
+    public void softDelete() {
+        this.deletedAt = Instant.now();
+        this.status = ContentStatus.DELETED;
+    }
 }

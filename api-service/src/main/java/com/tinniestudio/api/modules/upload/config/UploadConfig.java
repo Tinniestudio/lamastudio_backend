@@ -24,14 +24,16 @@ public class UploadConfig {
         ),
         UploadType.TRAILER,   Set.of("video/mp4", "video/quicktime"),
         UploadType.THUMBNAIL, Set.of("image/jpeg", "image/png", "image/webp"),
-        UploadType.SUBTITLE,  Set.of("text/vtt", "application/x-subrip")
+        UploadType.SUBTITLE,  Set.of("text/vtt", "application/x-subrip"),
+        UploadType.PARTNER_LOGO, Set.of("image/jpeg", "image/png", "image/webp")
     );
 
     private static final Map<UploadType, Long> MAX_BYTES = Map.of(
         UploadType.RAW_VIDEO, 10L * 1024 * 1024 * 1024,  // 10 GB
         UploadType.TRAILER,    2L * 1024 * 1024 * 1024,   // 2 GB
         UploadType.THUMBNAIL,        10L * 1024 * 1024,   // 10 MB
-        UploadType.SUBTITLE,          5L * 1024 * 1024    // 5 MB
+        UploadType.SUBTITLE,          5L * 1024 * 1024,   // 5 MB
+        UploadType.PARTNER_LOGO,      5L * 1024 * 1024    // 5 MB
     );
 
     public static final Duration PRESIGNED_URL_TTL = Duration.ofMinutes(30);

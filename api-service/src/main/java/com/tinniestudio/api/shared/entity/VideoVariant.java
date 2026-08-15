@@ -24,7 +24,9 @@ public class VideoVariant extends BaseEntity {
 
   private Long bitrate;
 
-  private String storageKey;
+  // video_variants (V27) has manifest_key, not manifest_url, and no storage_key column at all —
+  // matches media-worker's own VideoVariant entity, which is what actually writes these rows.
+  private String manifestKey;
 
-  private String manifestUrl;
+  private Integer segmentCount;
 }

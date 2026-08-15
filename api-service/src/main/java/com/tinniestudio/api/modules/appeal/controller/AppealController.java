@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.appeal.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.appeal.dto.AppealResponse;
 import com.tinniestudio.api.modules.appeal.dto.SubmitAppealRequest;
 import com.tinniestudio.api.modules.appeal.service.AppealService;
@@ -39,7 +40,7 @@ public class AppealController {
     public ResponseEntity<AppealResponse> submit(
             @AuthenticationPrincipal UserDetails principal,
             @Valid @RequestBody SubmitAppealRequest req) {
-        UUID userId = UUID.fromString(principal.getUsername());
+        UUID userId = CurrentUser.id(principal);
         return ResponseEntity.status(HttpStatus.CREATED).body(appealService.submit(userId, req));
     }
 }

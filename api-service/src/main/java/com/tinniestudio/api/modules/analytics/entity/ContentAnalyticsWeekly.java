@@ -8,7 +8,7 @@ import java.util.UUID;
 
 /**
  * Weekly (ISO week, Monday-start) analytics rollup for a piece of content.
- * Maps to content_analytics_weekly (V44 migration). Populated by a nightly
+ * Maps to content_analytics_weekly (V46 migration). Populated by a nightly
  * scheduled job that aggregates content_analytics_daily for the current
  * calendar week (Batch 16 #6) — see WeeklyAnalyticsRollupJob.
  */
@@ -27,14 +27,17 @@ public class ContentAnalyticsWeekly {
     @Column(name = "week_start_date", nullable = false)
     private LocalDate weekStartDate;
 
+    // Integer, matching the actual DB column type (V46: INTEGER) — these are single-week counts
+    // for one content item, never realistically approaching 2^31. watchTimeSeconds below stays
+    // Long since seconds accumulate much faster and the column is BIGINT.
     @Column(name = "views", nullable = false)
-    private Long views = 0L;
+    private Integer views = 0;
 
     @Column(name = "unique_viewers", nullable = false)
-    private Long uniqueViewers = 0L;
+    private Integer uniqueViewers = 0;
 
     @Column(name = "completions", nullable = false)
-    private Long completions = 0L;
+    private Integer completions = 0;
 
     @Column(name = "watch_time_seconds", nullable = false)
     private Long watchTimeSeconds = 0L;

@@ -7,9 +7,9 @@ import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.upload.repository.UploadSessionRepository;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
 import com.tinniestudio.api.modules.user.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
@@ -31,7 +31,17 @@ class AdminDashboardServiceTest {
     @Mock VideoAssetRepository videoAssetRepo;
     @Mock UploadSessionRepository uploadSessionRepo;
     @Mock RabbitAdmin rabbitAdmin;
-    @InjectMocks AdminDashboardServiceImpl dashboardService;
+    AdminDashboardServiceImpl dashboardService;
+
+    @BeforeEach
+    void setUp() {
+        // Not @InjectMocks: getDashboard() dispatches its lookups via an Executor, and an
+        // auto-injected Mockito mock Executor would no-op on execute(...) and hang the test
+        // forever on join(). Runnable::run executes synchronously on the calling thread instead.
+        dashboardService = new AdminDashboardServiceImpl(
+            userRepo, subscriptionRepo, paymentRepo, contentRepo, videoAssetRepo,
+            uploadSessionRepo, rabbitAdmin, Runnable::run);
+    }
 
     @Test
     void getDashboard_returnsAggregatedStats() {

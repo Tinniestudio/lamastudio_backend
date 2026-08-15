@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.discover.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.content.dto.ContentSummaryResponse;
 import com.tinniestudio.api.modules.discover.dto.HomeSectionDto;
 import com.tinniestudio.api.modules.discover.dto.HomeResponse;
@@ -69,7 +70,7 @@ public class DiscoverController {
     @GetMapping("/recommended")
     public ResponseEntity<List<ContentSummaryResponse>> recommended(
             @AuthenticationPrincipal UserDetails principal) {
-        UUID userId = principal != null ? UUID.fromString(principal.getUsername()) : null;
+        UUID userId = CurrentUser.idOrNull(principal);
         if (userId == null) {
             return ResponseEntity.ok(discoverService.trending(20));
         }

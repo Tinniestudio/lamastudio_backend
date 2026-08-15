@@ -158,12 +158,18 @@ public class ContentService {
         return ContentResponse.from(contentRepository.save(content));
     }
 
+    /**
+     * Moderation delete is a soft-delete: the row (and its season/episode/video-asset tree) stays
+     * in the DB with status flipped to DELETED, so it can be recovered later instead of being
+     * irreversibly destroyed by the cascade on Content.seasons/videoAssets.
+     */
     @Transactional
     @CacheEvict(value = {"content-list", "content-detail", "discover"}, allEntries = true)
     public void delete(UUID id) {
         Content content = contentRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + id));
-        contentRepository.delete(content);
+        content.softDelete();
+        contentRepository.save(content);
     }
 
     @Transactional
@@ -196,6 +202,7 @@ public class ContentService {
             case REJECTED   -> target == ContentStatus.DRAFT || target == ContentStatus.ARCHIVED;
             case PUBLISHED  -> target == ContentStatus.ARCHIVED;
             case ARCHIVED   -> false;
+            case DELETED    -> false; // terminal — only ContentService.delete() sets this, never transitionStatus()
         };
         if (!valid) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,

@@ -17,9 +17,9 @@ public record ContentAnalyticsWeeklyDto(
         return new ContentAnalyticsWeeklyDto(
                 e.getContentId(),
                 e.getWeekStartDate(),
-                e.getViews(),
-                e.getUniqueViewers(),
-                e.getCompletions(),
+                e.getViews() != null ? e.getViews().longValue() : null,
+                e.getUniqueViewers() != null ? e.getUniqueViewers().longValue() : null,
+                e.getCompletions() != null ? e.getCompletions().longValue() : null,
                 e.getWatchTimeSeconds()
         );
     }

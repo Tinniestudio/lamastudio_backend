@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,6 +18,13 @@ public interface ContentAnalyticsWeeklyRepository
 
     List<ContentAnalyticsWeekly> findByContentIdAndWeekStartDateBetweenOrderByWeekStartDateAsc(
             UUID contentId, LocalDate from, LocalDate to);
+
+    /**
+     * Batch variant of the single-content lookup above, for a partner's whole content catalog —
+     * one query instead of one-per-content-id (was an N+1 in getPartnerAnalyticsWeekly).
+     */
+    List<ContentAnalyticsWeekly> findByContentIdInAndWeekStartDateBetweenOrderByWeekStartDateAsc(
+            Collection<UUID> contentIds, LocalDate from, LocalDate to);
 
     /**
      * Aggregates content_analytics_daily rows for [weekStart, weekEnd] (inclusive, both Monday

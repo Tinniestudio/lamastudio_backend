@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.user.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.user.dto.*;
 import com.tinniestudio.api.modules.user.service.UserProfileService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,7 +28,7 @@ public class UserProfileController {
     @GetMapping("/me")
     public ResponseEntity<UserProfileResponse> getProfile(
             @AuthenticationPrincipal UserDetails principal) {
-        return ResponseEntity.ok(userProfileService.getProfile(userId(principal)));
+        return ResponseEntity.ok(userProfileService.getProfile(CurrentUser.id(principal)));
     }
 
     @Operation(summary = "Partially update current user's profile")
@@ -35,7 +36,7 @@ public class UserProfileController {
     public ResponseEntity<UserProfileResponse> updateProfile(
             @AuthenticationPrincipal UserDetails principal,
             @Valid @RequestBody UpdateProfileRequest request) {
-        return ResponseEntity.ok(userProfileService.updateProfile(userId(principal), request));
+        return ResponseEntity.ok(userProfileService.updateProfile(CurrentUser.id(principal), request));
     }
 
     @Operation(summary = "Update email notification preference")
@@ -43,7 +44,7 @@ public class UserProfileController {
     public ResponseEntity<Map<String, Boolean>> updateNotifications(
             @AuthenticationPrincipal UserDetails principal,
             @Valid @RequestBody UpdateNotificationRequest request) {
-        userProfileService.updateNotifications(userId(principal), request);
+        userProfileService.updateNotifications(CurrentUser.id(principal), request);
         return ResponseEntity.ok(Map.of("notificationEmail", request.getNotificationEmail()));
     }
 
@@ -52,7 +53,7 @@ public class UserProfileController {
     public ResponseEntity<Object> updateAvatar(
             @AuthenticationPrincipal UserDetails principal,
             @Valid @RequestBody AvatarUpdateRequest request) {
-        UUID userId = userId(principal);
+        UUID userId = CurrentUser.id(principal);
         if (request.getMode() == AvatarUpdateRequest.Mode.URL) {
             String url = userProfileService.setAvatarByUrl(userId, request.getAvatarUrl());
             return ResponseEntity.ok(Map.of("avatarUrl", url));
@@ -65,7 +66,7 @@ public class UserProfileController {
     public ResponseEntity<Map<String, String>> confirmAvatarUpload(
             @AuthenticationPrincipal UserDetails principal,
             @Valid @RequestBody AvatarConfirmRequest request) {
-        String url = userProfileService.confirmAvatarUpload(userId(principal), request);
+        String url = userProfileService.confirmAvatarUpload(CurrentUser.id(principal), request);
         return ResponseEntity.ok(Map.of("avatarUrl", url));
     }
 
@@ -76,16 +77,13 @@ public class UserProfileController {
             @Valid @RequestBody UpdatePasswordRequest request,
             HttpServletRequest httpRequest) {
         UUID currentSessionId = sessionId(httpRequest);
-        userProfileService.changePassword(userId(principal), request, currentSessionId);
+        userProfileService.changePassword(CurrentUser.id(principal), request, currentSessionId);
         return ResponseEntity.ok(Map.of(
             "message", "Password updated successfully. Other sessions have been logged out."));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private UUID userId(UserDetails principal) {
-        return UUID.fromString(principal.getUsername());
-    }
 
     private UUID sessionId(HttpServletRequest request) {
         Object sid = request.getAttribute("sessionId");

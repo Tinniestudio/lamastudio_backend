@@ -57,6 +57,15 @@ public class VideoAsset extends BaseEntity {
   @Enumerated(EnumType.STRING)
   private ProcessingStatus processingStatus;
 
+  // Written by media-worker (VideoProcessingService) on every processing attempt/failure —
+  // present in the DB since V27/V29 but previously unmapped here, so api-service could never
+  // read back why a video failed or how many retries occurred.
+  @Column(columnDefinition = "TEXT")
+  private String processingError;
+
+  @Column(nullable = false)
+  private int processingAttempts;
+
   @Column(nullable = false)
   private UUID uploadedBy;
 

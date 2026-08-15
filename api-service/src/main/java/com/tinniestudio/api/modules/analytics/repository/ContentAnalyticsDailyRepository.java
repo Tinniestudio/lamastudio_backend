@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,6 +18,14 @@ public interface ContentAnalyticsDailyRepository
 
     List<ContentAnalyticsDaily> findByContentIdAndAnalyticsDateBetweenOrderByAnalyticsDateAsc(
             UUID contentId, LocalDate from, LocalDate to);
+
+    /**
+     * Batch variant of the single-content lookup above, for a partner's whole content catalog —
+     * one query instead of one-per-content-id (was an N+1 in getPartnerAnalytics/
+     * exportPartnerAnalyticsCsv).
+     */
+    List<ContentAnalyticsDaily> findByContentIdInAndAnalyticsDateBetweenOrderByAnalyticsDateAsc(
+            Collection<UUID> contentIds, LocalDate from, LocalDate to);
 
     /**
      * Atomically inserts a new row for (content_id, analytics_date) or increments

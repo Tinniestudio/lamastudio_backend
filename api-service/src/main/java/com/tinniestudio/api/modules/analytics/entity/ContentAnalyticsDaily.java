@@ -25,14 +25,17 @@ public class ContentAnalyticsDaily {
     @Column(name = "analytics_date", nullable = false)
     private LocalDate analyticsDate;
 
+    // Integer, matching the actual DB column type (V40: INTEGER) — these are single-day counts
+    // for one content item, never realistically approaching 2^31. watchTimeSeconds below stays
+    // Long since seconds accumulate much faster and the column is BIGINT.
     @Column(name = "views", nullable = false)
-    private Long views = 0L;
+    private Integer views = 0;
 
     @Column(name = "unique_viewers", nullable = false)
-    private Long uniqueViewers = 0L;
+    private Integer uniqueViewers = 0;
 
     @Column(name = "completions", nullable = false)
-    private Long completions = 0L;
+    private Integer completions = 0;
 
     @Column(name = "watch_time_seconds", nullable = false)
     private Long watchTimeSeconds = 0L;

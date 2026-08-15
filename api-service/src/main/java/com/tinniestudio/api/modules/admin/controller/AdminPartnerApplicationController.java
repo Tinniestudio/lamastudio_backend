@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.admin.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.admin.dto.PartnerApplicationResponse;
 import com.tinniestudio.api.modules.admin.dto.RejectApplicationRequest;
 import com.tinniestudio.api.modules.admin.service.PartnerApplicationService;
@@ -41,7 +42,7 @@ public class AdminPartnerApplicationController {
     public ResponseEntity<PartnerApplicationResponse> approve(
             @PathVariable UUID id,
             @AuthenticationPrincipal UserDetails principal) {
-        return ResponseEntity.ok(applicationService.approve(id, UUID.fromString(principal.getUsername())));
+        return ResponseEntity.ok(applicationService.approve(id, CurrentUser.id(principal)));
     }
 
     @Operation(summary = "Reject a partner application")
@@ -50,6 +51,6 @@ public class AdminPartnerApplicationController {
             @PathVariable UUID id,
             @Valid @RequestBody RejectApplicationRequest req,
             @AuthenticationPrincipal UserDetails principal) {
-        return ResponseEntity.ok(applicationService.reject(id, req, UUID.fromString(principal.getUsername())));
+        return ResponseEntity.ok(applicationService.reject(id, req, CurrentUser.id(principal)));
     }
 }

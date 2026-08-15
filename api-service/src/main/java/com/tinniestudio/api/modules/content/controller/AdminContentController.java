@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.content.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.content.dto.ContentResponse;
 import com.tinniestudio.api.modules.content.dto.CreateContentRequest;
 import com.tinniestudio.api.modules.content.dto.UpdateContentRequest;
@@ -53,7 +54,7 @@ public class AdminContentController {
             @Valid @RequestBody CreateContentRequest req,
             @AuthenticationPrincipal UserDetails principal) {
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(contentService.create(req, UUID.fromString(principal.getUsername())));
+            .body(contentService.create(req, CurrentUser.id(principal)));
     }
 
     @Operation(summary = "Update content metadata")
@@ -131,7 +132,7 @@ public class AdminContentController {
         }
         Content content = contentRepository.findById(contentId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId));
-        UUID callerId = UUID.fromString(principal.getUsername());
+        UUID callerId = CurrentUser.id(principal);
         if (!callerId.equals(content.getCreatedBy())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId);
         }

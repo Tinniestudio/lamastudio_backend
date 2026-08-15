@@ -3,10 +3,8 @@ package com.tinniestudio.api.shared.security.jwt;
 import com.tinniestudio.api.shared.config.AppProperties;
 import com.tinniestudio.api.shared.entity.User;
 
-import io.jsonwebtoken.*;
-import io.jsonwebtoken.io.Decoders;
-import io.jsonwebtoken.security.Keys;
-import lombok.extern.slf4j.Slf4j;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
@@ -15,17 +13,14 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Component
-public class JwtTokenProvider {
+public class JwtTokenProvider extends AbstractJwtTokenProvider {
 
     public static final String AUDIENCE_USER = "user";
     public static final String CLAIM_SESSION_ID = "sid";
 
-    private final AppProperties appProperties;
-
     public JwtTokenProvider(AppProperties appProperties) {
-        this.appProperties = appProperties;
+        super(appProperties);
     }
 
     // ── Access Token ──────────────────────────────────────────────────────────
@@ -58,7 +53,7 @@ public class JwtTokenProvider {
     }
 
     public boolean validateAccessToken(String token) {
-        return validateToken(token, getAccessTokenKey());
+        return validateToken(token, getAccessTokenKey(), "user access");
     }
 
     // ── Refresh Token ─────────────────────────────────────────────────────────
@@ -84,7 +79,7 @@ public class JwtTokenProvider {
     }
 
     public boolean validateRefreshToken(String token) {
-        return validateToken(token, getRefreshTokenKey());
+        return validateToken(token, getRefreshTokenKey(), "user refresh");
     }
 
     // ── Expiry helpers ────────────────────────────────────────────────────────
@@ -97,41 +92,13 @@ public class JwtTokenProvider {
         return appProperties.getJwt().getRefreshToken().getExpirationMs();
     }
 
-    // ── Shared helpers ────────────────────────────────────────────────────────
-
-    private boolean validateToken(String token, SecretKey key) {
-        try {
-            parseClaims(token, key);
-            return true;
-        } catch (ExpiredJwtException ex) {
-            log.debug("JWT expired: {}", ex.getMessage());
-        } catch (UnsupportedJwtException ex) {
-            log.warn("Unsupported JWT: {}", ex.getMessage());
-        } catch (MalformedJwtException ex) {
-            log.warn("Malformed JWT: {}", ex.getMessage());
-        } catch (SecurityException ex) {
-            log.warn("Invalid JWT signature: {}", ex.getMessage());
-        } catch (IllegalArgumentException ex) {
-            log.warn("JWT claims empty: {}", ex.getMessage());
-        }
-        return false;
-    }
-
-    private Claims parseClaims(String token, SecretKey key) {
-        return Jwts.parser()
-                .verifyWith(key)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-    }
+    // ── Keys ──────────────────────────────────────────────────────────────────
 
     private SecretKey getAccessTokenKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(appProperties.getJwt().getAccessToken().getSecret());
-        return Keys.hmacShaKeyFor(keyBytes);
+        return deriveKey(appProperties.getJwt().getAccessToken().getSecret());
     }
 
     private SecretKey getRefreshTokenKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(appProperties.getJwt().getRefreshToken().getSecret());
-        return Keys.hmacShaKeyFor(keyBytes);
+        return deriveKey(appProperties.getJwt().getRefreshToken().getSecret());
     }
 }

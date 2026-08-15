@@ -10,6 +10,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
@@ -104,6 +105,19 @@ public class MinioStorageService implements StorageService {
             throw new StorageException("Failed to check object existence for key=" + key, e);
         } catch (SdkException e) {
             throw new StorageException("Failed to check object existence for key=" + key, e);
+        }
+    }
+
+    @Override
+    public long getObjectSize(String key) {
+        try {
+            HeadObjectResponse head = s3Client.headObject(HeadObjectRequest.builder()
+                    .bucket(props.getBucket())
+                    .key(key)
+                    .build());
+            return head.contentLength() != null ? head.contentLength() : 0L;
+        } catch (SdkException e) {
+            throw new StorageException("Failed to get object size for key=" + key, e);
         }
     }
 

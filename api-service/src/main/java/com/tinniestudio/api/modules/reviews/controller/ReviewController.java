@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.reviews.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.reviews.dto.CreateReviewRequest;
 import com.tinniestudio.api.modules.reviews.dto.ReviewResponse;
 import com.tinniestudio.api.modules.reviews.dto.UpdateReviewRequest;
@@ -14,7 +15,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
@@ -44,7 +44,7 @@ public class ReviewController {
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID contentId,
             @Valid @RequestBody CreateReviewRequest request) {
-        ReviewResponse response = reviewService.create(userId(principal), contentId, request);
+        ReviewResponse response = reviewService.create(CurrentUser.id(principal), contentId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -54,7 +54,7 @@ public class ReviewController {
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID id,
             @Valid @RequestBody UpdateReviewRequest request) {
-        return ResponseEntity.ok(reviewService.update(userId(principal), id, request));
+        return ResponseEntity.ok(reviewService.update(CurrentUser.id(principal), id, request));
     }
 
     @Operation(summary = "Delete a review")
@@ -62,14 +62,10 @@ public class ReviewController {
     public ResponseEntity<Object> delete(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID id) {
-        reviewService.delete(userId(principal), id);
+        reviewService.delete(CurrentUser.id(principal), id);
         return ResponseEntity.ok(Map.of("message", "Review deleted successfully"));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private UUID userId(UserDetails principal) {
-        if (principal == null) throw new AuthenticationCredentialsNotFoundException("No credentials");
-        return UUID.fromString(principal.getUsername());
-    }
 }

@@ -1,5 +1,7 @@
 package com.tinniestudio.api.modules.upload.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
+import com.tinniestudio.api.modules.upload.dto.CompleteUploadRequest;
 import com.tinniestudio.api.modules.upload.dto.CompleteUploadResponse;
 import com.tinniestudio.api.modules.upload.dto.CreateUploadSessionRequest;
 import com.tinniestudio.api.modules.upload.dto.UploadSessionResponse;
@@ -33,17 +35,19 @@ public class UploadController {
     public ResponseEntity<UploadSessionResponse> createSession(
             @AuthenticationPrincipal UserDetails principal,
             @Valid @RequestBody CreateUploadSessionRequest req) {
-        UUID userId = UUID.fromString(principal.getUsername());
+        UUID userId = CurrentUser.id(principal);
         return ResponseEntity.status(HttpStatus.CREATED).body(uploadService.createSession(userId, req));
     }
 
-    @Operation(summary = "Complete an upload session — verifies object exists in storage, triggers processing if applicable")
+    @Operation(summary = "Complete an upload session — verifies object exists in storage, triggers processing if applicable",
+        description = "Body is only required for SUBTITLE uploads (languageCode, optional label/isDefault); omit for every other upload type.")
     @PostMapping("/{sessionId}/complete")
     public ResponseEntity<CompleteUploadResponse> complete(
             @AuthenticationPrincipal UserDetails principal,
-            @PathVariable UUID sessionId) {
-        UUID userId = UUID.fromString(principal.getUsername());
-        return ResponseEntity.ok(uploadService.completeSession(userId, sessionId));
+            @PathVariable UUID sessionId,
+            @RequestBody(required = false) CompleteUploadRequest body) {
+        UUID userId = CurrentUser.id(principal);
+        return ResponseEntity.ok(uploadService.completeSession(userId, sessionId, body));
     }
 
     @Operation(summary = "Get upload session status and video processing progress")
@@ -51,7 +55,7 @@ public class UploadController {
     public ResponseEntity<UploadStatusResponse> status(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID sessionId) {
-        UUID userId = UUID.fromString(principal.getUsername());
+        UUID userId = CurrentUser.id(principal);
         return ResponseEntity.ok(uploadService.getStatus(userId, sessionId));
     }
 }

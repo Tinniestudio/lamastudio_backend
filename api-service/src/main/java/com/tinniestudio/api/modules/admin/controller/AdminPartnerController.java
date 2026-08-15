@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.admin.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.partner.dto.AdminUpdatePartnerProfileRequest;
 import com.tinniestudio.api.modules.partner.dto.PartnerProfileResponse;
 import com.tinniestudio.api.modules.partner.service.PartnerService;
@@ -37,7 +38,7 @@ public class AdminPartnerController {
             @Valid @RequestBody AdminUpdatePartnerProfileRequest req,
             @AuthenticationPrincipal UserDetails principal) {
         return ResponseEntity.ok(
-            partnerService.adminUpdateProfile(userId, req, UUID.fromString(principal.getUsername()))
+            partnerService.adminUpdateProfile(userId, req, CurrentUser.id(principal))
         );
     }
 }

@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.notification.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.notification.dto.*;
 import com.tinniestudio.api.modules.notification.service.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,27 +34,27 @@ public class NotificationController {
     public ResponseEntity<Page<NotificationResponse>> list(
             @AuthenticationPrincipal UserDetails principal,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(notificationService.listForUser(userId(principal), pageable));
+        return ResponseEntity.ok(notificationService.listForUser(CurrentUser.id(principal), pageable));
     }
 
     @Operation(summary = "Get unread notification count")
     @GetMapping("/unread-count")
     public ResponseEntity<Map<String, Long>> getUnreadCount(@AuthenticationPrincipal UserDetails principal) {
-        return ResponseEntity.ok(Map.of("count", notificationService.getUnreadCount(userId(principal))));
+        return ResponseEntity.ok(Map.of("count", notificationService.getUnreadCount(CurrentUser.id(principal))));
     }
 
     @Operation(summary = "Mark a notification as read")
     @PostMapping("/{id}/read")
     public ResponseEntity<Object> markRead(@PathVariable UUID id,
                                           @AuthenticationPrincipal UserDetails principal) {
-        notificationService.markRead(userId(principal), id);
+        notificationService.markRead(CurrentUser.id(principal), id);
         return ResponseEntity.ok(Map.of("message", "Notification marked as read"));
     }
 
     @Operation(summary = "Mark all notifications as read")
     @PostMapping("/read-all")
     public ResponseEntity<Object> markAllRead(@AuthenticationPrincipal UserDetails principal) {
-        notificationService.markAllRead(userId(principal));
+        notificationService.markAllRead(CurrentUser.id(principal));
         return ResponseEntity.ok(Map.of("message", "All notifications marked as read"));
     }
 
@@ -61,7 +62,7 @@ public class NotificationController {
     @GetMapping("/preferences")
     public ResponseEntity<List<NotificationPreferenceResponse>> getPreferences(
             @AuthenticationPrincipal UserDetails principal) {
-        return ResponseEntity.ok(notificationService.getPreferences(userId(principal)));
+        return ResponseEntity.ok(notificationService.getPreferences(CurrentUser.id(principal)));
     }
 
     @Operation(summary = "Update notification preference")
@@ -69,10 +70,7 @@ public class NotificationController {
     public ResponseEntity<NotificationPreferenceResponse> updatePreference(
             @Valid @RequestBody UpdatePreferenceRequest req,
             @AuthenticationPrincipal UserDetails principal) {
-        return ResponseEntity.ok(notificationService.updatePreference(userId(principal), req));
+        return ResponseEntity.ok(notificationService.updatePreference(CurrentUser.id(principal), req));
     }
 
-    private UUID userId(UserDetails principal) {
-        return UUID.fromString(principal.getUsername());
-    }
 }

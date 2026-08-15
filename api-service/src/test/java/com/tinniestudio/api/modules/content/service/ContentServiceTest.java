@@ -273,13 +273,19 @@ class ContentServiceTest {
     class DeleteTests {
 
         @Test
-        @DisplayName("calls repository.delete(entity) when content found")
-        void deletesWhenFound() {
+        @DisplayName("soft-deletes: sets status to DELETED and deletedAt, never hard-deletes the row")
+        void softDeletesWhenFound() {
             when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+            when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
 
             contentService.delete(contentId);
 
-            verify(contentRepository).delete(content);
+            verify(contentRepository, never()).delete(any(Content.class));
+            verify(contentRepository, never()).deleteById(any());
+            ArgumentCaptor<Content> captor = ArgumentCaptor.forClass(Content.class);
+            verify(contentRepository).save(captor.capture());
+            assertThat(captor.getValue().getStatus()).isEqualTo(ContentStatus.DELETED);
+            assertThat(captor.getValue().getDeletedAt()).isNotNull();
         }
 
         @Test

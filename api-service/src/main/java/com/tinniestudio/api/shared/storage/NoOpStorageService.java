@@ -35,6 +35,12 @@ public class NoOpStorageService implements StorageService {
     }
 
     @Override
+    public long getObjectSize(String key) {
+        log.warn("NoOpStorageService: getObjectSize called for key={}. Returning 0 — no file was actually stored.", key);
+        return 0L;
+    }
+
+    @Override
     public void deleteObject(String key) {
         log.warn("NoOpStorageService: deleteObject called for key={}. No-op in development.", key);
     }

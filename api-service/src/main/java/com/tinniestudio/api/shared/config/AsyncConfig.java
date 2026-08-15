@@ -21,4 +21,18 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    // Fans out AdminDashboardServiceImpl's ~11 independent stat/queue-depth lookups so they run
+    // concurrently instead of sequentially — sized for that specific call count, not general
+    // request-handling load.
+    @Bean(name = "dashboardTaskExecutor")
+    public Executor dashboardTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(8);
+        executor.setMaxPoolSize(12);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("dashboard-");
+        executor.initialize();
+        return executor;
+    }
 }

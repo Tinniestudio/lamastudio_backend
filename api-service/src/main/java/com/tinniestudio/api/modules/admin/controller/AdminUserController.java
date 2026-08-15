@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.admin.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.admin.dto.AdminUserResponse;
 import com.tinniestudio.api.modules.admin.dto.PromoteToPartnerRequest;
 import com.tinniestudio.api.modules.admin.dto.UpdateUserRequest;
@@ -61,7 +62,7 @@ public class AdminUserController {
             @PathVariable UUID id,
             @Valid @RequestBody UpdateUserStatusRequest req,
             @AuthenticationPrincipal UserDetails principal) {
-        adminUserService.updateStatus(id, req, UUID.fromString(principal.getUsername()));
+        adminUserService.updateStatus(id, req, CurrentUser.id(principal));
         return ResponseEntity.ok(Map.of("message", "User status updated successfully"));
     }
 
@@ -70,7 +71,7 @@ public class AdminUserController {
     public ResponseEntity<Object> delete(
             @PathVariable UUID id,
             @AuthenticationPrincipal UserDetails principal) {
-        adminUserService.softDelete(id, UUID.fromString(principal.getUsername()));
+        adminUserService.softDelete(id, CurrentUser.id(principal));
         return ResponseEntity.ok(Map.of("message", "User deleted successfully"));
     }
 
@@ -81,7 +82,7 @@ public class AdminUserController {
             @Valid @RequestBody(required = false) PromoteToPartnerRequest req,
             @AuthenticationPrincipal UserDetails principal) {
         return ResponseEntity.ok(
-            adminUserService.promoteToPartner(id, req, UUID.fromString(principal.getUsername()))
+            adminUserService.promoteToPartner(id, req, CurrentUser.id(principal))
         );
     }
 }

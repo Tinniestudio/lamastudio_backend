@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.content.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.content.dto.ContentResponse;
 import com.tinniestudio.api.modules.content.dto.ContentSummaryResponse;
 import com.tinniestudio.api.modules.content.service.ContentService;
@@ -58,7 +59,7 @@ public class ContentController {
     public ResponseEntity<Void> recordView(
             @PathVariable UUID id,
             @AuthenticationPrincipal UserDetails principal) {
-        UUID userId = principal != null ? UUID.fromString(principal.getUsername()) : null;
+        UUID userId = CurrentUser.idOrNull(principal);
         contentService.recordView(id, userId);
         return ResponseEntity.accepted().build();
     }

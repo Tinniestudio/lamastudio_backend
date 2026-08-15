@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.library.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.library.dto.FavoriteResponse;
 import com.tinniestudio.api.modules.library.service.FavoriteService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,7 +11,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
@@ -31,7 +31,7 @@ public class FavoriteController {
     public ResponseEntity<Page<FavoriteResponse>> list(
             @AuthenticationPrincipal UserDetails principal,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(favoriteService.list(userId(principal), pageable));
+        return ResponseEntity.ok(favoriteService.list(CurrentUser.id(principal), pageable));
     }
 
     @Operation(summary = "Add a content item to favorites")
@@ -39,7 +39,7 @@ public class FavoriteController {
     public ResponseEntity<Void> add(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID contentId) {
-        favoriteService.add(userId(principal), contentId);
+        favoriteService.add(CurrentUser.id(principal), contentId);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
@@ -48,14 +48,7 @@ public class FavoriteController {
     public ResponseEntity<Object> remove(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID contentId) {
-        favoriteService.remove(userId(principal), contentId);
+        favoriteService.remove(CurrentUser.id(principal), contentId);
         return ResponseEntity.ok(Map.of("message", "Removed from favorites successfully"));
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private UUID userId(UserDetails principal) {
-        if (principal == null) throw new AuthenticationCredentialsNotFoundException("No credentials");
-        return UUID.fromString(principal.getUsername());
     }
 }

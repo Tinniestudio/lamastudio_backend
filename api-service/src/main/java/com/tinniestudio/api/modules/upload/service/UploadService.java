@@ -3,9 +3,12 @@ package com.tinniestudio.api.modules.upload.service;
 import com.tinniestudio.api.modules.upload.config.UploadConfig;
 import com.tinniestudio.api.modules.upload.dto.*;
 import com.tinniestudio.api.modules.upload.repository.MediaFileRepository;
+import com.tinniestudio.api.modules.upload.repository.SubtitleRepository;
 import com.tinniestudio.api.modules.upload.repository.UploadSessionRepository;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
+import com.tinniestudio.api.shared.config.AppProperties;
 import com.tinniestudio.api.shared.entity.MediaFile;
+import com.tinniestudio.api.shared.entity.Subtitle;
 import com.tinniestudio.api.shared.entity.UploadSession;
 import com.tinniestudio.api.shared.entity.VideoAsset;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
@@ -28,9 +31,11 @@ public class UploadService {
     private final UploadSessionRepository uploadSessionRepository;
     private final MediaFileRepository mediaFileRepository;
     private final VideoAssetRepository videoAssetRepository;
+    private final SubtitleRepository subtitleRepository;
     private final StorageService storageService;
     private final QueuePublisher queuePublisher;
     private final UploadConfig uploadConfig;
+    private final AppProperties appProperties;
 
     @Transactional
     public UploadSessionResponse createSession(UUID userId, CreateUploadSessionRequest req) {
@@ -75,7 +80,7 @@ public class UploadService {
     }
 
     @Transactional
-    public CompleteUploadResponse completeSession(UUID userId, UUID sessionId) {
+    public CompleteUploadResponse completeSession(UUID userId, UUID sessionId, CompleteUploadRequest body) {
         UploadSession session = uploadSessionRepository.findById(sessionId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                 "Upload session not found: " + sessionId));
@@ -93,8 +98,13 @@ public class UploadService {
                 "Upload session has expired");
         }
         boolean objectPresent;
+        long actualSizeBytes;
         try {
             objectPresent = storageService.objectExists(session.getStorageKey());
+            // Measured from storage (a HEAD request), not the client-declared expectedMaxSizeBytes
+            // from createSession — a caller can declare any size at presign time, so that value
+            // must never be trusted for quota/storage-accounting figures.
+            actualSizeBytes = objectPresent ? storageService.getObjectSize(session.getStorageKey()) : 0L;
         } catch (RuntimeException ex) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                 "Storage check failed — please retry", ex);
@@ -114,12 +124,12 @@ public class UploadService {
         MediaFile savedFile = mediaFileRepository.save(mediaFile);
 
         session.setUploadStatus(UploadStatus.COMPLETED);
-        session.setFileSizeBytes(session.getExpectedMaxSizeBytes() != null
-            ? session.getExpectedMaxSizeBytes() : 0L);
+        session.setFileSizeBytes(actualSizeBytes);
         session.setCompletedAt(Instant.now());
         uploadSessionRepository.save(session);
 
         UUID videoAssetId = null;
+        UUID subtitleId = null;
         UploadType type = session.getUploadType();
         if (type == UploadType.RAW_VIDEO || type == UploadType.TRAILER) {
             VideoAsset asset = new VideoAsset();
@@ -146,9 +156,49 @@ public class UploadService {
             } else {
                 queuePublisher.publish(UploadConfig.VIDEO_PROCESS_QUEUE, "VIDEO_PROCESSING_JOB", payload);
             }
+        } else if (type == UploadType.SUBTITLE) {
+            subtitleId = attachSubtitle(userId, session, body);
         }
 
-        return new CompleteUploadResponse(savedFile.getId(), videoAssetId);
+        return new CompleteUploadResponse(savedFile.getId(), videoAssetId, subtitleId);
+    }
+
+    /**
+     * Attaches a completed SUBTITLE upload to the VideoAsset named by
+     * session.getTargetEntityId() — a Subtitle row can't be created at createSession() time since
+     * the file doesn't exist in storage yet, and language/label aren't known until the client
+     * supplies them here.
+     */
+    private UUID attachSubtitle(UUID userId, UploadSession session, CompleteUploadRequest body) {
+        if (session.getTargetEntityId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "targetEntityId (the VideoAsset to attach this subtitle to) is required for SUBTITLE uploads");
+        }
+        if (body == null || body.languageCode() == null || body.languageCode().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "languageCode is required to complete a SUBTITLE upload");
+        }
+        VideoAsset asset = videoAssetRepository.findById(session.getTargetEntityId())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "VideoAsset not found: " + session.getTargetEntityId()));
+        // IDOR guard: UploadController has no PARTNER-role restriction (any authenticated user
+        // can call it), so without this check any user could attach a subtitle to a video asset
+        // they don't own just by guessing/enumerating its UUID. 404, not 403 — enumeration-safe,
+        // matching the ownership-check pattern used elsewhere (AdminContentController,
+        // PartnerServiceImpl.assertOwnedByPartner).
+        if (!userId.equals(asset.getUploadedBy())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "VideoAsset not found: " + session.getTargetEntityId());
+        }
+
+        Subtitle subtitle = new Subtitle();
+        subtitle.setVideoAsset(asset);
+        subtitle.setLanguageCode(body.languageCode());
+        subtitle.setLabel(body.label());
+        subtitle.setFileUrl(appProperties.getCdn().getBaseUrl() + "/" + session.getStorageKey());
+        subtitle.setFormat("text/vtt".equals(session.getMimeType()) ? SubtitleFormat.VTT : SubtitleFormat.SRT);
+        subtitle.setIsDefault(Boolean.TRUE.equals(body.isDefault()));
+        return subtitleRepository.save(subtitle).getId();
     }
 
     @Transactional(readOnly = true)
@@ -173,12 +223,20 @@ public class UploadService {
             case TRAILER   -> "raw/trailers/" + uuid + "/original." + ext;
             case THUMBNAIL -> "thumbnails/" + (targetEntityId != null ? targetEntityId : uuid) + "/" + uuid + "." + ext;
             case SUBTITLE  -> "subtitles/" + (targetEntityId != null ? targetEntityId : uuid) + "/" + uuid + "." + ext;
+            case PARTNER_LOGO -> "partner-logos/" + (targetEntityId != null ? targetEntityId : uuid) + "/logo." + ext;
             default        -> "uploads/" + uuid + "." + ext;
         };
     }
 
+    // Allow-list only plain alphanumeric extensions (max 10 chars) — anything else (path
+    // separators, "..", empty) falls back to "bin" rather than being written into the storage
+    // key. Mirrors the guard StringUtils.getFilenameExtension() gives PartnerServiceImpl for
+    // logo uploads, applied here as well since this key ends up in a client-facing presigned URL.
+    private static final java.util.regex.Pattern SAFE_EXTENSION = java.util.regex.Pattern.compile("^[a-zA-Z0-9]{1,10}$");
+
     private String extractExtension(String filename) {
-        if (filename == null || !filename.contains(".")) return "bin";
-        return filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
+        String ext = org.springframework.util.StringUtils.getFilenameExtension(filename);
+        if (ext == null || !SAFE_EXTENSION.matcher(ext).matches()) return "bin";
+        return ext.toLowerCase();
     }
 }

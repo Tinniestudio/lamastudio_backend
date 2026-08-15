@@ -15,6 +15,14 @@ public interface StorageService {
 
     boolean objectExists(String key);
 
+    /**
+     * The actual size, in bytes, of the stored object — a server-side measurement, not the
+     * client-declared size from a presigned upload request. Callers that need to record how many
+     * bytes an upload actually used (quota, storage accounting) must use this rather than trusting
+     * a client-supplied value, which a caller could otherwise declare arbitrarily.
+     */
+    long getObjectSize(String key);
+
     void deleteObject(String key);
 
     /**

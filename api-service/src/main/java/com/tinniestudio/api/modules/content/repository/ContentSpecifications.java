@@ -7,6 +7,8 @@ import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import jakarta.persistence.criteria.JoinType;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.util.UUID;
+
 public class ContentSpecifications {
 
     private ContentSpecifications() {}
@@ -14,6 +16,16 @@ public class ContentSpecifications {
     public static Specification<Content> hasStatus(ContentStatus status) {
         return (root, query, cb) -> status == null ? cb.conjunction()
             : cb.equal(root.get("status"), status);
+    }
+
+    public static Specification<Content> hasCreatedBy(UUID createdBy) {
+        return (root, query, cb) -> createdBy == null ? cb.conjunction()
+            : cb.equal(root.get("createdBy"), createdBy);
+    }
+
+    public static Specification<Content> titleContains(String q) {
+        return (root, query, cb) -> (q == null || q.isBlank()) ? cb.conjunction()
+            : cb.like(cb.lower(root.get("title")), "%" + q.toLowerCase() + "%");
     }
 
     public static Specification<Content> hasType(ContentType type) {
@@ -54,7 +66,8 @@ public class ContentSpecifications {
     public static Specification<Content> isViewable() {
         return (root, query, cb) -> cb.and(
             cb.notEqual(root.get("status"), ContentStatus.ARCHIVED),
-            cb.notEqual(root.get("status"), ContentStatus.REJECTED)
+            cb.notEqual(root.get("status"), ContentStatus.REJECTED),
+            cb.notEqual(root.get("status"), ContentStatus.DELETED)
         );
     }
 

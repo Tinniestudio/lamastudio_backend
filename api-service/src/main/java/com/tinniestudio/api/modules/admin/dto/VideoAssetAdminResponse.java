@@ -15,6 +15,8 @@ public record VideoAssetAdminResponse(
     String storageKey,
     String originalFilename,
     Long fileSizeBytes,
+    String processingError,
+    int processingAttempts,
     Instant createdAt
 ) {
     public static VideoAssetAdminResponse from(VideoAsset va) {
@@ -26,6 +28,8 @@ public record VideoAssetAdminResponse(
             va.getStorageKey(),
             va.getOriginalFilename(),
             va.getFileSizeBytes(),
+            va.getProcessingError(),
+            va.getProcessingAttempts(),
             va.getCreatedAt()
         );
     }

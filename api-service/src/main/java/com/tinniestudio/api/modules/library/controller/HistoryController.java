@@ -1,5 +1,6 @@
 package com.tinniestudio.api.modules.library.controller;
 
+import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.library.dto.WatchHistoryResponse;
 import com.tinniestudio.api.modules.library.service.WatchHistoryService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -9,7 +10,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
@@ -30,7 +30,7 @@ public class HistoryController {
     public ResponseEntity<Page<WatchHistoryResponse>> list(
             @AuthenticationPrincipal UserDetails principal,
             @PageableDefault(size = 50) Pageable pageable) {
-        return ResponseEntity.ok(historyService.list(userId(principal), pageable));
+        return ResponseEntity.ok(historyService.list(CurrentUser.id(principal), pageable));
     }
 
     @Operation(summary = "Delete a single watch history entry")
@@ -38,7 +38,7 @@ public class HistoryController {
     public ResponseEntity<Object> delete(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID id) {
-        historyService.delete(userId(principal), id);
+        historyService.delete(CurrentUser.id(principal), id);
         return ResponseEntity.ok(Map.of("message", "Watch history entry deleted successfully"));
     }
 
@@ -46,14 +46,7 @@ public class HistoryController {
     @DeleteMapping
     public ResponseEntity<Object> deleteAll(
             @AuthenticationPrincipal UserDetails principal) {
-        historyService.deleteAll(userId(principal));
+        historyService.deleteAll(CurrentUser.id(principal));
         return ResponseEntity.ok(Map.of("message", "Watch history cleared successfully"));
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private UUID userId(UserDetails principal) {
-        if (principal == null) throw new AuthenticationCredentialsNotFoundException("No credentials");
-        return UUID.fromString(principal.getUsername());
     }
 }
