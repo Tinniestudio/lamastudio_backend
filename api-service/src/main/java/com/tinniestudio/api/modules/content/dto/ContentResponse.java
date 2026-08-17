@@ -14,7 +14,7 @@ public record ContentResponse(
     Boolean featured, Boolean comingSoon, Long viewCount,
     Integer durationSeconds, String posterUrl, String thumbnailUrl,
     BigDecimal averageRating, Integer reviewCount,
-    List<String> categoryNames, Instant publishedAt
+    List<String> categoryNames, Instant publishedAt, String rejectionReason
 ) {
     public static ContentResponse from(Content c) {
         return new ContentResponse(
@@ -26,7 +26,7 @@ public record ContentResponse(
             c.getDurationSeconds(), c.getPosterUrl(), c.getThumbnailUrl(),
             c.getAverageRating(), c.getReviewCount(),
             c.getCategories().stream().map(cat -> cat.getName()).toList(),
-            c.getPublishedAt()
+            c.getPublishedAt(), c.getRejectionReason()
         );
     }
 }

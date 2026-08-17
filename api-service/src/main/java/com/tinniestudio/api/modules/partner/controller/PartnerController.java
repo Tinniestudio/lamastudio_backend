@@ -96,6 +96,15 @@ public class PartnerController {
         return ResponseEntity.ok(partnerService.listContents(userId, status, q, pageable));
     }
 
+    @Operation(summary = "Get one piece of own content (404 if not found or not owned)")
+    @GetMapping("/contents/{id}")
+    public ResponseEntity<PartnerContentResponse> getContent(
+            @AuthenticationPrincipal UserDetails principal,
+            @PathVariable UUID id) {
+        UUID userId = CurrentUser.id(principal);
+        return ResponseEntity.ok(partnerService.getContent(userId, id));
+    }
+
     @Operation(summary = "Create new content (starts in DRAFT, owned by the calling partner)")
     @PostMapping("/contents")
     public ResponseEntity<PartnerContentResponse> createContent(

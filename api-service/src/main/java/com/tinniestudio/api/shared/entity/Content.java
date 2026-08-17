@@ -45,6 +45,15 @@ public class Content extends BaseEntity {
     @Column(nullable = false)
     private ContentStatus status;
 
+    /**
+     * Set when an admin rejects content (REVIEW -> REJECTED, see ContentService.transitionStatus);
+     * cleared on any transition out of REJECTED (e.g. re-editing back to DRAFT) so a stale reason
+     * never lingers past the round of feedback it was written for. Mirrors
+     * PartnerApplication.rejectionReason's role for applications.
+     */
+    @Column(columnDefinition = "TEXT")
+    private String rejectionReason;
+
     private LocalDate releaseDate;
 
     private String language;

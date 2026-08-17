@@ -3,6 +3,7 @@ package com.tinniestudio.api.modules.content.controller;
 import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.content.dto.ContentResponse;
 import com.tinniestudio.api.modules.content.dto.CreateContentRequest;
+import com.tinniestudio.api.modules.content.dto.RejectContentRequest;
 import com.tinniestudio.api.modules.content.dto.UpdateContentRequest;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.content.service.ContentService;
@@ -81,35 +82,37 @@ public class AdminContentController {
             @PathVariable UUID id,
             @AuthenticationPrincipal UserDetails principal) {
         assertOwnedByCallerOrAdmin(id, principal);
-        return ResponseEntity.ok(contentService.transitionStatus(id, ContentStatus.REVIEW));
+        return ResponseEntity.ok(contentService.transitionStatus(id, ContentStatus.REVIEW, null));
     }
 
     @Operation(summary = "Approve for processing (REVIEW → PROCESSING)")
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ContentResponse> approve(@PathVariable UUID id) {
-        return ResponseEntity.ok(contentService.transitionStatus(id, ContentStatus.PROCESSING));
+        return ResponseEntity.ok(contentService.transitionStatus(id, ContentStatus.PROCESSING, null));
     }
 
     @Operation(summary = "Reject content (REVIEW → REJECTED)")
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ContentResponse> reject(@PathVariable UUID id) {
-        return ResponseEntity.ok(contentService.transitionStatus(id, ContentStatus.REJECTED));
+    public ResponseEntity<ContentResponse> reject(
+            @PathVariable UUID id,
+            @Valid @RequestBody RejectContentRequest req) {
+        return ResponseEntity.ok(contentService.transitionStatus(id, ContentStatus.REJECTED, req.getReason()));
     }
 
     @Operation(summary = "Publish content (PROCESSING → PUBLISHED)")
     @PostMapping("/{id}/publish")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ContentResponse> publish(@PathVariable UUID id) {
-        return ResponseEntity.ok(contentService.transitionStatus(id, ContentStatus.PUBLISHED));
+        return ResponseEntity.ok(contentService.transitionStatus(id, ContentStatus.PUBLISHED, null));
     }
 
     @Operation(summary = "Archive content")
     @PostMapping("/{id}/archive")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ContentResponse> archive(@PathVariable UUID id) {
-        return ResponseEntity.ok(contentService.transitionStatus(id, ContentStatus.ARCHIVED));
+        return ResponseEntity.ok(contentService.transitionStatus(id, ContentStatus.ARCHIVED, null));
     }
 
     @Operation(summary = "Toggle featured flag")

@@ -172,9 +172,15 @@ public class ContentService {
         contentRepository.save(content);
     }
 
+    /**
+     * @param rejectionReason only meaningful when targetStatus is REJECTED — pass null for every
+     *                        other transition. Any transition OUT of REJECTED clears a previously
+     *                        set reason, so a stale explanation never lingers past the round of
+     *                        feedback it was written for.
+     */
     @Transactional
     @CacheEvict(value = {"content-list", "content-detail", "discover"}, allEntries = true)
-    public ContentResponse transitionStatus(UUID id, ContentStatus targetStatus) {
+    public ContentResponse transitionStatus(UUID id, ContentStatus targetStatus, String rejectionReason) {
         Content content = contentRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + id));
         validateTransition(content.getStatus(), targetStatus);
@@ -182,6 +188,7 @@ public class ContentService {
         if (targetStatus == ContentStatus.PUBLISHED && content.getPublishedAt() == null) {
             content.setPublishedAt(Instant.now());
         }
+        content.setRejectionReason(targetStatus == ContentStatus.REJECTED ? rejectionReason : null);
         return ContentResponse.from(contentRepository.save(content));
     }
 

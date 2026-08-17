@@ -204,7 +204,7 @@ class PartnerControllerTest {
             false, false, 0L,
             null, null, null,
             BigDecimal.ZERO, 0,
-            List.of(), null
+            List.of(), null, null
         );
     }
 }

@@ -236,7 +236,7 @@ class PartnerServiceTest {
             UUID.randomUUID(), "New Show", "new-show", null, null,
             "SERIES", "DRAFT", "NOT_RATED", null, null, null,
             false, false, 0L, null, null, null,
-            BigDecimal.ZERO, 0, java.util.List.of(), null);
+            BigDecimal.ZERO, 0, java.util.List.of(), null, null);
         when(contentService.create(req, partnerId)).thenReturn(created);
 
         PartnerContentResponse result = partnerService.createContent(partnerId, req);
@@ -257,7 +257,7 @@ class PartnerServiceTest {
             contentId, "Renamed", "my-movie", null, null,
             "MOVIE", "DRAFT", "NOT_RATED", null, null, null,
             false, false, 0L, null, null, null,
-            BigDecimal.ZERO, 0, java.util.List.of(), null);
+            BigDecimal.ZERO, 0, java.util.List.of(), null, null);
         when(contentService.update(contentId, req)).thenReturn(updated);
 
         PartnerContentResponse result = partnerService.updateContent(partnerId, contentId, req);
@@ -291,6 +291,41 @@ class PartnerServiceTest {
             "X", null, null, null, null, null, null, null, null, null, null, null);
 
         assertThatThrownBy(() -> partnerService.updateContent(partnerId, contentId, req))
+            .isInstanceOf(ResponseStatusException.class)
+            .extracting("status").isEqualTo(org.springframework.http.HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void getContent_ownedByCaller_returnsIt() {
+        UUID partnerId = UUID.randomUUID();
+        UUID contentId = UUID.randomUUID();
+        Content owned = makeContent(contentId, partnerId);
+        when(contentRepo.findById(contentId)).thenReturn(Optional.of(owned));
+
+        PartnerContentResponse result = partnerService.getContent(partnerId, contentId);
+
+        assertThat(result.id()).isEqualTo(contentId);
+    }
+
+    @Test
+    void getContent_notOwnedByCaller_throws404_notFoundNot403() {
+        UUID partnerId = UUID.randomUUID();
+        UUID contentId = UUID.randomUUID();
+        Content ownedBySomeoneElse = makeContent(contentId, UUID.randomUUID());
+        when(contentRepo.findById(contentId)).thenReturn(Optional.of(ownedBySomeoneElse));
+
+        assertThatThrownBy(() -> partnerService.getContent(partnerId, contentId))
+            .isInstanceOf(ResponseStatusException.class)
+            .extracting("status").isEqualTo(org.springframework.http.HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void getContent_contentNotFound_throws404() {
+        UUID partnerId = UUID.randomUUID();
+        UUID contentId = UUID.randomUUID();
+        when(contentRepo.findById(contentId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> partnerService.getContent(partnerId, contentId))
             .isInstanceOf(ResponseStatusException.class)
             .extracting("status").isEqualTo(org.springframework.http.HttpStatus.NOT_FOUND);
     }

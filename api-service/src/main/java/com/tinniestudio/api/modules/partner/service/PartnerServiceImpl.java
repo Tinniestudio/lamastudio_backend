@@ -108,6 +108,12 @@ public class PartnerServiceImpl implements PartnerService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public PartnerContentResponse getContent(UUID partnerId, UUID contentId) {
+        return PartnerContentResponse.from(requireOwnedContent(partnerId, contentId));
+    }
+
+    @Override
     @Transactional
     public PartnerContentResponse createContent(UUID partnerId, CreateContentRequest req) {
         ContentResponse created = contentService.create(req, partnerId);
@@ -117,7 +123,7 @@ public class PartnerServiceImpl implements PartnerService {
     @Override
     @Transactional
     public PartnerContentResponse updateContent(UUID partnerId, UUID contentId, UpdateContentRequest req) {
-        assertOwnedByPartner(partnerId, contentId);
+        requireOwnedContent(partnerId, contentId);
         ContentResponse updated = contentService.update(contentId, req);
         return PartnerContentResponse.from(updated);
     }
@@ -128,11 +134,12 @@ public class PartnerServiceImpl implements PartnerService {
      * checks: a partner probing other partners' content ids can't distinguish "doesn't exist"
      * from "exists but isn't yours".
      */
-    private void assertOwnedByPartner(UUID partnerId, UUID contentId) {
+    private Content requireOwnedContent(UUID partnerId, UUID contentId) {
         Content content = contentRepo.findById(contentId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId));
         if (!partnerId.equals(content.getCreatedBy())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId);
         }
+        return content;
     }
 }

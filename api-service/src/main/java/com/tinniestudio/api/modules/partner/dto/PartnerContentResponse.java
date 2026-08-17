@@ -22,7 +22,7 @@ public record PartnerContentResponse(
     Boolean featured, Boolean comingSoon, Long viewCount,
     Integer durationSeconds, String posterUrl, String thumbnailUrl,
     BigDecimal averageRating, Integer reviewCount,
-    List<String> categoryNames, Instant publishedAt
+    List<String> categoryNames, Instant publishedAt, String rejectionReason
 ) {
     public static PartnerContentResponse from(Content c) {
         return new PartnerContentResponse(
@@ -34,7 +34,7 @@ public record PartnerContentResponse(
             c.getDurationSeconds(), c.getPosterUrl(), c.getThumbnailUrl(),
             c.getAverageRating(), c.getReviewCount(),
             c.getCategories().stream().map(cat -> cat.getName()).toList(),
-            c.getPublishedAt()
+            c.getPublishedAt(), c.getRejectionReason()
         );
     }
 
@@ -47,7 +47,7 @@ public record PartnerContentResponse(
             c.featured(), c.comingSoon(), c.viewCount(),
             c.durationSeconds(), c.posterUrl(), c.thumbnailUrl(),
             c.averageRating(), c.reviewCount(),
-            c.categoryNames(), c.publishedAt()
+            c.categoryNames(), c.publishedAt(), c.rejectionReason()
         );
     }
 }

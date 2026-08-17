@@ -24,6 +24,8 @@ public interface PartnerService {
 
     // ── Content: merged listing + management (Batch 13 #7/#8/#10) ──────────────
     Page<PartnerContentResponse> listContents(UUID partnerId, ContentStatus status, String q, Pageable pageable);
+    /** 404 if contentId doesn't exist or isn't owned by partnerId — same as every other partner-scoped lookup here. */
+    PartnerContentResponse getContent(UUID partnerId, UUID contentId);
     PartnerContentResponse createContent(UUID partnerId, CreateContentRequest req);
     PartnerContentResponse updateContent(UUID partnerId, UUID contentId, UpdateContentRequest req);
 }

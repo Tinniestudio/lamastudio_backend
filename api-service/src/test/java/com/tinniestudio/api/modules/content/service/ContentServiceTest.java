@@ -311,7 +311,7 @@ class ContentServiceTest {
             when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
             when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            ContentResponse result = contentService.transitionStatus(contentId, ContentStatus.REVIEW);
+            ContentResponse result = contentService.transitionStatus(contentId, ContentStatus.REVIEW, null);
 
             assertThat(result.status()).isEqualTo("REVIEW");
         }
@@ -322,7 +322,7 @@ class ContentServiceTest {
             content.setStatus(ContentStatus.DRAFT);
             when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
 
-            assertThatThrownBy(() -> contentService.transitionStatus(contentId, ContentStatus.PUBLISHED))
+            assertThatThrownBy(() -> contentService.transitionStatus(contentId, ContentStatus.PUBLISHED, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("400");
         }
@@ -334,7 +334,7 @@ class ContentServiceTest {
             when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
             when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            ContentResponse result = contentService.transitionStatus(contentId, ContentStatus.PUBLISHED);
+            ContentResponse result = contentService.transitionStatus(contentId, ContentStatus.PUBLISHED, null);
 
             assertThat(result.status()).isEqualTo("PUBLISHED");
             assertThat(result.publishedAt()).isNotNull();
@@ -346,9 +346,36 @@ class ContentServiceTest {
             content.setStatus(ContentStatus.ARCHIVED);
             when(contentRepository.findById(content.getId())).thenReturn(Optional.of(content));
 
-            assertThatThrownBy(() -> contentService.transitionStatus(content.getId(), ContentStatus.DRAFT))
+            assertThatThrownBy(() -> contentService.transitionStatus(content.getId(), ContentStatus.DRAFT, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
+        }
+
+        @Test
+        @DisplayName("REVIEW to REJECTED stores the rejection reason")
+        void reviewToRejectedStoresReason() {
+            content.setStatus(ContentStatus.REVIEW);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+            when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            ContentResponse result = contentService.transitionStatus(contentId, ContentStatus.REJECTED, "Poster violates guidelines");
+
+            assertThat(result.status()).isEqualTo("REJECTED");
+            assertThat(result.rejectionReason()).isEqualTo("Poster violates guidelines");
+        }
+
+        @Test
+        @DisplayName("REJECTED to DRAFT clears the stale rejection reason")
+        void rejectedToDraftClearsReason() {
+            content.setStatus(ContentStatus.REJECTED);
+            content.setRejectionReason("Old reason from a previous round");
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+            when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            ContentResponse result = contentService.transitionStatus(contentId, ContentStatus.DRAFT, null);
+
+            assertThat(result.status()).isEqualTo("DRAFT");
+            assertThat(result.rejectionReason()).isNull();
         }
     }
 
