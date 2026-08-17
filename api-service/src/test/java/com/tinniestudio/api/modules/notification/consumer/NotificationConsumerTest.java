@@ -53,9 +53,11 @@ class NotificationConsumerTest {
 
         verify(videoAssetRepo).save(asset);
         assertThat(asset.getProcessingStatus()).isEqualTo(ProcessingStatus.READY);
+        // CONTENT + contentId, not VIDEO_ASSET + assetId — the frontend has a content page to
+        // deep-link to, not a video-asset detail view (B3 fix).
         verify(notificationService).sendNotification(
             eq(creatorId), eq(NotificationEventType.CONTENT_PROCESSED),
-            eq("VIDEO_ASSET"), eq(assetId));
+            eq("CONTENT"), eq(contentId));
     }
 
     @Test
@@ -88,5 +90,36 @@ class NotificationConsumerTest {
     void handleEvent_skips_whenTypeIsUnknown() {
         consumer.handleNotificationEvent(Map.of("type", "UNKNOWN_EVENT"));
         verifyNoInteractions(videoAssetRepo, contentRepo, notificationService);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("still updates the asset's processing status even when contentId can't be resolved (no notification sent)")
+    void handleContentProcessed_updatesStatusButSkipsNotification_whenContentNotFound() {
+        // Reproduces today's real-world path: VideoAsset.contentId is never populated by the
+        // upload-completion flow (see UploadService.completeSession), so media-worker's publisher
+        // sends an empty-string contentId, which fails UUID.fromString and is caught by the outer
+        // try/catch — before that, though, a *resolvable* but nonexistent contentId hits this same
+        // early return. Either way: the VideoAsset status update must not depend on notification
+        // delivery succeeding.
+        UUID assetId = UUID.randomUUID();
+        UUID contentId = UUID.randomUUID();
+
+        VideoAsset asset = new VideoAsset();
+        asset.setProcessingStatus(ProcessingStatus.PROCESSING);
+
+        when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+        when(contentRepo.findById(contentId)).thenReturn(Optional.empty());
+        when(videoAssetRepo.save(any())).thenReturn(asset);
+
+        consumer.handleNotificationEvent(Map.of(
+            "type", "CONTENT_PROCESSED",
+            "videoAssetId", assetId.toString(),
+            "contentId", contentId.toString(),
+            "status", "READY"
+        ));
+
+        assertThat(asset.getProcessingStatus()).isEqualTo(ProcessingStatus.READY);
+        verify(videoAssetRepo).save(asset);
+        verifyNoInteractions(notificationService);
     }
 }

@@ -49,11 +49,24 @@ public class NotificationConsumer {
                 log.warn("Content not found for notification: {}", contentId);
                 return;
             }
+            // CONTENT, not VIDEO_ASSET: the notification is about a piece of content finishing
+            // processing, and the frontend has a content page to deep-link to — it has no
+            // video-asset detail view. contentId was already resolved above (it's how we found
+            // the recipient), it just wasn't what got sent as the reference before this fix.
+            //
+            // Known limitation: media-worker's publisher (VideoProcessingService) only includes a
+            // real contentId in this message when VideoAsset.contentId is set, which nothing in
+            // the upload-completion path populates yet (see UploadService.completeSession) — so
+            // in practice this branch is rarely reached today; contentRepo.findById(contentId)
+            // above returns empty and we return early instead. That's the video-upload-to-content
+            // linking gap (tracked separately, not fixed here) — this fix is still correct for the
+            // day that gap closes, and is a strict improvement over the old VIDEO_ASSET reference,
+            // which could never deep-link correctly even with a valid id.
             notificationService.sendNotification(
                 content.getCreatedBy(),
                 NotificationEventType.CONTENT_PROCESSED,
-                "VIDEO_ASSET",
-                assetId
+                "CONTENT",
+                contentId
             );
         } catch (Exception e) {
             log.error("Error processing CONTENT_PROCESSED notification: {}", e.getMessage(), e);
