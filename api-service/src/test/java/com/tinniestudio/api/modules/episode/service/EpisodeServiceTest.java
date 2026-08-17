@@ -22,6 +22,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
@@ -47,18 +50,20 @@ class EpisodeServiceTest {
     private Content content;
     private Season season;
     private UUID seasonId;
+    private UUID ownerId;
 
     @BeforeEach
     void setUp() {
         UUID contentId = UUID.randomUUID();
         seasonId = UUID.randomUUID();
+        ownerId = UUID.randomUUID();
 
         content = new Content();
         content.setId(contentId);
         content.setTitle("Breaking Bad");
         content.setType(ContentType.SERIES);
         content.setStatus(ContentStatus.DRAFT);
-        content.setCreatedBy(UUID.randomUUID());
+        content.setCreatedBy(ownerId);
         content.setComingSoon(false);
         content.setFeatured(false);
         content.setViewCount(0L);
@@ -71,6 +76,25 @@ class EpisodeServiceTest {
         season.setSeasonNumber(1);
         season.setTitle("Season 1");
         season.setEpisodes(new ArrayList<>());
+    }
+
+    private UserDetails principalFor(UUID userId) {
+        UserDetails principal = mock(UserDetails.class);
+        lenient().when(principal.getUsername()).thenReturn(userId.toString());
+        List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_PARTNER"));
+        lenient().doReturn(authorities).when(principal).getAuthorities();
+        return principal;
+    }
+
+    private UserDetails adminPrincipal() {
+        UserDetails principal = mock(UserDetails.class);
+        List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        lenient().doReturn(authorities).when(principal).getAuthorities();
+        return principal;
+    }
+
+    private UserDetails ownerPrincipal() {
+        return principalFor(ownerId);
     }
 
     private Episode buildEpisode(int number) {
@@ -208,7 +232,7 @@ class EpisodeServiceTest {
                 return ep;
             });
 
-            EpisodeResponse result = episodeService.create(seasonId, req);
+            EpisodeResponse result = episodeService.create(seasonId, req, ownerPrincipal());
 
             assertThat(result.episodeNumber()).isEqualTo(3);
         }
@@ -227,7 +251,7 @@ class EpisodeServiceTest {
                 return ep;
             });
 
-            EpisodeResponse result = episodeService.create(seasonId, req);
+            EpisodeResponse result = episodeService.create(seasonId, req, ownerPrincipal());
 
             assertThat(result.episodeNumber()).isEqualTo(1);
         }
@@ -246,7 +270,7 @@ class EpisodeServiceTest {
                 return ep;
             });
 
-            EpisodeResponse result = episodeService.create(seasonId, req);
+            EpisodeResponse result = episodeService.create(seasonId, req, ownerPrincipal());
 
             assertThat(result.episodeNumber()).isEqualTo(5);
             assertThat(result.title()).isEqualTo("Episode Five");
@@ -261,7 +285,7 @@ class EpisodeServiceTest {
             when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
             when(episodeRepository.existsBySeasonIdAndEpisodeNumber(seasonId, 2)).thenReturn(true);
 
-            assertThatThrownBy(() -> episodeService.create(seasonId, req))
+            assertThatThrownBy(() -> episodeService.create(seasonId, req, ownerPrincipal()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(409));
         }
@@ -277,7 +301,7 @@ class EpisodeServiceTest {
             when(episodeRepository.saveAndFlush(any(Episode.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
-            assertThatThrownBy(() -> episodeService.create(seasonId, req))
+            assertThatThrownBy(() -> episodeService.create(seasonId, req, ownerPrincipal()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(409));
         }
@@ -291,9 +315,39 @@ class EpisodeServiceTest {
             );
             when(seasonRepository.findById(missingSeasonId)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> episodeService.create(missingSeasonId, req))
+            assertThatThrownBy(() -> episodeService.create(missingSeasonId, req, ownerPrincipal()))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
+        }
+
+        @Test
+        @DisplayName("throws 404 when caller is a different partner (not the content owner)")
+        void throws404WhenNotOwner() {
+            CreateEpisodeRequest req = new CreateEpisodeRequest(1, "Episode One", null, null, null, null);
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
+
+            assertThatThrownBy(() -> episodeService.create(seasonId, req, principalFor(UUID.randomUUID())))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
+
+            verifyNoInteractions(episodeRepository);
+        }
+
+        @Test
+        @DisplayName("admin can create an episode on content they don't own")
+        void adminCanCreateOnAnyContent() {
+            CreateEpisodeRequest req = new CreateEpisodeRequest(1, "Episode One", null, null, null, null);
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
+            when(episodeRepository.existsBySeasonIdAndEpisodeNumber(seasonId, 1)).thenReturn(false);
+            when(episodeRepository.saveAndFlush(any(Episode.class))).thenAnswer(inv -> {
+                Episode ep = inv.getArgument(0);
+                ep.setId(UUID.randomUUID());
+                return ep;
+            });
+
+            EpisodeResponse result = episodeService.create(seasonId, req, adminPrincipal());
+
+            assertThat(result.episodeNumber()).isEqualTo(1);
         }
     }
 
@@ -314,7 +368,7 @@ class EpisodeServiceTest {
             when(episodeRepository.findById(epId)).thenReturn(Optional.of(ep));
             when(episodeRepository.save(any(Episode.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            EpisodeResponse result = episodeService.update(seasonId, epId, req);
+            EpisodeResponse result = episodeService.update(seasonId, epId, req, ownerPrincipal());
 
             assertThat(result.title()).isEqualTo("Updated Title");
             assertThat(result.thumbnailUrl()).isEqualTo("https://old-thumb.jpg"); // unchanged
@@ -329,9 +383,36 @@ class EpisodeServiceTest {
 
             when(episodeRepository.findById(epId)).thenReturn(Optional.of(ep));
 
-            assertThatThrownBy(() -> episodeService.update(wrongSeasonId, epId, new UpdateEpisodeRequest(null, null, null, null, null)))
+            assertThatThrownBy(() -> episodeService.update(wrongSeasonId, epId, new UpdateEpisodeRequest(null, null, null, null, null), ownerPrincipal()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
+        }
+
+        @Test
+        @DisplayName("throws 404 when caller is a different partner (not the content owner)")
+        void throws404WhenNotOwner() {
+            Episode ep = buildEpisode(1);
+            when(episodeRepository.findById(ep.getId())).thenReturn(Optional.of(ep));
+
+            assertThatThrownBy(() -> episodeService.update(
+                    seasonId, ep.getId(), new UpdateEpisodeRequest("Hijacked", null, null, null, null), principalFor(UUID.randomUUID())))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
+
+            verify(episodeRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("admin can update an episode on content they don't own")
+        void adminCanUpdateAnyContent() {
+            Episode ep = buildEpisode(1);
+            when(episodeRepository.findById(ep.getId())).thenReturn(Optional.of(ep));
+            when(episodeRepository.save(any(Episode.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            EpisodeResponse result = episodeService.update(
+                seasonId, ep.getId(), new UpdateEpisodeRequest("Admin Edit", null, null, null, null), adminPrincipal());
+
+            assertThat(result.title()).isEqualTo("Admin Edit");
         }
     }
 
@@ -378,12 +459,13 @@ class EpisodeServiceTest {
             // reorder: ep1 should become #1, ep2 should become #2
             ReorderEpisodesRequest req = new ReorderEpisodesRequest(List.of(ep1Id, ep2Id));
 
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
             when(episodeRepository.findBySeasonIdOrderByEpisodeNumberAsc(seasonId)).thenReturn(List.of(ep1, ep2));
             when(episodeRepository.findById(ep1Id)).thenReturn(Optional.of(ep1));
             when(episodeRepository.findById(ep2Id)).thenReturn(Optional.of(ep2));
             when(episodeRepository.save(any(Episode.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            episodeService.reorder(seasonId, req);
+            episodeService.reorder(seasonId, req, ownerPrincipal());
 
             // After phase 2, ep1 should be 1 and ep2 should be 2
             assertThat(ep1.getEpisodeNumber()).isEqualTo(1);
@@ -398,11 +480,12 @@ class EpisodeServiceTest {
             Episode ep1 = buildEpisode(1);
             Episode ep2 = buildEpisode(2);
 
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
             when(episodeRepository.findBySeasonIdOrderByEpisodeNumberAsc(seasonId)).thenReturn(List.of(ep1, ep2));
 
             ReorderEpisodesRequest req = new ReorderEpisodesRequest(List.of(ep1.getId())); // only 1 of 2
 
-            assertThatThrownBy(() -> episodeService.reorder(seasonId, req))
+            assertThatThrownBy(() -> episodeService.reorder(seasonId, req, ownerPrincipal()))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting("status")
                 .isEqualTo(HttpStatus.BAD_REQUEST);
@@ -422,6 +505,7 @@ class EpisodeServiceTest {
             Episode ep2 = new Episode(); ep2.setId(UUID.randomUUID()); ep2.setEpisodeNumber(2); ep2.setTitle("E2");
             ep2.setSeason(wrongSeason); // wrong season
 
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
             when(episodeRepository.findBySeasonIdOrderByEpisodeNumberAsc(seasonId)).thenReturn(List.of(ep1, ep2));
             when(episodeRepository.findById(ep1.getId())).thenReturn(Optional.of(ep1));
             when(episodeRepository.findById(ep2.getId())).thenReturn(Optional.of(ep2));
@@ -429,10 +513,25 @@ class EpisodeServiceTest {
 
             ReorderEpisodesRequest req = new ReorderEpisodesRequest(List.of(ep1.getId(), ep2.getId()));
 
-            assertThatThrownBy(() -> episodeService.reorder(seasonId, req))
+            assertThatThrownBy(() -> episodeService.reorder(seasonId, req, ownerPrincipal()))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting("status")
                 .isEqualTo(HttpStatus.BAD_REQUEST);
+        }
+
+        @Test
+        @DisplayName("throws 404 when caller is a different partner (not the content owner)")
+        void throws404WhenNotOwner() {
+            Episode ep1 = buildEpisode(1);
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
+
+            ReorderEpisodesRequest req = new ReorderEpisodesRequest(List.of(ep1.getId()));
+
+            assertThatThrownBy(() -> episodeService.reorder(seasonId, req, principalFor(UUID.randomUUID())))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
+
+            verifyNoInteractions(episodeRepository);
         }
     }
 }

@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -30,8 +32,9 @@ public class AdminEpisodeController {
     @PostMapping
     public ResponseEntity<EpisodeResponse> create(
             @PathVariable UUID seasonId,
-            @Valid @RequestBody CreateEpisodeRequest req) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(episodeService.create(seasonId, req));
+            @Valid @RequestBody CreateEpisodeRequest req,
+            @AuthenticationPrincipal UserDetails principal) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(episodeService.create(seasonId, req, principal));
     }
 
     @Operation(summary = "Update episode metadata")
@@ -39,8 +42,9 @@ public class AdminEpisodeController {
     public ResponseEntity<EpisodeResponse> update(
             @PathVariable UUID seasonId,
             @PathVariable UUID id,
-            @Valid @RequestBody UpdateEpisodeRequest req) {
-        return ResponseEntity.ok(episodeService.update(seasonId, id, req));
+            @Valid @RequestBody UpdateEpisodeRequest req,
+            @AuthenticationPrincipal UserDetails principal) {
+        return ResponseEntity.ok(episodeService.update(seasonId, id, req, principal));
     }
 
     @Operation(summary = "Delete an episode")
@@ -55,8 +59,9 @@ public class AdminEpisodeController {
     @PatchMapping("/reorder")
     public ResponseEntity<Void> reorder(
             @PathVariable UUID seasonId,
-            @Valid @RequestBody ReorderEpisodesRequest req) {
-        episodeService.reorder(seasonId, req);
+            @Valid @RequestBody ReorderEpisodesRequest req,
+            @AuthenticationPrincipal UserDetails principal) {
+        episodeService.reorder(seasonId, req, principal);
         return ResponseEntity.ok().build();
     }
 }

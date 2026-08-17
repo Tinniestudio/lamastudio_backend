@@ -28,4 +28,16 @@ public final class CurrentUser {
     public static UUID idOrNull(UserDetails principal) {
         return principal != null ? id(principal) : null;
     }
+
+    /**
+     * Was inlined identically at every ownership-check call site (e.g.
+     * {@code AdminContentController.assertOwnedByCallerOrAdmin}) — centralized here so the
+     * {@code "ROLE_ADMIN"} authority string only needs to match Spring Security's actual
+     * convention in one place.
+     */
+    public static boolean isAdmin(UserDetails principal) {
+        if (principal == null) return false;
+        return principal.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+    }
 }

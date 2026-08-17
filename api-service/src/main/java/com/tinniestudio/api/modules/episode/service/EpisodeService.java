@@ -6,12 +6,15 @@ import com.tinniestudio.api.modules.episode.dto.ReorderEpisodesRequest;
 import com.tinniestudio.api.modules.episode.dto.UpdateEpisodeRequest;
 import com.tinniestudio.api.modules.episode.repository.EpisodeRepository;
 import com.tinniestudio.api.modules.season.repository.SeasonRepository;
+import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import com.tinniestudio.api.shared.entity.Episode;
 import com.tinniestudio.api.shared.entity.Season;
+import com.tinniestudio.api.shared.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -51,9 +54,10 @@ public class EpisodeService {
     }
 
     @Transactional
-    public EpisodeResponse create(UUID seasonId, CreateEpisodeRequest req) {
+    public EpisodeResponse create(UUID seasonId, CreateEpisodeRequest req, UserDetails principal) {
         Season season = seasonRepository.findById(seasonId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + seasonId));
+        assertOwnedByCallerOrAdmin(season.getContent(), principal);
 
         int episodeNumber;
         if (req.episodeNumber() != null) {
@@ -85,12 +89,13 @@ public class EpisodeService {
     }
 
     @Transactional
-    public EpisodeResponse update(UUID seasonId, UUID id, UpdateEpisodeRequest req) {
+    public EpisodeResponse update(UUID seasonId, UUID id, UpdateEpisodeRequest req, UserDetails principal) {
         Episode episode = episodeRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found: " + id));
         if (!episode.getSeason().getId().equals(seasonId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found: " + id);
         }
+        assertOwnedByCallerOrAdmin(episode.getSeason().getContent(), principal);
         if (req.title() != null) {
             if (req.title().isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "title must not be blank");
             episode.setTitle(req.title());
@@ -104,6 +109,8 @@ public class EpisodeService {
 
     @Transactional
     public void delete(UUID seasonId, UUID id) {
+        // Delete stays ADMIN-only at the controller (@PreAuthorize("hasRole('ADMIN')")), so no
+        // ownership check needed here — every caller who reaches this is already an admin.
         Episode episode = episodeRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found: " + id));
         if (!episode.getSeason().getId().equals(seasonId)) {
@@ -113,7 +120,11 @@ public class EpisodeService {
     }
 
     @Transactional
-    public void reorder(UUID seasonId, ReorderEpisodesRequest req) {
+    public void reorder(UUID seasonId, ReorderEpisodesRequest req, UserDetails principal) {
+        Season season = seasonRepository.findById(seasonId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + seasonId));
+        assertOwnedByCallerOrAdmin(season.getContent(), principal);
+
         List<UUID> orderedIds = req.episodeIds();
         List<Episode> allEpisodes = episodeRepository.findBySeasonIdOrderByEpisodeNumberAsc(seasonId);
         if (allEpisodes.size() != orderedIds.size()) {
@@ -142,6 +153,22 @@ public class EpisodeService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found during reorder: " + epId));
             ep.setEpisodeNumber(number++);
             episodeRepository.save(ep);
+        }
+    }
+
+    /**
+     * 404 (not 403) on a content the caller doesn't own — same enumeration-safe pattern as
+     * {@code AdminContentController.assertOwnedByCallerOrAdmin},
+     * {@code SeasonService.assertOwnedByCallerOrAdmin}, and
+     * {@code PartnerServiceImpl.assertOwnedByPartner}. Admins bypass entirely.
+     */
+    private void assertOwnedByCallerOrAdmin(Content content, UserDetails principal) {
+        if (CurrentUser.isAdmin(principal)) {
+            return;
+        }
+        UUID callerId = CurrentUser.id(principal);
+        if (!callerId.equals(content.getCreatedBy())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + content.getId());
         }
     }
 }

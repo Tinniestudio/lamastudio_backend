@@ -8,8 +8,10 @@ import com.tinniestudio.api.modules.season.repository.SeasonRepository;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import com.tinniestudio.api.shared.entity.Season;
+import com.tinniestudio.api.shared.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -49,9 +51,10 @@ public class SeasonService {
     }
 
     @Transactional
-    public SeasonResponse create(UUID contentId, CreateSeasonRequest req) {
+    public SeasonResponse create(UUID contentId, CreateSeasonRequest req, UserDetails principal) {
         Content content = contentRepository.findById(contentId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId));
+        assertOwnedByCallerOrAdmin(content, principal);
 
         int seasonNumber;
         if (req.seasonNumber() != null) {
@@ -83,12 +86,13 @@ public class SeasonService {
     }
 
     @Transactional
-    public SeasonResponse update(UUID contentId, UUID id, UpdateSeasonRequest req) {
+    public SeasonResponse update(UUID contentId, UUID id, UpdateSeasonRequest req, UserDetails principal) {
         Season season = seasonRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + id));
         if (!season.getContent().getId().equals(contentId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + id);
         }
+        assertOwnedByCallerOrAdmin(season.getContent(), principal);
         if (req.title() != null)        season.setTitle(req.title());
         if (req.description() != null)  season.setDescription(req.description());
         if (req.releaseDate() != null)  season.setReleaseDate(req.releaseDate());
@@ -99,11 +103,28 @@ public class SeasonService {
 
     @Transactional
     public void delete(UUID contentId, UUID id) {
+        // Delete stays ADMIN-only at the controller (@PreAuthorize("hasRole('ADMIN')")), so no
+        // ownership check needed here — every caller who reaches this is already an admin.
         Season season = seasonRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + id));
         if (!season.getContent().getId().equals(contentId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + id);
         }
         seasonRepository.delete(season);
+    }
+
+    /**
+     * 404 (not 403) on a content the caller doesn't own — same enumeration-safe pattern as
+     * {@code AdminContentController.assertOwnedByCallerOrAdmin} and
+     * {@code PartnerServiceImpl.assertOwnedByPartner}. Admins bypass entirely.
+     */
+    private void assertOwnedByCallerOrAdmin(Content content, UserDetails principal) {
+        if (CurrentUser.isAdmin(principal)) {
+            return;
+        }
+        UUID callerId = CurrentUser.id(principal);
+        if (!callerId.equals(content.getCreatedBy())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + content.getId());
+        }
     }
 }

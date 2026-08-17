@@ -18,6 +18,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
@@ -42,22 +45,45 @@ class SeasonServiceTest {
 
     private Content seriesContent;
     private UUID contentId;
+    private UUID ownerId;
 
     @BeforeEach
     void setUp() {
         contentId = UUID.randomUUID();
+        ownerId = UUID.randomUUID();
 
         seriesContent = new Content();
         seriesContent.setId(contentId);
         seriesContent.setTitle("Breaking Bad");
         seriesContent.setType(ContentType.SERIES);
         seriesContent.setStatus(ContentStatus.DRAFT);
-        seriesContent.setCreatedBy(UUID.randomUUID());
+        seriesContent.setCreatedBy(ownerId);
         seriesContent.setComingSoon(false);
         seriesContent.setFeatured(false);
         seriesContent.setViewCount(0L);
         seriesContent.setMaturityRating(MaturityRating.NOT_RATED);
         seriesContent.setCategories(new java.util.HashSet<>());
+    }
+
+    /** Non-admin principal, username = the given user id (matches JwtAuthenticationFilter's convention). */
+    private UserDetails principalFor(UUID userId) {
+        UserDetails principal = mock(UserDetails.class);
+        lenient().when(principal.getUsername()).thenReturn(userId.toString());
+        List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_PARTNER"));
+        lenient().doReturn(authorities).when(principal).getAuthorities();
+        return principal;
+    }
+
+    private UserDetails adminPrincipal() {
+        UserDetails principal = mock(UserDetails.class);
+        List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        lenient().doReturn(authorities).when(principal).getAuthorities();
+        return principal;
+    }
+
+    /** The owning partner — the common case for tests that aren't specifically about ownership. */
+    private UserDetails ownerPrincipal() {
+        return principalFor(ownerId);
     }
 
     private Season buildSeason(int number) {
@@ -186,7 +212,7 @@ class SeasonServiceTest {
                 return s;
             });
 
-            SeasonResponse result = seasonService.create(contentId, req);
+            SeasonResponse result = seasonService.create(contentId, req, ownerPrincipal());
 
             assertThat(result.seasonNumber()).isEqualTo(3);
         }
@@ -206,7 +232,7 @@ class SeasonServiceTest {
                 return s;
             });
 
-            SeasonResponse result = seasonService.create(contentId, req);
+            SeasonResponse result = seasonService.create(contentId, req, ownerPrincipal());
 
             assertThat(result.seasonNumber()).isEqualTo(1);
         }
@@ -226,7 +252,7 @@ class SeasonServiceTest {
                 return s;
             });
 
-            SeasonResponse result = seasonService.create(contentId, req);
+            SeasonResponse result = seasonService.create(contentId, req, ownerPrincipal());
 
             assertThat(result.seasonNumber()).isEqualTo(5);
             assertThat(result.title()).isEqualTo("Season Five");
@@ -241,7 +267,7 @@ class SeasonServiceTest {
             when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
             when(seasonRepository.existsByContentIdAndSeasonNumber(contentId, 2)).thenReturn(true);
 
-            assertThatThrownBy(() -> seasonService.create(contentId, req))
+            assertThatThrownBy(() -> seasonService.create(contentId, req, ownerPrincipal()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(409));
         }
@@ -255,9 +281,40 @@ class SeasonServiceTest {
             );
             when(contentRepository.findById(missingContentId)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> seasonService.create(missingContentId, req))
+            assertThatThrownBy(() -> seasonService.create(missingContentId, req, ownerPrincipal()))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
+        }
+
+        @Test
+        @DisplayName("throws 404 when caller is a different partner (not the content owner)")
+        void throws404WhenNotOwner() {
+            CreateSeasonRequest req = new CreateSeasonRequest(1, "Season One", null, null, null, null);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
+
+            assertThatThrownBy(() -> seasonService.create(contentId, req, principalFor(UUID.randomUUID())))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
+
+            verifyNoInteractions(seasonRepository);
+        }
+
+        @Test
+        @DisplayName("admin can create a season on content they don't own")
+        void adminCanCreateOnAnyContent() {
+            CreateSeasonRequest req = new CreateSeasonRequest(1, "Season One", null, null, null, null);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
+            when(seasonRepository.existsByContentIdAndSeasonNumber(contentId, 1)).thenReturn(false);
+            when(seasonRepository.saveAndFlush(any(Season.class))).thenAnswer(inv -> {
+                Season s = inv.getArgument(0);
+                s.setId(UUID.randomUUID());
+                s.setEpisodes(new ArrayList<>());
+                return s;
+            });
+
+            SeasonResponse result = seasonService.create(contentId, req, adminPrincipal());
+
+            assertThat(result.seasonNumber()).isEqualTo(1);
         }
     }
 
@@ -278,7 +335,7 @@ class SeasonServiceTest {
             when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(s));
             when(seasonRepository.save(any(Season.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            SeasonResponse result = seasonService.update(contentId, seasonId, req);
+            SeasonResponse result = seasonService.update(contentId, seasonId, req, ownerPrincipal());
 
             assertThat(result.title()).isEqualTo("Updated Title");
             assertThat(result.posterUrl()).isEqualTo("https://old-poster.jpg"); // unchanged
@@ -290,7 +347,7 @@ class SeasonServiceTest {
             UUID missingId = UUID.randomUUID();
             when(seasonRepository.findById(missingId)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> seasonService.update(contentId, missingId, new UpdateSeasonRequest(null, null, null, null, null)))
+            assertThatThrownBy(() -> seasonService.update(contentId, missingId, new UpdateSeasonRequest(null, null, null, null, null), ownerPrincipal()))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
         }
@@ -307,9 +364,36 @@ class SeasonServiceTest {
             UUID wrongContentId = UUID.randomUUID();
             when(seasonRepository.findById(season.getId())).thenReturn(Optional.of(season));
 
-            assertThatThrownBy(() -> seasonService.update(wrongContentId, season.getId(), new UpdateSeasonRequest(null, null, null, null, null)))
+            assertThatThrownBy(() -> seasonService.update(wrongContentId, season.getId(), new UpdateSeasonRequest(null, null, null, null, null), ownerPrincipal()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
+        }
+
+        @Test
+        @DisplayName("throws 404 when caller is a different partner (not the content owner)")
+        void updateThrowsWhenNotOwner() {
+            Season s = buildSeason(1);
+            when(seasonRepository.findById(s.getId())).thenReturn(Optional.of(s));
+
+            assertThatThrownBy(() -> seasonService.update(
+                    contentId, s.getId(), new UpdateSeasonRequest("Hijacked", null, null, null, null), principalFor(UUID.randomUUID())))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
+
+            verify(seasonRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("admin can update a season on content they don't own")
+        void adminCanUpdateAnyContent() {
+            Season s = buildSeason(1);
+            when(seasonRepository.findById(s.getId())).thenReturn(Optional.of(s));
+            when(seasonRepository.save(any(Season.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            SeasonResponse result = seasonService.update(
+                contentId, s.getId(), new UpdateSeasonRequest("Admin Edit", null, null, null, null), adminPrincipal());
+
+            assertThat(result.title()).isEqualTo("Admin Edit");
         }
     }
 
@@ -353,7 +437,7 @@ class SeasonServiceTest {
             when(seasonRepository.saveAndFlush(any(Season.class)))
                 .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
 
-            assertThatThrownBy(() -> seasonService.create(seriesContent.getId(), req))
+            assertThatThrownBy(() -> seasonService.create(seriesContent.getId(), req, ownerPrincipal()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(409));
         }

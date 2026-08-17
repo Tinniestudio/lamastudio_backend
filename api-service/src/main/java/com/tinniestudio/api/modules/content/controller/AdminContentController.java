@@ -125,9 +125,7 @@ public class AdminContentController {
      * any other partner's content by id. Admins bypass this check entirely.
      */
     private void assertOwnedByCallerOrAdmin(UUID contentId, UserDetails principal) {
-        boolean isAdmin = principal.getAuthorities().stream()
-            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
-        if (isAdmin) {
+        if (CurrentUser.isAdmin(principal)) {
             return;
         }
         Content content = contentRepository.findById(contentId)

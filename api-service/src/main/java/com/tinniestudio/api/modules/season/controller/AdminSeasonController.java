@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -28,8 +30,9 @@ public class AdminSeasonController {
     @PostMapping
     public ResponseEntity<SeasonResponse> create(
             @PathVariable UUID contentId,
-            @RequestBody CreateSeasonRequest req) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(seasonService.create(contentId, req));
+            @RequestBody CreateSeasonRequest req,
+            @AuthenticationPrincipal UserDetails principal) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(seasonService.create(contentId, req, principal));
     }
 
     @Operation(summary = "Update season metadata")
@@ -37,8 +40,9 @@ public class AdminSeasonController {
     public ResponseEntity<SeasonResponse> update(
             @PathVariable UUID contentId,
             @PathVariable UUID id,
-            @RequestBody UpdateSeasonRequest req) {
-        return ResponseEntity.ok(seasonService.update(contentId, id, req));
+            @RequestBody UpdateSeasonRequest req,
+            @AuthenticationPrincipal UserDetails principal) {
+        return ResponseEntity.ok(seasonService.update(contentId, id, req, principal));
     }
 
     @Operation(summary = "Delete a season and all its episodes")
