@@ -16,6 +16,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -35,6 +36,23 @@ public class AdminEpisodeController {
             @Valid @RequestBody CreateEpisodeRequest req,
             @AuthenticationPrincipal UserDetails principal) {
         return ResponseEntity.status(HttpStatus.CREATED).body(episodeService.create(seasonId, req, principal));
+    }
+
+    @Operation(summary = "List episodes for own (or, as admin, any) season — works regardless of content status")
+    @GetMapping
+    public ResponseEntity<List<EpisodeResponse>> list(
+            @PathVariable UUID seasonId,
+            @AuthenticationPrincipal UserDetails principal) {
+        return ResponseEntity.ok(episodeService.listBySeasonForOwnerOrAdmin(seasonId, principal));
+    }
+
+    @Operation(summary = "Get one episode of own (or, as admin, any) season — works regardless of content status")
+    @GetMapping("/{id}")
+    public ResponseEntity<EpisodeResponse> get(
+            @PathVariable UUID seasonId,
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserDetails principal) {
+        return ResponseEntity.ok(episodeService.getByIdForOwnerOrAdmin(seasonId, id, principal));
     }
 
     @Operation(summary = "Update episode metadata")
@@ -57,11 +75,11 @@ public class AdminEpisodeController {
 
     @Operation(summary = "Reorder episodes — provide episodeIds in desired 1..N order")
     @PatchMapping("/reorder")
-    public ResponseEntity<Void> reorder(
+    public ResponseEntity<Object> reorder(
             @PathVariable UUID seasonId,
             @Valid @RequestBody ReorderEpisodesRequest req,
             @AuthenticationPrincipal UserDetails principal) {
         episodeService.reorder(seasonId, req, principal);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(Map.of("message", "Episodes reordered successfully"));
     }
 }
