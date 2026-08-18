@@ -50,6 +50,26 @@ public class SeasonService {
         return SeasonResponse.from(season);
     }
 
+    @Transactional(readOnly = true)
+    public List<SeasonResponse> listByContentForOwnerOrAdmin(UUID contentId, UserDetails principal) {
+        Content content = contentRepository.findById(contentId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId));
+        assertOwnedByCallerOrAdmin(content, principal);
+        return seasonRepository.findByContentIdOrderBySeasonNumberAsc(contentId)
+                .stream().map(SeasonResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public SeasonResponse getByIdForOwnerOrAdmin(UUID contentId, UUID id, UserDetails principal) {
+        Season season = seasonRepository.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + id));
+        if (!season.getContent().getId().equals(contentId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + id);
+        }
+        assertOwnedByCallerOrAdmin(season.getContent(), principal);
+        return SeasonResponse.from(season);
+    }
+
     @Transactional
     public SeasonResponse create(UUID contentId, CreateSeasonRequest req, UserDetails principal) {
         Content content = contentRepository.findById(contentId)

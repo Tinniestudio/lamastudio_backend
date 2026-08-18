@@ -194,6 +194,105 @@ class SeasonServiceTest {
     }
 
     @Nested
+    @DisplayName("listByContentForOwnerOrAdmin()")
+    class ListByContentForOwnerOrAdminTests {
+
+        @Test
+        @DisplayName("returns seasons for the owning partner even when content is DRAFT")
+        void returnsSeasonsForOwnerRegardlessOfStatus() {
+            Season s1 = buildSeason(1);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
+            when(seasonRepository.findByContentIdOrderBySeasonNumberAsc(contentId)).thenReturn(List.of(s1));
+
+            List<SeasonResponse> result = seasonService.listByContentForOwnerOrAdmin(contentId, ownerPrincipal());
+
+            assertThat(result).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("throws 404 when caller is a different partner")
+        void throws404WhenNotOwner() {
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
+
+            assertThatThrownBy(() -> seasonService.listByContentForOwnerOrAdmin(contentId, principalFor(UUID.randomUUID())))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
+        }
+
+        @Test
+        @DisplayName("admin can list seasons for content they don't own")
+        void adminCanListAnyContent() {
+            Season s1 = buildSeason(1);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
+            when(seasonRepository.findByContentIdOrderBySeasonNumberAsc(contentId)).thenReturn(List.of(s1));
+
+            List<SeasonResponse> result = seasonService.listByContentForOwnerOrAdmin(contentId, adminPrincipal());
+
+            assertThat(result).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("throws 404 when content does not exist")
+        void throws404WhenContentMissing() {
+            when(contentRepository.findById(contentId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> seasonService.listByContentForOwnerOrAdmin(contentId, ownerPrincipal()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
+    }
+
+    @Nested
+    @DisplayName("getByIdForOwnerOrAdmin()")
+    class GetByIdForOwnerOrAdminTests {
+
+        @Test
+        @DisplayName("returns the season for the owning partner even when content is DRAFT")
+        void returnsForOwnerRegardlessOfStatus() {
+            Season s = buildSeason(1);
+            when(seasonRepository.findById(s.getId())).thenReturn(Optional.of(s));
+
+            SeasonResponse result = seasonService.getByIdForOwnerOrAdmin(contentId, s.getId(), ownerPrincipal());
+
+            assertThat(result.id()).isEqualTo(s.getId());
+        }
+
+        @Test
+        @DisplayName("throws 404 when caller is a different partner")
+        void throws404WhenNotOwner() {
+            Season s = buildSeason(1);
+            when(seasonRepository.findById(s.getId())).thenReturn(Optional.of(s));
+
+            assertThatThrownBy(() -> seasonService.getByIdForOwnerOrAdmin(contentId, s.getId(), principalFor(UUID.randomUUID())))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
+        }
+
+        @Test
+        @DisplayName("throws 404 when season belongs to a different content")
+        void throws404WhenWrongContent() {
+            Season s = buildSeason(1);
+            UUID wrongContentId = UUID.randomUUID();
+            when(seasonRepository.findById(s.getId())).thenReturn(Optional.of(s));
+
+            assertThatThrownBy(() -> seasonService.getByIdForOwnerOrAdmin(wrongContentId, s.getId(), ownerPrincipal()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
+
+        @Test
+        @DisplayName("admin can get a season for content they don't own")
+        void adminCanGetAnyContent() {
+            Season s = buildSeason(1);
+            when(seasonRepository.findById(s.getId())).thenReturn(Optional.of(s));
+
+            SeasonResponse result = seasonService.getByIdForOwnerOrAdmin(contentId, s.getId(), adminPrincipal());
+
+            assertThat(result.id()).isEqualTo(s.getId());
+        }
+    }
+
+    @Nested
     @DisplayName("create()")
     class CreateTests {
 
