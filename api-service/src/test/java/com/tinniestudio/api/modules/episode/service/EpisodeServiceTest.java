@@ -215,6 +215,105 @@ class EpisodeServiceTest {
     }
 
     @Nested
+    @DisplayName("listBySeasonForOwnerOrAdmin()")
+    class ListBySeasonForOwnerOrAdminTests {
+
+        @Test
+        @DisplayName("returns episodes for the owning partner even when content is DRAFT")
+        void returnsEpisodesForOwnerRegardlessOfStatus() {
+            Episode e1 = buildEpisode(1);
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
+            when(episodeRepository.findBySeasonIdOrderByEpisodeNumberAsc(seasonId)).thenReturn(List.of(e1));
+
+            List<EpisodeResponse> result = episodeService.listBySeasonForOwnerOrAdmin(seasonId, ownerPrincipal());
+
+            assertThat(result).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("throws 404 when caller is a different partner")
+        void throws404WhenNotOwner() {
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
+
+            assertThatThrownBy(() -> episodeService.listBySeasonForOwnerOrAdmin(seasonId, principalFor(UUID.randomUUID())))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
+        }
+
+        @Test
+        @DisplayName("admin can list episodes for a season they don't own")
+        void adminCanListAnySeason() {
+            Episode e1 = buildEpisode(1);
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
+            when(episodeRepository.findBySeasonIdOrderByEpisodeNumberAsc(seasonId)).thenReturn(List.of(e1));
+
+            List<EpisodeResponse> result = episodeService.listBySeasonForOwnerOrAdmin(seasonId, adminPrincipal());
+
+            assertThat(result).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("throws 404 when season does not exist")
+        void throws404WhenSeasonMissing() {
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> episodeService.listBySeasonForOwnerOrAdmin(seasonId, ownerPrincipal()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
+    }
+
+    @Nested
+    @DisplayName("getByIdForOwnerOrAdmin()")
+    class GetByIdForOwnerOrAdminTests {
+
+        @Test
+        @DisplayName("returns the episode for the owning partner even when content is DRAFT")
+        void returnsForOwnerRegardlessOfStatus() {
+            Episode e = buildEpisode(1);
+            when(episodeRepository.findById(e.getId())).thenReturn(Optional.of(e));
+
+            EpisodeResponse result = episodeService.getByIdForOwnerOrAdmin(seasonId, e.getId(), ownerPrincipal());
+
+            assertThat(result.id()).isEqualTo(e.getId());
+        }
+
+        @Test
+        @DisplayName("throws 404 when caller is a different partner")
+        void throws404WhenNotOwner() {
+            Episode e = buildEpisode(1);
+            when(episodeRepository.findById(e.getId())).thenReturn(Optional.of(e));
+
+            assertThatThrownBy(() -> episodeService.getByIdForOwnerOrAdmin(seasonId, e.getId(), principalFor(UUID.randomUUID())))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
+        }
+
+        @Test
+        @DisplayName("throws 404 when episode belongs to a different season")
+        void throws404WhenWrongSeason() {
+            Episode e = buildEpisode(1);
+            UUID wrongSeasonId = UUID.randomUUID();
+            when(episodeRepository.findById(e.getId())).thenReturn(Optional.of(e));
+
+            assertThatThrownBy(() -> episodeService.getByIdForOwnerOrAdmin(wrongSeasonId, e.getId(), ownerPrincipal()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
+
+        @Test
+        @DisplayName("admin can get an episode for a season they don't own")
+        void adminCanGetAnySeason() {
+            Episode e = buildEpisode(1);
+            when(episodeRepository.findById(e.getId())).thenReturn(Optional.of(e));
+
+            EpisodeResponse result = episodeService.getByIdForOwnerOrAdmin(seasonId, e.getId(), adminPrincipal());
+
+            assertThat(result.id()).isEqualTo(e.getId());
+        }
+    }
+
+    @Nested
     @DisplayName("create()")
     class CreateTests {
 

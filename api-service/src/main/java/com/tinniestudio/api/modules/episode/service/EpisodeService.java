@@ -53,6 +53,26 @@ public class EpisodeService {
         return EpisodeResponse.from(episode);
     }
 
+    @Transactional(readOnly = true)
+    public List<EpisodeResponse> listBySeasonForOwnerOrAdmin(UUID seasonId, UserDetails principal) {
+        Season season = seasonRepository.findById(seasonId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + seasonId));
+        assertOwnedByCallerOrAdmin(season.getContent(), principal);
+        return episodeRepository.findBySeasonIdOrderByEpisodeNumberAsc(seasonId)
+                .stream().map(EpisodeResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public EpisodeResponse getByIdForOwnerOrAdmin(UUID seasonId, UUID id, UserDetails principal) {
+        Episode episode = episodeRepository.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found: " + id));
+        if (!episode.getSeason().getId().equals(seasonId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found: " + id);
+        }
+        assertOwnedByCallerOrAdmin(episode.getSeason().getContent(), principal);
+        return EpisodeResponse.from(episode);
+    }
+
     @Transactional
     public EpisodeResponse create(UUID seasonId, CreateEpisodeRequest req, UserDetails principal) {
         Season season = seasonRepository.findById(seasonId)
