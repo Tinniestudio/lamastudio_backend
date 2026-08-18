@@ -377,6 +377,20 @@ class ContentServiceTest {
             assertThat(result.status()).isEqualTo("DRAFT");
             assertThat(result.rejectionReason()).isNull();
         }
+
+        @Test
+        @DisplayName("REJECTED to REVIEW succeeds and clears the stale rejection reason (resubmit path)")
+        void rejectedToReviewSucceedsAndClearsReason() {
+            content.setStatus(ContentStatus.REJECTED);
+            content.setRejectionReason("Poster violates guidelines");
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+            when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            ContentResponse result = contentService.transitionStatus(contentId, ContentStatus.REVIEW, null);
+
+            assertThat(result.status()).isEqualTo("REVIEW");
+            assertThat(result.rejectionReason()).isNull();
+        }
     }
 
     @Nested

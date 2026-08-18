@@ -76,7 +76,7 @@ public class AdminContentController {
         return ResponseEntity.ok(Map.of("message", "Content deleted successfully"));
     }
 
-    @Operation(summary = "Submit for review (DRAFT → REVIEW)")
+    @Operation(summary = "Submit for review — DRAFT or REJECTED to REVIEW (resubmit clears any prior rejectionReason)")
     @PostMapping("/{id}/submit")
     public ResponseEntity<ContentResponse> submit(
             @PathVariable UUID id,

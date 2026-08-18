@@ -206,7 +206,11 @@ public class ContentService {
             case DRAFT      -> target == ContentStatus.REVIEW || target == ContentStatus.ARCHIVED;
             case REVIEW     -> target == ContentStatus.PROCESSING || target == ContentStatus.REJECTED || target == ContentStatus.ARCHIVED;
             case PROCESSING -> target == ContentStatus.PUBLISHED || target == ContentStatus.ARCHIVED;
-            case REJECTED   -> target == ContentStatus.DRAFT || target == ContentStatus.ARCHIVED;
+            // REVIEW is included so a partner can resubmit rejected content directly (the only
+            // partner-facing transition action, AdminContentController.submit(), always targets
+            // REVIEW — without this, a rejected item had no reachable next state at all via any
+            // partner-accessible endpoint, since nothing exposes REJECTED -> DRAFT either).
+            case REJECTED   -> target == ContentStatus.DRAFT || target == ContentStatus.REVIEW || target == ContentStatus.ARCHIVED;
             case PUBLISHED  -> target == ContentStatus.ARCHIVED;
             case ARCHIVED   -> false;
             case DELETED    -> false; // terminal — only ContentService.delete() sets this, never transitionStatus()
