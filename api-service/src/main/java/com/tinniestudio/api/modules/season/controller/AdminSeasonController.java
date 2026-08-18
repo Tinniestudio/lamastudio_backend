@@ -14,6 +14,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -33,6 +34,23 @@ public class AdminSeasonController {
             @RequestBody CreateSeasonRequest req,
             @AuthenticationPrincipal UserDetails principal) {
         return ResponseEntity.status(HttpStatus.CREATED).body(seasonService.create(contentId, req, principal));
+    }
+
+    @Operation(summary = "List seasons for own (or, as admin, any) content — works regardless of content status")
+    @GetMapping
+    public ResponseEntity<List<SeasonResponse>> list(
+            @PathVariable UUID contentId,
+            @AuthenticationPrincipal UserDetails principal) {
+        return ResponseEntity.ok(seasonService.listByContentForOwnerOrAdmin(contentId, principal));
+    }
+
+    @Operation(summary = "Get one season of own (or, as admin, any) content — works regardless of content status")
+    @GetMapping("/{id}")
+    public ResponseEntity<SeasonResponse> get(
+            @PathVariable UUID contentId,
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserDetails principal) {
+        return ResponseEntity.ok(seasonService.getByIdForOwnerOrAdmin(contentId, id, principal));
     }
 
     @Operation(summary = "Update season metadata")
