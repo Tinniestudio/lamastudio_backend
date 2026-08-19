@@ -1,5 +1,8 @@
 package com.tinniestudio.api.modules.upload.service;
 
+import com.tinniestudio.api.modules.content.repository.ContentRepository;
+import com.tinniestudio.api.modules.episode.repository.EpisodeRepository;
+import com.tinniestudio.api.modules.season.repository.SeasonRepository;
 import com.tinniestudio.api.modules.upload.config.UploadConfig;
 import com.tinniestudio.api.modules.upload.dto.*;
 import com.tinniestudio.api.modules.upload.repository.MediaFileRepository;
@@ -7,7 +10,10 @@ import com.tinniestudio.api.modules.upload.repository.SubtitleRepository;
 import com.tinniestudio.api.modules.upload.repository.UploadSessionRepository;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
 import com.tinniestudio.api.shared.config.AppProperties;
+import com.tinniestudio.api.shared.entity.Content;
+import com.tinniestudio.api.shared.entity.Episode;
 import com.tinniestudio.api.shared.entity.MediaFile;
+import com.tinniestudio.api.shared.entity.Season;
 import com.tinniestudio.api.shared.entity.Subtitle;
 import com.tinniestudio.api.shared.entity.UploadSession;
 import com.tinniestudio.api.shared.entity.VideoAsset;
@@ -36,6 +42,9 @@ public class UploadService {
     private final QueuePublisher queuePublisher;
     private final UploadConfig uploadConfig;
     private final AppProperties appProperties;
+    private final ContentRepository contentRepository;
+    private final SeasonRepository seasonRepository;
+    private final EpisodeRepository episodeRepository;
 
     @Transactional
     public UploadSessionResponse createSession(UUID userId, CreateUploadSessionRequest req) {
@@ -139,6 +148,7 @@ public class UploadService {
             asset.setStorageKey(session.getStorageKey());
             asset.setOriginalFilename(session.getOriginalFilename() != null ? session.getOriginalFilename() : "upload");
             asset.setProcessingStatus(ProcessingStatus.PENDING);
+            linkTargetAndAssertOwnership(asset, session, userId);
             VideoAsset savedAsset = videoAssetRepository.save(asset);
             videoAssetId = savedAsset.getId();
 
@@ -238,5 +248,64 @@ public class UploadService {
         String ext = org.springframework.util.StringUtils.getFilenameExtension(filename);
         if (ext == null || !SAFE_EXTENSION.matcher(ext).matches()) return "bin";
         return ext.toLowerCase();
+    }
+
+    /**
+     * Links a newly-created RAW_VIDEO/TRAILER VideoAsset back to the Content/Season/Episode it
+     * was uploaded for (session.targetEntityType/targetEntityId, captured at createSession() time
+     * but never read again until now), and verifies the caller owns that Content before doing so
+     * — without this check, any authenticated user could scope an upload session to someone
+     * else's content and silently attach a video to it (UploadController has no role
+     * restriction). `content` is always set regardless of how specifically the upload was
+     * targeted (even for SEASON/EPISODE) — media-worker's own VideoAsset entity only ever reads a
+     * flat contentId column, no season/episode awareness, so this denormalization is what lets
+     * the CONTENT_PROCESSED notification (and any other content-level lookup) work correctly for
+     * episode-scoped videos too, without touching media-worker at all.
+     */
+    private void linkTargetAndAssertOwnership(VideoAsset asset, UploadSession session, UUID userId) {
+        TargetEntityType type = session.getTargetEntityType();
+        if (type == null || session.getTargetEntityId() == null) {
+            return;
+        }
+        switch (type) {
+            case CONTENT -> {
+                Content content = contentRepository.findById(session.getTargetEntityId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Content not found: " + session.getTargetEntityId()));
+                assertOwnsContent(userId, content);
+                asset.setContent(content);
+            }
+            case SEASON -> {
+                Season season = seasonRepository.findById(session.getTargetEntityId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Season not found: " + session.getTargetEntityId()));
+                assertOwnsContent(userId, season.getContent());
+                asset.setSeason(season);
+                asset.setContent(season.getContent());
+            }
+            case EPISODE -> {
+                Episode episode = episodeRepository.findById(session.getTargetEntityId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Episode not found: " + session.getTargetEntityId()));
+                Content parentContent = episode.getSeason().getContent();
+                assertOwnsContent(userId, parentContent);
+                asset.setEpisode(episode);
+                asset.setContent(parentContent);
+            }
+            case VIDEO_ASSET -> {
+                // Not a valid target for RAW_VIDEO/TRAILER (VIDEO_ASSET only means anything for
+                // SUBTITLE, handled entirely by attachSubtitle()) — no-op, matches prior behavior.
+            }
+        }
+    }
+
+    // 404, not 403 — enumeration-safe, same pattern as attachSubtitle()'s existing IDOR guard
+    // just above. No admin bypass: this method only ever receives a raw UUID, not a
+    // principal/role set, so it can't distinguish an admin from a partner — the same constraint
+    // attachSubtitle() already lives with.
+    private void assertOwnsContent(UUID userId, Content content) {
+        if (!userId.equals(content.getCreatedBy())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + content.getId());
+        }
     }
 }

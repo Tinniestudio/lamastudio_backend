@@ -1,5 +1,8 @@
 package com.tinniestudio.api.modules.upload.service;
 
+import com.tinniestudio.api.modules.content.repository.ContentRepository;
+import com.tinniestudio.api.modules.episode.repository.EpisodeRepository;
+import com.tinniestudio.api.modules.season.repository.SeasonRepository;
 import com.tinniestudio.api.modules.upload.config.UploadConfig;
 import com.tinniestudio.api.modules.upload.dto.*;
 import com.tinniestudio.api.modules.upload.repository.MediaFileRepository;
@@ -7,8 +10,11 @@ import com.tinniestudio.api.modules.upload.repository.SubtitleRepository;
 import com.tinniestudio.api.modules.upload.repository.UploadSessionRepository;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
 import com.tinniestudio.api.shared.config.AppProperties;
+import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
+import com.tinniestudio.api.shared.entity.Episode;
 import com.tinniestudio.api.shared.entity.MediaFile;
+import com.tinniestudio.api.shared.entity.Season;
 import com.tinniestudio.api.shared.entity.Subtitle;
 import com.tinniestudio.api.shared.entity.UploadSession;
 import com.tinniestudio.api.shared.entity.VideoAsset;
@@ -45,6 +51,9 @@ class UploadServiceTest {
     @Mock QueuePublisher queuePublisher;
     @Mock UploadConfig uploadConfig;
     @Mock AppProperties appProperties;
+    @Mock ContentRepository contentRepository;
+    @Mock SeasonRepository seasonRepository;
+    @Mock EpisodeRepository episodeRepository;
 
     @InjectMocks UploadService uploadService;
 
@@ -422,6 +431,194 @@ class UploadServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
             verify(subtitleRepository, never()).save(any());
+        }
+    }
+
+    // ── video-to-content/season/episode linking (completeSession) ─────────────
+
+    @Nested @DisplayName("completeSession() — video linking")
+    class VideoLinkingTests {
+
+        private Content contentOwnedByCaller() {
+            Content c = new Content();
+            c.setId(targetId);
+            c.setCreatedBy(userId);
+            return c;
+        }
+
+        @Test @DisplayName("links VideoAsset.content when targetEntityType is CONTENT and caller owns it")
+        void linksContentWhenOwned() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            session.setTargetEntityType(TargetEntityType.CONTENT);
+            session.setTargetEntityId(targetId);
+            Content content = contentOwnedByCaller();
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+            when(storageService.objectExists("raw/uuid/original.mp4")).thenReturn(true);
+            when(contentRepository.findById(targetId)).thenReturn(Optional.of(content));
+            when(mediaFileRepository.save(any())).thenAnswer(inv -> {
+                MediaFile f = inv.getArgument(0);
+                f.setId(UUID.randomUUID());
+                return f;
+            });
+            ArgumentCaptor<VideoAsset> captor = ArgumentCaptor.forClass(VideoAsset.class);
+            when(videoAssetRepository.save(captor.capture())).thenAnswer(inv -> {
+                VideoAsset a = inv.getArgument(0);
+                a.setId(UUID.randomUUID());
+                return a;
+            });
+            when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            uploadService.completeSession(userId, session.getId(), null);
+
+            assertThat(captor.getValue().getContent()).isSameAs(content);
+            assertThat(captor.getValue().getSeason()).isNull();
+            assertThat(captor.getValue().getEpisode()).isNull();
+        }
+
+        @Test @DisplayName("throws 404 when targetEntityType is CONTENT but caller doesn't own it")
+        void throws404WhenContentNotOwned() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            session.setTargetEntityType(TargetEntityType.CONTENT);
+            session.setTargetEntityId(targetId);
+            Content content = new Content();
+            content.setId(targetId);
+            content.setCreatedBy(UUID.randomUUID()); // different owner
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+            when(storageService.objectExists("raw/uuid/original.mp4")).thenReturn(true);
+            when(contentRepository.findById(targetId)).thenReturn(Optional.of(content));
+
+            assertThatThrownBy(() -> uploadService.completeSession(userId, session.getId(), null))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+            verify(videoAssetRepository, never()).save(any());
+        }
+
+        @Test @DisplayName("throws 404 when targetEntityType is CONTENT but the content doesn't exist")
+        void throws404WhenContentMissing() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            session.setTargetEntityType(TargetEntityType.CONTENT);
+            session.setTargetEntityId(targetId);
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+            when(storageService.objectExists("raw/uuid/original.mp4")).thenReturn(true);
+            when(contentRepository.findById(targetId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> uploadService.completeSession(userId, session.getId(), null))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test @DisplayName("links VideoAsset.season AND .content (denormalized) when targetEntityType is SEASON and caller owns the parent content")
+        void linksSeasonAndDenormalizedContentWhenOwned() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            UUID seasonId = UUID.randomUUID();
+            session.setTargetEntityType(TargetEntityType.SEASON);
+            session.setTargetEntityId(seasonId);
+            Content content = contentOwnedByCaller();
+            Season season = new Season();
+            season.setId(seasonId);
+            season.setContent(content);
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+            when(storageService.objectExists("raw/uuid/original.mp4")).thenReturn(true);
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
+            when(mediaFileRepository.save(any())).thenAnswer(inv -> {
+                MediaFile f = inv.getArgument(0);
+                f.setId(UUID.randomUUID());
+                return f;
+            });
+            ArgumentCaptor<VideoAsset> captor = ArgumentCaptor.forClass(VideoAsset.class);
+            when(videoAssetRepository.save(captor.capture())).thenAnswer(inv -> {
+                VideoAsset a = inv.getArgument(0);
+                a.setId(UUID.randomUUID());
+                return a;
+            });
+            when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            uploadService.completeSession(userId, session.getId(), null);
+
+            assertThat(captor.getValue().getSeason()).isSameAs(season);
+            assertThat(captor.getValue().getContent()).isSameAs(content);
+        }
+
+        @Test @DisplayName("links VideoAsset.episode AND .content (denormalized, via episode->season->content) when targetEntityType is EPISODE and caller owns the parent content")
+        void linksEpisodeAndDenormalizedContentWhenOwned() {
+            UploadSession session = pendingSession(UploadType.TRAILER, "raw/trailers/uuid/original.mp4");
+            UUID episodeId = UUID.randomUUID();
+            session.setTargetEntityType(TargetEntityType.EPISODE);
+            session.setTargetEntityId(episodeId);
+            Content content = contentOwnedByCaller();
+            Season season = new Season();
+            season.setContent(content);
+            Episode episode = new Episode();
+            episode.setId(episodeId);
+            episode.setSeason(season);
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+            when(storageService.objectExists("raw/trailers/uuid/original.mp4")).thenReturn(true);
+            when(episodeRepository.findById(episodeId)).thenReturn(Optional.of(episode));
+            when(mediaFileRepository.save(any())).thenAnswer(inv -> {
+                MediaFile f = inv.getArgument(0);
+                f.setId(UUID.randomUUID());
+                return f;
+            });
+            ArgumentCaptor<VideoAsset> captor = ArgumentCaptor.forClass(VideoAsset.class);
+            when(videoAssetRepository.save(captor.capture())).thenAnswer(inv -> {
+                VideoAsset a = inv.getArgument(0);
+                a.setId(UUID.randomUUID());
+                return a;
+            });
+            when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            uploadService.completeSession(userId, session.getId(), null);
+
+            assertThat(captor.getValue().getEpisode()).isSameAs(episode);
+            assertThat(captor.getValue().getContent()).isSameAs(content);
+        }
+
+        @Test @DisplayName("throws 404 when targetEntityType is EPISODE but caller doesn't own the parent content")
+        void throws404WhenEpisodeParentNotOwned() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            UUID episodeId = UUID.randomUUID();
+            session.setTargetEntityType(TargetEntityType.EPISODE);
+            session.setTargetEntityId(episodeId);
+            Content content = new Content();
+            content.setCreatedBy(UUID.randomUUID()); // different owner
+            Season season = new Season();
+            season.setContent(content);
+            Episode episode = new Episode();
+            episode.setId(episodeId);
+            episode.setSeason(season);
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+            when(storageService.objectExists("raw/uuid/original.mp4")).thenReturn(true);
+            when(episodeRepository.findById(episodeId)).thenReturn(Optional.of(episode));
+
+            assertThatThrownBy(() -> uploadService.completeSession(userId, session.getId(), null))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+            verify(videoAssetRepository, never()).save(any());
+        }
+
+        @Test @DisplayName("does not attempt any link when targetEntityType is null (existing untargeted-upload behavior preserved)")
+        void noLinkWhenTargetEntityTypeNull() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            // targetEntityType left null, matching the two pre-existing tests in CompleteSessionTests
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+            when(storageService.objectExists("raw/uuid/original.mp4")).thenReturn(true);
+            when(mediaFileRepository.save(any())).thenAnswer(inv -> {
+                MediaFile f = inv.getArgument(0);
+                f.setId(UUID.randomUUID());
+                return f;
+            });
+            ArgumentCaptor<VideoAsset> captor = ArgumentCaptor.forClass(VideoAsset.class);
+            when(videoAssetRepository.save(captor.capture())).thenAnswer(inv -> {
+                VideoAsset a = inv.getArgument(0);
+                a.setId(UUID.randomUUID());
+                return a;
+            });
+            when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            uploadService.completeSession(userId, session.getId(), null);
+
+            assertThat(captor.getValue().getContent()).isNull();
+            verifyNoInteractions(contentRepository, seasonRepository, episodeRepository);
         }
     }
 
