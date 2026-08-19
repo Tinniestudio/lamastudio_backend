@@ -27,6 +27,19 @@ public interface VideoAssetRepository extends JpaRepository<VideoAsset, UUID> {
     Optional<VideoAsset> findTopByEpisode_IdAndAssetTypeAndProcessingStatus(
             UUID episodeId, VideoAssetType assetType, ProcessingStatus processingStatus);
 
+    /**
+     * Deactivates every VideoAsset sharing (content, assetType) with the given asset, excluding
+     * the asset itself — the "retire siblings" half of the isActive lifecycle. Callers are
+     * responsible for setting the target asset's own isActive=true afterward (this method never
+     * touches it, in case excludeId doesn't actually belong to the given contentId — a caller bug
+     * that would otherwise silently deactivate everything including the intended new active one).
+     */
+    @Transactional
+    @Modifying
+    @Query("UPDATE VideoAsset a SET a.isActive = false " +
+           "WHERE a.content.id = :contentId AND a.assetType = :assetType AND a.id <> :excludeId AND a.isActive = true")
+    void deactivateOtherAssets(@Param("contentId") UUID contentId, @Param("assetType") VideoAssetType assetType, @Param("excludeId") UUID excludeId);
+
     long countByProcessingStatus(ProcessingStatus status);
 
     long countByContent_CreatedByAndProcessingStatus(UUID createdBy, ProcessingStatus status);

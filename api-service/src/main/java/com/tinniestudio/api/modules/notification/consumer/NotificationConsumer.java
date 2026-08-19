@@ -41,7 +41,17 @@ public class NotificationConsumer {
                 log.warn("VideoAsset not found: {}", assetId);
                 return;
             }
-            asset.setProcessingStatus("READY".equals(status) ? ProcessingStatus.READY : ProcessingStatus.FAILED);
+            boolean succeeded = "READY".equals(status);
+            asset.setProcessingStatus(succeeded ? ProcessingStatus.READY : ProcessingStatus.FAILED);
+            if (succeeded && asset.getContent() != null) {
+                // Auto-retire: this asset becomes "the" active one for its (content, assetType)
+                // pair, every sibling that was previously active gets flipped off. Guarded on
+                // asset.getContent() != null because a video processed before B6 (video-linking
+                // fix) landed may have no content link at all — nothing to retire against, and
+                // no isActive semantics apply to an unlinked asset.
+                videoAssetRepo.deactivateOtherAssets(asset.getContent().getId(), asset.getAssetType(), asset.getId());
+                asset.setActive(true);
+            }
             videoAssetRepo.save(asset);
 
             Content content = contentRepo.findById(contentId).orElse(null);

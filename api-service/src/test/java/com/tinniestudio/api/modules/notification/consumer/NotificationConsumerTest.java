@@ -6,8 +6,10 @@ import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.VideoAsset;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -121,5 +123,60 @@ class NotificationConsumerTest {
         assertThat(asset.getProcessingStatus()).isEqualTo(ProcessingStatus.READY);
         verify(videoAssetRepo).save(asset);
         verifyNoInteractions(notificationService);
+    }
+
+    @Test
+    @DisplayName("on successful processing, activates the processed asset and deactivates its siblings")
+    void activatesProcessedAssetAndDeactivatesSiblings() {
+        UUID assetId = UUID.randomUUID();
+        UUID contentId = UUID.randomUUID();
+        VideoAsset asset = new VideoAsset();
+        asset.setId(assetId);
+        asset.setAssetType(VideoAssetType.MAIN_VIDEO);
+        Content content = new Content();
+        content.setId(contentId);
+        content.setCreatedBy(UUID.randomUUID());
+        // The Task-1 (B6) video-linking fix populates this at upload time, well before the
+        // CONTENT_PROCESSED message is consumed — mirror that here rather than leaving the
+        // asset unlinked, since an unlinked asset is exactly the case the consumer skips.
+        asset.setContent(content);
+
+        Map<String, Object> message = Map.of(
+            "type", "CONTENT_PROCESSED",
+            "videoAssetId", assetId.toString(),
+            "contentId", contentId.toString(),
+            "status", "READY"
+        );
+        when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+        when(contentRepo.findById(contentId)).thenReturn(Optional.of(content));
+
+        consumer.handleNotificationEvent(message);
+
+        verify(videoAssetRepo).deactivateOtherAssets(contentId, VideoAssetType.MAIN_VIDEO, assetId);
+        ArgumentCaptor<VideoAsset> captor = ArgumentCaptor.forClass(VideoAsset.class);
+        verify(videoAssetRepo, atLeastOnce()).save(captor.capture());
+        assertThat(captor.getValue().isActive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("on failed processing, does not activate or retire siblings")
+    void doesNotActivateOnFailedProcessing() {
+        UUID assetId = UUID.randomUUID();
+        UUID contentId = UUID.randomUUID();
+        VideoAsset asset = new VideoAsset();
+        asset.setId(assetId);
+        asset.setAssetType(VideoAssetType.MAIN_VIDEO);
+
+        Map<String, Object> message = Map.of(
+            "type", "CONTENT_PROCESSED",
+            "videoAssetId", assetId.toString(),
+            "contentId", contentId.toString(),
+            "status", "FAILED"
+        );
+        when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+
+        consumer.handleNotificationEvent(message);
+
+        verify(videoAssetRepo, never()).deactivateOtherAssets(any(), any(), any());
     }
 }
