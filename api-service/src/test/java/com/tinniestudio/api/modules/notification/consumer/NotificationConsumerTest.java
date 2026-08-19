@@ -3,13 +3,13 @@ package com.tinniestudio.api.modules.notification.consumer;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.notification.service.NotificationService;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
+import com.tinniestudio.api.modules.upload.service.VideoActivationService;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.VideoAsset;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -28,6 +28,7 @@ class NotificationConsumerTest {
     @Mock NotificationService notificationService;
     @Mock VideoAssetRepository videoAssetRepo;
     @Mock ContentRepository contentRepo;
+    @Mock VideoActivationService videoActivationService;
     @InjectMocks NotificationConsumer consumer;
 
     @Test
@@ -152,10 +153,13 @@ class NotificationConsumerTest {
 
         consumer.handleNotificationEvent(message);
 
-        verify(videoAssetRepo).deactivateOtherAssets(contentId, VideoAssetType.MAIN_VIDEO, assetId);
-        ArgumentCaptor<VideoAsset> captor = ArgumentCaptor.forClass(VideoAsset.class);
-        verify(videoAssetRepo, atLeastOnce()).save(captor.capture());
-        assertThat(captor.getValue().isActive()).isTrue();
+        // The retire-siblings + activate sequence is delegated to VideoActivationService (its
+        // own transactional atomicity is covered by VideoActivationServiceTest) — this test only
+        // needs to confirm the consumer hands off the right asset and doesn't also save directly,
+        // which would be a redundant/duplicate write of the same entity.
+        verify(videoActivationService).activateAndRetireSiblings(asset);
+        assertThat(asset.getProcessingStatus()).isEqualTo(ProcessingStatus.READY);
+        verify(videoAssetRepo, never()).save(any());
     }
 
     @Test
@@ -174,9 +178,12 @@ class NotificationConsumerTest {
             "status", "FAILED"
         );
         when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+        when(videoAssetRepo.save(any())).thenReturn(asset);
 
         consumer.handleNotificationEvent(message);
 
-        verify(videoAssetRepo, never()).deactivateOtherAssets(any(), any(), any());
+        verify(videoActivationService, never()).activateAndRetireSiblings(any());
+        assertThat(asset.getProcessingStatus()).isEqualTo(ProcessingStatus.FAILED);
+        verify(videoAssetRepo).save(asset);
     }
 }

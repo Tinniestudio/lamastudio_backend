@@ -3,6 +3,7 @@ package com.tinniestudio.api.modules.notification.consumer;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.notification.service.NotificationService;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
+import com.tinniestudio.api.modules.upload.service.VideoActivationService;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.VideoAsset;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
@@ -23,6 +24,7 @@ public class NotificationConsumer {
     private final NotificationService notificationService;
     private final VideoAssetRepository videoAssetRepo;
     private final ContentRepository contentRepo;
+    private final VideoActivationService videoActivationService;
 
     @RabbitListener(queues = RabbitConfig.QUEUE_NOTIFICATIONS)
     public void handleNotificationEvent(Map<String, Object> message) {
@@ -49,10 +51,21 @@ public class NotificationConsumer {
                 // asset.getContent() != null because a video processed before B6 (video-linking
                 // fix) landed may have no content link at all — nothing to retire against, and
                 // no isActive semantics apply to an unlinked asset.
-                videoAssetRepo.deactivateOtherAssets(asset.getContent().getId(), asset.getAssetType(), asset.getId());
-                asset.setActive(true);
+                //
+                // Delegated to VideoActivationService so the sibling-retire UPDATE and this
+                // asset's own save() commit in one transaction — done inline in the same method
+                // (no enclosing @Transactional here), a crash between the two writes could
+                // otherwise leave zero active assets for this (content, assetType) pair.
+                // processingStatus was already set above on this same in-memory entity, so the
+                // service's own save() persists both fields together — no separate save needed.
+                videoActivationService.activateAndRetireSiblings(asset);
+            } else {
+                if (succeeded) {
+                    log.warn("VideoAsset {} processed successfully but has no content link " +
+                            "(pre-B6 legacy data?) — cannot activate", assetId);
+                }
+                videoAssetRepo.save(asset);
             }
-            videoAssetRepo.save(asset);
 
             Content content = contentRepo.findById(contentId).orElse(null);
             if (content == null) {
