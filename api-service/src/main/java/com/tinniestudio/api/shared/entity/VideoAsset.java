@@ -71,6 +71,14 @@ public class VideoAsset extends BaseEntity {
 
   private UUID uploadSessionId;
 
+  // Which of possibly-several VideoAssets sharing (content, assetType) is "the" one playback/
+  // partner UI should treat as current. Automatically flipped on successful processing
+  // (NotificationConsumer) and manually flippable via PATCH /partners/videos/{id}/activate
+  // (PartnerVideoController) — both retire every sibling atomically via
+  // VideoAssetRepository.deactivateOtherAssets(...) before setting this one true.
+  @Column(name = "is_active", nullable = false)
+  private boolean isActive = false;
+
   @OneToMany(mappedBy = "videoAsset", cascade = CascadeType.ALL)
   private List<VideoVariant> variants = new ArrayList<>();
 
