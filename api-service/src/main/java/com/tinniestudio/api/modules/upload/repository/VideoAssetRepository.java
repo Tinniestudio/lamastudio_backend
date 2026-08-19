@@ -27,6 +27,12 @@ public interface VideoAssetRepository extends JpaRepository<VideoAsset, UUID> {
     Optional<VideoAsset> findTopByEpisode_IdAndAssetTypeAndProcessingStatus(
             UUID episodeId, VideoAssetType assetType, ProcessingStatus processingStatus);
 
+    List<VideoAsset> findByContent_IdAndAssetTypeOrderByCreatedAtDesc(UUID contentId, VideoAssetType assetType);
+
+    List<VideoAsset> findBySeason_IdAndAssetTypeOrderByCreatedAtDesc(UUID seasonId, VideoAssetType assetType);
+
+    List<VideoAsset> findByEpisode_IdAndAssetTypeOrderByCreatedAtDesc(UUID episodeId, VideoAssetType assetType);
+
     /**
      * Deactivates every VideoAsset sharing (content, assetType) with the given asset, excluding
      * the asset itself — the "retire siblings" half of the isActive lifecycle. Callers are
