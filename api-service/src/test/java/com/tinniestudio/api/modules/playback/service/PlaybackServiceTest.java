@@ -123,8 +123,8 @@ class PlaybackServiceTest {
             sub.setStatus(SubscriptionStatus.ACTIVE);
             when(contentRepo.findById(any())).thenReturn(Optional.of(content));
             when(subscriptionRepo.findByUserIdAndStatus(any(), any())).thenReturn(Optional.of(sub));
-            when(videoAssetRepo.findTopByContent_IdAndAssetTypeAndProcessingStatus(
-                any(), eq(VideoAssetType.MAIN_VIDEO), eq(ProcessingStatus.READY)))
+            when(videoAssetRepo.findByContent_IdAndAssetTypeAndIsActiveTrue(
+                any(), eq(VideoAssetType.MAIN_VIDEO)))
                 .thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.getContentManifest(UUID.randomUUID(), UUID.randomUUID()))
@@ -159,8 +159,8 @@ class PlaybackServiceTest {
             when(contentRepo.findById(contentId)).thenReturn(Optional.of(content));
             when(subscriptionRepo.findByUserIdAndStatus(eq(userId), eq(SubscriptionStatus.ACTIVE)))
                 .thenReturn(Optional.of(sub));
-            when(videoAssetRepo.findTopByContent_IdAndAssetTypeAndProcessingStatus(
-                eq(contentId), eq(VideoAssetType.MAIN_VIDEO), eq(ProcessingStatus.READY)))
+            when(videoAssetRepo.findByContent_IdAndAssetTypeAndIsActiveTrue(
+                eq(contentId), eq(VideoAssetType.MAIN_VIDEO)))
                 .thenReturn(Optional.of(asset));
             when(watchProgressRepo.findMovieProgress(userId, contentId))
                 .thenReturn(Optional.of(progress));

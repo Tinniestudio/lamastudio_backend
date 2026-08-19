@@ -80,8 +80,7 @@ public class PlaybackServiceImpl implements PlaybackService {
         }
 
         VideoAsset asset = videoAssetRepo
-            .findTopByContent_IdAndAssetTypeAndProcessingStatus(
-                contentId, VideoAssetType.MAIN_VIDEO, ProcessingStatus.READY)
+            .findByContent_IdAndAssetTypeAndIsActiveTrue(contentId, VideoAssetType.MAIN_VIDEO)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No ready video asset"));
 
         Integer resumeAt = watchProgressRepo.findMovieProgress(userId, contentId)
@@ -120,8 +119,7 @@ public class PlaybackServiceImpl implements PlaybackService {
         }
 
         VideoAsset asset = videoAssetRepo
-            .findTopByEpisode_IdAndAssetTypeAndProcessingStatus(
-                episodeId, VideoAssetType.MAIN_VIDEO, ProcessingStatus.READY)
+            .findByEpisode_IdAndAssetTypeAndIsActiveTrue(episodeId, VideoAssetType.MAIN_VIDEO)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No ready video asset for episode"));
 
         Integer resumeAt = watchProgressRepo.findByUserIdAndEpisodeId(userId, episodeId)

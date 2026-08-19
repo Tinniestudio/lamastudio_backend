@@ -27,6 +27,10 @@ public interface VideoAssetRepository extends JpaRepository<VideoAsset, UUID> {
     Optional<VideoAsset> findTopByEpisode_IdAndAssetTypeAndProcessingStatus(
             UUID episodeId, VideoAssetType assetType, ProcessingStatus processingStatus);
 
+    Optional<VideoAsset> findByContent_IdAndAssetTypeAndIsActiveTrue(UUID contentId, VideoAssetType assetType);
+
+    Optional<VideoAsset> findByEpisode_IdAndAssetTypeAndIsActiveTrue(UUID episodeId, VideoAssetType assetType);
+
     List<VideoAsset> findByContent_IdAndAssetTypeOrderByCreatedAtDesc(UUID contentId, VideoAssetType assetType);
 
     List<VideoAsset> findBySeason_IdAndAssetTypeOrderByCreatedAtDesc(UUID seasonId, VideoAssetType assetType);
