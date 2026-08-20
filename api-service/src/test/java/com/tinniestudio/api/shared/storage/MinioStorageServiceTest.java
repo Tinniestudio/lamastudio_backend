@@ -13,25 +13,36 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListPartsRequest;
+import software.amazon.awssdk.services.s3.model.ListPartsResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.Part;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedUploadPartRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
 
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -311,6 +322,152 @@ class MinioStorageServiceTest {
             String url = svc.uploadFile("partner-logos/abc/logo.png", new byte[]{1, 2, 3}, "image/png");
 
             assertThat(url).isEqualTo("http://localhost:9000/tinniestudio/partner-logos/abc/logo.png");
+        }
+    }
+
+    @Nested
+    @DisplayName("multipart upload")
+    class MultipartUploadTests {
+
+        @Test
+        @DisplayName("initiateMultipartUpload returns the uploadId from S3's response")
+        void initiatesMultipartUpload() {
+            when(s3Client.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
+                .thenReturn(CreateMultipartUploadResponse.builder().uploadId("upload-123").build());
+
+            MultipartUploadHandle handle = service.initiateMultipartUpload("raw/uuid/original.mp4", "video/mp4");
+
+            assertThat(handle.uploadId()).isEqualTo("upload-123");
+        }
+
+        @Test
+        @DisplayName("initiateMultipartUpload wraps SdkException as StorageException")
+        void wrapsInitiateException() {
+            when(s3Client.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
+                .thenThrow(SdkException.builder().message("timeout").build());
+
+            assertThatThrownBy(() -> service.initiateMultipartUpload("raw/uuid/original.mp4", "video/mp4"))
+                .isInstanceOf(StorageException.class)
+                .hasMessageContaining("raw/uuid/original.mp4");
+        }
+
+        @Test
+        @DisplayName("generatePartUploadUrl returns a presigned URL for the given part number")
+        void generatesPartUploadUrl() throws MalformedURLException {
+            PresignedUploadPartRequest presigned = mock(PresignedUploadPartRequest.class);
+            when(presigned.url()).thenReturn(new URL("https://minio/part-url"));
+            when(presigner.presignUploadPart(any(UploadPartPresignRequest.class))).thenReturn(presigned);
+
+            String url = service.generatePartUploadUrl("raw/uuid/original.mp4", "upload-123", 3, Duration.ofMinutes(30));
+
+            assertThat(url).isEqualTo("https://minio/part-url");
+        }
+
+        @Test
+        @DisplayName("generatePartUploadUrl passes correct bucket, key, uploadId, and part number to presigner")
+        void passesCorrectPartUploadArgs() throws MalformedURLException {
+            PresignedUploadPartRequest presigned = mock(PresignedUploadPartRequest.class);
+            when(presigned.url()).thenReturn(new URL("https://minio/part-url"));
+            when(presigner.presignUploadPart(any(UploadPartPresignRequest.class))).thenReturn(presigned);
+
+            service.generatePartUploadUrl("raw/uuid/original.mp4", "upload-123", 3, Duration.ofMinutes(30));
+
+            ArgumentCaptor<UploadPartPresignRequest> captor = ArgumentCaptor.forClass(UploadPartPresignRequest.class);
+            verify(presigner).presignUploadPart(captor.capture());
+            assertThat(captor.getValue().uploadPartRequest().bucket()).isEqualTo("tinniestudio");
+            assertThat(captor.getValue().uploadPartRequest().key()).isEqualTo("raw/uuid/original.mp4");
+            assertThat(captor.getValue().uploadPartRequest().uploadId()).isEqualTo("upload-123");
+            assertThat(captor.getValue().uploadPartRequest().partNumber()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("generatePartUploadUrl wraps SdkException as StorageException")
+        void wrapsGeneratePartUploadUrlException() {
+            when(presigner.presignUploadPart(any(UploadPartPresignRequest.class)))
+                .thenThrow(SdkException.builder().message("timeout").build());
+
+            assertThatThrownBy(() ->
+                service.generatePartUploadUrl("raw/uuid/original.mp4", "upload-123", 3, Duration.ofMinutes(30))
+            ).isInstanceOf(StorageException.class)
+             .hasMessageContaining("raw/uuid/original.mp4");
+        }
+
+        @Test
+        @DisplayName("listUploadedParts maps S3's Part list to UploadedPart records")
+        void listsUploadedParts() {
+            Part part1 = Part.builder().partNumber(1).eTag("etag-1").size(1000L).build();
+            Part part2 = Part.builder().partNumber(2).eTag("etag-2").size(2000L).build();
+            when(s3Client.listParts(any(ListPartsRequest.class)))
+                .thenReturn(ListPartsResponse.builder().parts(part1, part2).build());
+
+            List<UploadedPart> result = service.listUploadedParts("raw/uuid/original.mp4", "upload-123");
+
+            assertThat(result).containsExactly(
+                new UploadedPart(1, "etag-1", 1000L),
+                new UploadedPart(2, "etag-2", 2000L)
+            );
+        }
+
+        @Test
+        @DisplayName("listUploadedParts wraps SdkException as StorageException")
+        void wrapsListUploadedPartsException() {
+            when(s3Client.listParts(any(ListPartsRequest.class)))
+                .thenThrow(SdkException.builder().message("timeout").build());
+
+            assertThatThrownBy(() -> service.listUploadedParts("raw/uuid/original.mp4", "upload-123"))
+                .isInstanceOf(StorageException.class)
+                .hasMessageContaining("raw/uuid/original.mp4");
+        }
+
+        @Test
+        @DisplayName("completeMultipartUpload sends S3 the parts in the order given")
+        void completesMultipartUpload() {
+            service.completeMultipartUpload("raw/uuid/original.mp4", "upload-123",
+                List.of(new CompletedPartInfo(1, "etag-1"), new CompletedPartInfo(2, "etag-2")));
+
+            ArgumentCaptor<CompleteMultipartUploadRequest> captor = ArgumentCaptor.forClass(CompleteMultipartUploadRequest.class);
+            verify(s3Client).completeMultipartUpload(captor.capture());
+            assertThat(captor.getValue().bucket()).isEqualTo("tinniestudio");
+            assertThat(captor.getValue().key()).isEqualTo("raw/uuid/original.mp4");
+            assertThat(captor.getValue().uploadId()).isEqualTo("upload-123");
+            assertThat(captor.getValue().multipartUpload().parts()).extracting("partNumber", "eTag")
+                .containsExactly(tuple(1, "etag-1"), tuple(2, "etag-2"));
+        }
+
+        @Test
+        @DisplayName("completeMultipartUpload wraps SdkException as StorageException")
+        void wrapsCompleteMultipartUploadException() {
+            doThrow(SdkException.builder().message("timeout").build())
+                .when(s3Client).completeMultipartUpload(any(CompleteMultipartUploadRequest.class));
+
+            assertThatThrownBy(() ->
+                service.completeMultipartUpload("raw/uuid/original.mp4", "upload-123",
+                    List.of(new CompletedPartInfo(1, "etag-1")))
+            ).isInstanceOf(StorageException.class)
+             .hasMessageContaining("raw/uuid/original.mp4");
+        }
+
+        @Test
+        @DisplayName("abortMultipartUpload calls S3's abort endpoint with correct bucket, key and uploadId")
+        void abortsMultipartUpload() {
+            service.abortMultipartUpload("raw/uuid/original.mp4", "upload-123");
+
+            ArgumentCaptor<AbortMultipartUploadRequest> captor = ArgumentCaptor.forClass(AbortMultipartUploadRequest.class);
+            verify(s3Client).abortMultipartUpload(captor.capture());
+            assertThat(captor.getValue().bucket()).isEqualTo("tinniestudio");
+            assertThat(captor.getValue().key()).isEqualTo("raw/uuid/original.mp4");
+            assertThat(captor.getValue().uploadId()).isEqualTo("upload-123");
+        }
+
+        @Test
+        @DisplayName("abortMultipartUpload wraps SdkException as StorageException")
+        void wrapsAbortMultipartUploadException() {
+            doThrow(SdkException.builder().message("timeout").build())
+                .when(s3Client).abortMultipartUpload(any(AbortMultipartUploadRequest.class));
+
+            assertThatThrownBy(() -> service.abortMultipartUpload("raw/uuid/original.mp4", "upload-123"))
+                .isInstanceOf(StorageException.class)
+                .hasMessageContaining("raw/uuid/original.mp4");
         }
     }
 }

@@ -7,18 +7,27 @@ import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.CompletedMultipartUpload;
+import software.amazon.awssdk.services.s3.model.CompletedPart;
+import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListPartsRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.model.UploadPartRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
 
 import java.time.Duration;
+import java.util.List;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -152,6 +161,88 @@ public class MinioStorageService implements StorageService {
             return endpoint + "/" + props.getBucket() + "/" + key;
         } catch (SdkException e) {
             throw new StorageException("Failed to upload file for key=" + key, e);
+        }
+    }
+
+    @Override
+    public MultipartUploadHandle initiateMultipartUpload(String key, String mimeType) {
+        try {
+            var response = s3Client.createMultipartUpload(CreateMultipartUploadRequest.builder()
+                    .bucket(props.getBucket())
+                    .key(key)
+                    .contentType(mimeType)
+                    .build());
+            log.debug("Initiated multipart upload for key={} uploadId={}", key, response.uploadId());
+            return new MultipartUploadHandle(response.uploadId());
+        } catch (SdkException e) {
+            throw new StorageException("Failed to initiate multipart upload for key=" + key, e);
+        }
+    }
+
+    @Override
+    public String generatePartUploadUrl(String key, String uploadId, int partNumber, Duration ttl) {
+        try {
+            UploadPartRequest uploadPartRequest = UploadPartRequest.builder()
+                    .bucket(props.getBucket())
+                    .key(key)
+                    .uploadId(uploadId)
+                    .partNumber(partNumber)
+                    .build();
+            UploadPartPresignRequest presignRequest = UploadPartPresignRequest.builder()
+                    .signatureDuration(ttl)
+                    .uploadPartRequest(uploadPartRequest)
+                    .build();
+            return presigner.presignUploadPart(presignRequest).url().toString();
+        } catch (SdkException e) {
+            throw new StorageException("Failed to generate part upload URL for key=" + key + " part=" + partNumber, e);
+        }
+    }
+
+    @Override
+    public List<UploadedPart> listUploadedParts(String key, String uploadId) {
+        try {
+            var response = s3Client.listParts(ListPartsRequest.builder()
+                    .bucket(props.getBucket())
+                    .key(key)
+                    .uploadId(uploadId)
+                    .build());
+            return response.parts().stream()
+                    .map(p -> new UploadedPart(p.partNumber(), p.eTag(), p.size()))
+                    .toList();
+        } catch (SdkException e) {
+            throw new StorageException("Failed to list uploaded parts for key=" + key, e);
+        }
+    }
+
+    @Override
+    public void completeMultipartUpload(String key, String uploadId, List<CompletedPartInfo> parts) {
+        try {
+            List<CompletedPart> completedParts = parts.stream()
+                    .map(p -> CompletedPart.builder().partNumber(p.partNumber()).eTag(p.eTag()).build())
+                    .toList();
+            s3Client.completeMultipartUpload(CompleteMultipartUploadRequest.builder()
+                    .bucket(props.getBucket())
+                    .key(key)
+                    .uploadId(uploadId)
+                    .multipartUpload(CompletedMultipartUpload.builder().parts(completedParts).build())
+                    .build());
+            log.debug("Completed multipart upload for key={} uploadId={} parts={}", key, uploadId, parts.size());
+        } catch (SdkException e) {
+            throw new StorageException("Failed to complete multipart upload for key=" + key, e);
+        }
+    }
+
+    @Override
+    public void abortMultipartUpload(String key, String uploadId) {
+        try {
+            s3Client.abortMultipartUpload(AbortMultipartUploadRequest.builder()
+                    .bucket(props.getBucket())
+                    .key(key)
+                    .uploadId(uploadId)
+                    .build());
+            log.debug("Aborted multipart upload for key={} uploadId={}", key, uploadId);
+        } catch (SdkException e) {
+            throw new StorageException("Failed to abort multipart upload for key=" + key, e);
         }
     }
 }
