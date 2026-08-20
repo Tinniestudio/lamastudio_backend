@@ -132,21 +132,35 @@ public class UploadService {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                 "Upload session has expired");
         }
-        boolean objectPresent;
         long actualSizeBytes;
-        try {
-            objectPresent = storageService.objectExists(session.getStorageKey());
-            // Measured from storage (a HEAD request), not the client-declared expectedMaxSizeBytes
-            // from createSession — a caller can declare any size at presign time, so that value
-            // must never be trusted for quota/storage-accounting figures.
-            actualSizeBytes = objectPresent ? storageService.getObjectSize(session.getStorageKey()) : 0L;
-        } catch (RuntimeException ex) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "Storage check failed — please retry", ex);
-        }
-        if (!objectPresent) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                "Object not found in storage. Upload the file before calling complete.");
+        if (session.getMultipartUploadId() != null) {
+            if (body == null || body.parts() == null || body.parts().isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "parts is required to complete a multipart upload session");
+            }
+            try {
+                storageService.completeMultipartUpload(session.getStorageKey(), session.getMultipartUploadId(), body.parts());
+                actualSizeBytes = storageService.getObjectSize(session.getStorageKey());
+            } catch (RuntimeException ex) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Storage check failed — please retry", ex);
+            }
+        } else {
+            boolean objectPresent;
+            try {
+                objectPresent = storageService.objectExists(session.getStorageKey());
+                // Measured from storage (a HEAD request), not the client-declared expectedMaxSizeBytes
+                // from createSession — a caller can declare any size at presign time, so that value
+                // must never be trusted for quota/storage-accounting figures.
+                actualSizeBytes = objectPresent ? storageService.getObjectSize(session.getStorageKey()) : 0L;
+            } catch (RuntimeException ex) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Storage check failed — please retry", ex);
+            }
+            if (!objectPresent) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Object not found in storage. Upload the file before calling complete.");
+            }
         }
 
         MediaFile mediaFile = new MediaFile();

@@ -19,6 +19,7 @@ import com.tinniestudio.api.shared.entity.Subtitle;
 import com.tinniestudio.api.shared.entity.UploadSession;
 import com.tinniestudio.api.shared.entity.VideoAsset;
 import com.tinniestudio.api.shared.queue.QueuePublisher;
+import com.tinniestudio.api.shared.storage.CompletedPartInfo;
 import com.tinniestudio.api.shared.storage.MultipartUploadHandle;
 import com.tinniestudio.api.shared.storage.PresignedUploadResult;
 import com.tinniestudio.api.shared.storage.StorageService;
@@ -372,6 +373,46 @@ class UploadServiceTest {
                 .extracting("status").isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
         }
 
+        @Test @DisplayName("completes a multipart RAW_VIDEO session via storageService.completeMultipartUpload, not objectExists/getObjectSize")
+        void completesMultipartSession() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            session.setMultipartUploadId("s3-upload-id");
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+            when(mediaFileRepository.save(any())).thenAnswer(inv -> {
+                MediaFile f = inv.getArgument(0);
+                f.setId(UUID.randomUUID());
+                return f;
+            });
+            when(videoAssetRepository.save(any())).thenAnswer(inv -> {
+                VideoAsset a = inv.getArgument(0);
+                a.setId(UUID.randomUUID());
+                return a;
+            });
+            when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(storageService.getObjectSize("raw/uuid/original.mp4")).thenReturn(104_857_600L);
+
+            var parts = java.util.List.of(new CompletedPartInfo(1, "etag-1"), new CompletedPartInfo(2, "etag-2"));
+            var body = new CompleteUploadRequest(null, null, null, parts);
+
+            var result = uploadService.completeSession(userId, session.getId(), body);
+
+            verify(storageService).completeMultipartUpload("raw/uuid/original.mp4", "s3-upload-id", parts);
+            verify(storageService, never()).objectExists(any());
+            assertThat(result.videoAssetId()).isNotNull();
+            verify(queuePublisher).publish(eq("media.video.process"), eq("VIDEO_PROCESSING_JOB"), any());
+        }
+
+        @Test @DisplayName("throws 400 when completing a multipart session without a parts list")
+        void throws400WhenMultipartCompleteMissingParts() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            session.setMultipartUploadId("s3-upload-id");
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+
+            assertThatThrownBy(() -> uploadService.completeSession(userId, session.getId(), null))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
+        }
+
         // ── SUBTITLE completion: persists a Subtitle row (Batch 15 gap — was previously dead) ──
 
         @Test @DisplayName("completes SUBTITLE session by creating a Subtitle row attached to the target VideoAsset")
@@ -403,7 +444,7 @@ class UploadServiceTest {
                 return s;
             });
 
-            CompleteUploadRequest body = new CompleteUploadRequest("en", "English", true);
+            CompleteUploadRequest body = new CompleteUploadRequest("en", "English", true, null);
             var result = uploadService.completeSession(userId, session.getId(), body);
 
             assertThat(result.subtitleId()).isNotNull();
@@ -453,7 +494,7 @@ class UploadServiceTest {
             when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             assertThatThrownBy(() -> uploadService.completeSession(
-                    userId, session.getId(), new CompleteUploadRequest("en", null, null)))
+                    userId, session.getId(), new CompleteUploadRequest("en", null, null, null)))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
         }
@@ -481,7 +522,7 @@ class UploadServiceTest {
             when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             assertThatThrownBy(() -> uploadService.completeSession(
-                    userId, session.getId(), new CompleteUploadRequest("en", null, null)))
+                    userId, session.getId(), new CompleteUploadRequest("en", null, null, null)))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
             verify(subtitleRepository, never()).save(any());
