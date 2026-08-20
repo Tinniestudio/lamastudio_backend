@@ -5,6 +5,8 @@ import com.tinniestudio.api.modules.episode.repository.EpisodeRepository;
 import com.tinniestudio.api.modules.season.repository.SeasonRepository;
 import com.tinniestudio.api.modules.upload.config.UploadConfig;
 import com.tinniestudio.api.modules.upload.dto.*;
+import com.tinniestudio.api.modules.upload.dto.PartUploadUrlResponse;
+import com.tinniestudio.api.modules.upload.dto.UploadedPartResponse;
 import com.tinniestudio.api.modules.upload.repository.MediaFileRepository;
 import com.tinniestudio.api.modules.upload.repository.SubtitleRepository;
 import com.tinniestudio.api.modules.upload.repository.UploadSessionRepository;
@@ -29,6 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -246,6 +250,59 @@ public class UploadService {
             .map(a -> a.getProcessingStatus().name())
             .orElse(null);
         return new UploadStatusResponse(sessionId, session.getUploadStatus().name(), processingStatus);
+    }
+
+    @Transactional(readOnly = true)
+    public PartUploadUrlResponse getPartUploadUrl(UUID userId, UUID sessionId, int partNumber) {
+        UploadSession session = uploadSessionRepository.findById(sessionId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "Upload session not found: " + sessionId));
+        if (!session.getUserId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Upload session does not belong to this user");
+        }
+        if (session.getMultipartUploadId() == null) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "Upload session is not a multipart upload");
+        }
+        String url = storageService.generatePartUploadUrl(
+            session.getStorageKey(), session.getMultipartUploadId(), partNumber, UploadConfig.PRESIGNED_URL_TTL);
+        return new PartUploadUrlResponse(url);
+    }
+
+    @Transactional(readOnly = true)
+    public List<UploadedPartResponse> listUploadedParts(UUID userId, UUID sessionId) {
+        UploadSession session = uploadSessionRepository.findById(sessionId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "Upload session not found: " + sessionId));
+        if (!session.getUserId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Upload session does not belong to this user");
+        }
+        if (session.getMultipartUploadId() == null) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "Upload session is not a multipart upload");
+        }
+        return storageService.listUploadedParts(session.getStorageKey(), session.getMultipartUploadId())
+            .stream()
+            .map(p -> new UploadedPartResponse(p.partNumber(), p.eTag()))
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<UploadSessionResponse> findActiveSession(
+            UUID userId, TargetEntityType targetEntityType, UUID targetEntityId, UploadType uploadType) {
+        return uploadSessionRepository
+            .findActiveSessions(userId, targetEntityType, targetEntityId, uploadType, Instant.now())
+            .stream()
+            .findFirst()
+            .map(s -> {
+                Integer totalParts = (s.getPartSizeBytes() != null && s.getExpectedMaxSizeBytes() != null)
+                    ? (int) Math.ceil(s.getExpectedMaxSizeBytes() / (double) s.getPartSizeBytes())
+                    : null;
+                return new UploadSessionResponse(s.getId(), null, s.getStorageKey(), s.getExpiresAt(),
+                    s.getMultipartUploadId(), s.getPartSizeBytes(), totalParts);
+            });
     }
 
     private String buildStorageKey(UploadType type, UUID targetEntityId, String ext) {

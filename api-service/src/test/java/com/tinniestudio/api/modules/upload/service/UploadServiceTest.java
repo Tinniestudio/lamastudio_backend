@@ -709,4 +709,89 @@ class UploadServiceTest {
                 .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
         }
     }
+
+    // ── multipart part-URL / list-parts / active-session lookup ───────────────
+
+    @Nested @DisplayName("multipart helpers")
+    class MultipartHelperTests {
+
+        @Test @DisplayName("getPartUploadUrl returns a freshly-signed URL for a PENDING multipart session owned by the caller")
+        void returnsPartUploadUrl() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            session.setMultipartUploadId("s3-upload-id");
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+            when(storageService.generatePartUploadUrl("raw/uuid/original.mp4", "s3-upload-id", 2, UploadConfig.PRESIGNED_URL_TTL))
+                .thenReturn("https://minio/part-2");
+
+            PartUploadUrlResponse result = uploadService.getPartUploadUrl(userId, session.getId(), 2);
+
+            assertThat(result.url()).isEqualTo("https://minio/part-2");
+        }
+
+        @Test @DisplayName("getPartUploadUrl throws 403 when the session belongs to a different user")
+        void getPartUploadUrlThrows403WhenWrongUser() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            session.setMultipartUploadId("s3-upload-id");
+            session.setUserId(UUID.randomUUID());
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+
+            assertThatThrownBy(() -> uploadService.getPartUploadUrl(userId, session.getId(), 1))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+        }
+
+        @Test @DisplayName("getPartUploadUrl throws 422 when the session isn't multipart")
+        void getPartUploadUrlThrows422WhenNotMultipart() {
+            UploadSession session = pendingSession(UploadType.THUMBNAIL, "thumbnails/uuid/thumb.jpg");
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+
+            assertThatThrownBy(() -> uploadService.getPartUploadUrl(userId, session.getId(), 1))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting("status").isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+
+        @Test @DisplayName("listUploadedParts maps storage's part list to UploadedPartResponse for the owning caller")
+        void listsUploadedParts() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            session.setMultipartUploadId("s3-upload-id");
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+            when(storageService.listUploadedParts("raw/uuid/original.mp4", "s3-upload-id"))
+                .thenReturn(java.util.List.of(new com.tinniestudio.api.shared.storage.UploadedPart(1, "etag-1", 1000L)));
+
+            var result = uploadService.listUploadedParts(userId, session.getId());
+
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).partNumber()).isEqualTo(1);
+            assertThat(result.get(0).eTag()).isEqualTo("etag-1");
+        }
+
+        @Test @DisplayName("findActiveSession returns the most recent matching PENDING session, mapped to UploadSessionResponse")
+        void findsActiveSession() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            session.setTargetEntityType(TargetEntityType.CONTENT);
+            session.setTargetEntityId(targetId);
+            session.setMultipartUploadId("s3-upload-id");
+            session.setPartSizeBytes(UploadConfig.MULTIPART_PART_SIZE_BYTES);
+            session.setExpectedMaxSizeBytes(100_000_000L);
+            when(uploadSessionRepository.findActiveSessions(
+                    eq(userId), eq(TargetEntityType.CONTENT), eq(targetId), eq(UploadType.RAW_VIDEO), any()))
+                .thenReturn(java.util.List.of(session));
+
+            var result = uploadService.findActiveSession(userId, TargetEntityType.CONTENT, targetId, UploadType.RAW_VIDEO);
+
+            assertThat(result).isPresent();
+            assertThat(result.get().sessionId()).isEqualTo(session.getId());
+            assertThat(result.get().uploadId()).isEqualTo("s3-upload-id");
+        }
+
+        @Test @DisplayName("findActiveSession returns empty when none exists")
+        void findsNoActiveSession() {
+            when(uploadSessionRepository.findActiveSessions(any(), any(), any(), any(), any()))
+                .thenReturn(java.util.List.of());
+
+            var result = uploadService.findActiveSession(userId, TargetEntityType.CONTENT, targetId, UploadType.RAW_VIDEO);
+
+            assertThat(result).isEmpty();
+        }
+    }
 }
