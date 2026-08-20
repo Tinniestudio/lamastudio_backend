@@ -38,17 +38,37 @@ public interface VideoAssetRepository extends JpaRepository<VideoAsset, UUID> {
     List<VideoAsset> findByEpisode_IdAndAssetTypeOrderByCreatedAtDesc(UUID episodeId, VideoAssetType assetType);
 
     /**
-     * Deactivates every VideoAsset sharing (content, assetType) with the given asset, excluding
-     * the asset itself — the "retire siblings" half of the isActive lifecycle. Callers are
-     * responsible for setting the target asset's own isActive=true afterward (this method never
-     * touches it, in case excludeId doesn't actually belong to the given contentId — a caller bug
-     * that would otherwise silently deactivate everything including the intended new active one).
+     * Deactivates every sibling VideoAsset, excluding the asset itself — the "retire siblings"
+     * half of the isActive lifecycle. Callers are responsible for setting the target asset's own
+     * isActive=true afterward (these methods never touch it, in case excludeId doesn't actually
+     * belong to the given scope id — a caller bug that would otherwise silently deactivate
+     * everything including the intended new active one).
+     *
+     * Three variants, one per possible target granularity (content/season/episode). A caller
+     * MUST pick the most specific one available on the asset (episode > season > content) —
+     * content is denormalized onto every episode/season-linked asset too (see
+     * UploadService.linkTargetAndAssertOwnership), so scoping a series episode's activation by
+     * deactivateOtherAssetsForContent alone would match and deactivate every OTHER episode of the
+     * same show sharing that content id, not just true siblings of the one asset being activated.
+     * See VideoActivationService.activateAndRetireSiblings for the scope-selection logic.
      */
     @Transactional
     @Modifying
     @Query("UPDATE VideoAsset a SET a.isActive = false " +
            "WHERE a.content.id = :contentId AND a.assetType = :assetType AND a.id <> :excludeId AND a.isActive = true")
-    void deactivateOtherAssets(@Param("contentId") UUID contentId, @Param("assetType") VideoAssetType assetType, @Param("excludeId") UUID excludeId);
+    void deactivateOtherAssetsForContent(@Param("contentId") UUID contentId, @Param("assetType") VideoAssetType assetType, @Param("excludeId") UUID excludeId);
+
+    @Transactional
+    @Modifying
+    @Query("UPDATE VideoAsset a SET a.isActive = false " +
+           "WHERE a.season.id = :seasonId AND a.assetType = :assetType AND a.id <> :excludeId AND a.isActive = true")
+    void deactivateOtherAssetsForSeason(@Param("seasonId") UUID seasonId, @Param("assetType") VideoAssetType assetType, @Param("excludeId") UUID excludeId);
+
+    @Transactional
+    @Modifying
+    @Query("UPDATE VideoAsset a SET a.isActive = false " +
+           "WHERE a.episode.id = :episodeId AND a.assetType = :assetType AND a.id <> :excludeId AND a.isActive = true")
+    void deactivateOtherAssetsForEpisode(@Param("episodeId") UUID episodeId, @Param("assetType") VideoAssetType assetType, @Param("excludeId") UUID excludeId);
 
     long countByProcessingStatus(ProcessingStatus status);
 
