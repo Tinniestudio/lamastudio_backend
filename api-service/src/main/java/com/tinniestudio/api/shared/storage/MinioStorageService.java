@@ -27,6 +27,7 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
 
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.List;
 
 @Slf4j
@@ -198,6 +199,11 @@ public class MinioStorageService implements StorageService {
         }
     }
 
+    // Real S3 caps a single ListParts response at 1000 parts (isTruncated/nextPartNumberMarker
+    // for more) — not handled here, since it's currently unreachable: the largest upload type
+    // (RAW_VIDEO, 10GB max per UploadConfig) at this class's 25MB part size tops out around 410
+    // parts. Revisit with real pagination if either the max file size or part size ever changes
+    // enough to cross that ~1000-part threshold.
     @Override
     public List<UploadedPart> listUploadedParts(String key, String uploadId) {
         try {
@@ -217,7 +223,11 @@ public class MinioStorageService implements StorageService {
     @Override
     public void completeMultipartUpload(String key, String uploadId, List<CompletedPartInfo> parts) {
         try {
+            // S3's CompleteMultipartUpload requires parts in strictly ascending partNumber
+            // order and returns InvalidPartOrder otherwise — sort defensively rather than
+            // trusting caller order.
             List<CompletedPart> completedParts = parts.stream()
+                    .sorted(Comparator.comparingInt(CompletedPartInfo::partNumber))
                     .map(p -> CompletedPart.builder().partNumber(p.partNumber()).eTag(p.eTag()).build())
                     .toList();
             s3Client.completeMultipartUpload(CompleteMultipartUploadRequest.builder()

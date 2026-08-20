@@ -435,6 +435,18 @@ class MinioStorageServiceTest {
         }
 
         @Test
+        @DisplayName("completeMultipartUpload sorts parts by partNumber regardless of input order")
+        void completeMultipartUploadSortsPartsByNumber() {
+            service.completeMultipartUpload("raw/uuid/original.mp4", "upload-123",
+                List.of(new CompletedPartInfo(2, "etag-2"), new CompletedPartInfo(1, "etag-1")));
+
+            ArgumentCaptor<CompleteMultipartUploadRequest> captor = ArgumentCaptor.forClass(CompleteMultipartUploadRequest.class);
+            verify(s3Client).completeMultipartUpload(captor.capture());
+            assertThat(captor.getValue().multipartUpload().parts()).extracting("partNumber", "eTag")
+                .containsExactly(tuple(1, "etag-1"), tuple(2, "etag-2"));
+        }
+
+        @Test
         @DisplayName("completeMultipartUpload wraps SdkException as StorageException")
         void wrapsCompleteMultipartUploadException() {
             doThrow(SdkException.builder().message("timeout").build())
