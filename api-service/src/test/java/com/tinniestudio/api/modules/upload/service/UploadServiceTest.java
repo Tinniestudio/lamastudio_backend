@@ -791,6 +791,18 @@ class UploadServiceTest {
                 .extracting("status").isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
         }
 
+        @Test @DisplayName("getPartUploadUrl throws 422 when the session is already COMPLETED")
+        void getPartUploadUrlThrows422WhenAlreadyCompleted() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            session.setMultipartUploadId("s3-upload-id");
+            session.setUploadStatus(UploadStatus.COMPLETED);
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+
+            assertThatThrownBy(() -> uploadService.getPartUploadUrl(userId, session.getId(), 1))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting("status").isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+
         @Test @DisplayName("listUploadedParts maps storage's part list to UploadedPartResponse for the owning caller")
         void listsUploadedParts() {
             UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
@@ -821,6 +833,18 @@ class UploadServiceTest {
         @Test @DisplayName("listUploadedParts throws 422 when the session isn't multipart")
         void listUploadedPartsThrows422WhenNotMultipart() {
             UploadSession session = pendingSession(UploadType.THUMBNAIL, "thumbnails/uuid/thumb.jpg");
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+
+            assertThatThrownBy(() -> uploadService.listUploadedParts(userId, session.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting("status").isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+
+        @Test @DisplayName("listUploadedParts throws 422 when the session is already COMPLETED")
+        void listUploadedPartsThrows422WhenAlreadyCompleted() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            session.setMultipartUploadId("s3-upload-id");
+            session.setUploadStatus(UploadStatus.COMPLETED);
             when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
 
             assertThatThrownBy(() -> uploadService.listUploadedParts(userId, session.getId()))

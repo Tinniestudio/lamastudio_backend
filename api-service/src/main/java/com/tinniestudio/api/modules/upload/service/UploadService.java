@@ -275,6 +275,10 @@ public class UploadService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                 "Upload session does not belong to this user");
         }
+        if (session.getUploadStatus() != UploadStatus.PENDING) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "Upload session is not in PENDING state (current: " + session.getUploadStatus() + ")");
+        }
         if (session.getMultipartUploadId() == null) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                 "Upload session is not a multipart upload");
@@ -292,6 +296,10 @@ public class UploadService {
         if (!session.getUserId().equals(userId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                 "Upload session does not belong to this user");
+        }
+        if (session.getUploadStatus() != UploadStatus.PENDING) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "Upload session is not in PENDING state (current: " + session.getUploadStatus() + ")");
         }
         if (session.getMultipartUploadId() == null) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
