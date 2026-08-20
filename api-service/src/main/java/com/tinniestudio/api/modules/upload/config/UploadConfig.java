@@ -39,6 +39,17 @@ public class UploadConfig {
     public static final Duration PRESIGNED_URL_TTL = Duration.ofMinutes(30);
     public static final String VIDEO_PROCESS_QUEUE = "media.video.process";
 
+    // S3 requires every part but the last to be >=5MB. 25MB balances part count for a large
+    // file (a 10GB RAW_VIDEO is ~400 parts) against how much a single failed part's retry wastes
+    // on a slow connection.
+    public static final long MULTIPART_PART_SIZE_BYTES = 25L * 1024 * 1024;
+
+    // A multipart session's window is measured in hours, not the 30-minute single-PUT TTL —
+    // individual part URLs are separately, freshly presigned per-part (see
+    // UploadService.getPartUploadUrl()), so this only bounds how long the *session row itself*
+    // (and thus the "resume" lookup) stays valid, not any one signed URL.
+    public static final java.time.Duration MULTIPART_SESSION_TTL = java.time.Duration.ofHours(24);
+
     public boolean isMimeTypeAllowed(UploadType type, String mimeType) {
         Set<String> allowed = ALLOWED_MIME_TYPES.get(type);
         return allowed != null && allowed.contains(mimeType);

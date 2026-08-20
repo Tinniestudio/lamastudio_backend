@@ -40,6 +40,13 @@ public class UploadSession extends BaseEntity {
 
     private Long expectedMaxSizeBytes;
 
+    // Both null for a non-multipart session (everything except RAW_VIDEO/TRAILER — see
+    // UploadService.createSession()). multipartUploadId is S3's own upload id, the handle every
+    // part-URL/list/complete call must reference.
+    private String multipartUploadId;
+
+    private Long partSizeBytes;
+
     @Enumerated(EnumType.STRING)
     private UploadStatus uploadStatus;
 
