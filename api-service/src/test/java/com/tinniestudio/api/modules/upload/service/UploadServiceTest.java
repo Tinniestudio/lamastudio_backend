@@ -765,6 +765,28 @@ class UploadServiceTest {
             assertThat(result.get(0).eTag()).isEqualTo("etag-1");
         }
 
+        @Test @DisplayName("listUploadedParts throws 403 when the session belongs to a different user")
+        void listUploadedPartsThrows403WhenWrongUser() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            session.setMultipartUploadId("s3-upload-id");
+            session.setUserId(UUID.randomUUID());
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+
+            assertThatThrownBy(() -> uploadService.listUploadedParts(userId, session.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+        }
+
+        @Test @DisplayName("listUploadedParts throws 422 when the session isn't multipart")
+        void listUploadedPartsThrows422WhenNotMultipart() {
+            UploadSession session = pendingSession(UploadType.THUMBNAIL, "thumbnails/uuid/thumb.jpg");
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+
+            assertThatThrownBy(() -> uploadService.listUploadedParts(userId, session.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting("status").isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+
         @Test @DisplayName("findActiveSession returns the most recent matching PENDING session, mapped to UploadSessionResponse")
         void findsActiveSession() {
             UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
