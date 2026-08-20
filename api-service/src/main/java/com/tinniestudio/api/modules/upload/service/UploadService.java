@@ -19,6 +19,7 @@ import com.tinniestudio.api.shared.entity.UploadSession;
 import com.tinniestudio.api.shared.entity.VideoAsset;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
 import com.tinniestudio.api.shared.queue.QueuePublisher;
+import com.tinniestudio.api.shared.storage.MultipartUploadHandle;
 import com.tinniestudio.api.shared.storage.PresignedUploadResult;
 import com.tinniestudio.api.shared.storage.StorageService;
 import lombok.RequiredArgsConstructor;
@@ -65,27 +66,48 @@ public class UploadService {
         String ext = extractExtension(req.originalFilename());
         String storageKey = buildStorageKey(req.uploadType(), req.targetEntityId(), ext);
 
-        PresignedUploadResult presigned = storageService.generateUploadUrl(
-            storageKey, req.mimeType(), maxBytes, UploadConfig.PRESIGNED_URL_TTL);
-
-        // Use the confirmed storage key returned by the storage service (may differ from the hint)
-        String confirmedKey = presigned.storageKey();
-
         UploadSession session = new UploadSession();
         session.setUserId(userId);
         session.setUploadType(req.uploadType());
         session.setTargetEntityType(req.targetEntityType());
         session.setTargetEntityId(req.targetEntityId());
-        session.setStorageKey(confirmedKey);
         session.setOriginalFilename(req.originalFilename());
         session.setMimeType(req.mimeType());
         session.setExpectedMaxSizeBytes(req.fileSizeBytes());
         session.setUploadStatus(UploadStatus.PENDING);
+
+        boolean isMultipart = req.uploadType() == UploadType.RAW_VIDEO || req.uploadType() == UploadType.TRAILER;
+        if (isMultipart) {
+            return createMultipartSession(session, storageKey, req);
+        }
+        return createSinglePutSession(session, storageKey, req, maxBytes);
+    }
+
+    private UploadSessionResponse createMultipartSession(UploadSession session, String storageKey, CreateUploadSessionRequest req) {
+        MultipartUploadHandle handle = storageService.initiateMultipartUpload(storageKey, req.mimeType());
+        session.setStorageKey(storageKey);
+        session.setMultipartUploadId(handle.uploadId());
+        session.setPartSizeBytes(UploadConfig.MULTIPART_PART_SIZE_BYTES);
+        session.setExpiresAt(Instant.now().plus(UploadConfig.MULTIPART_SESSION_TTL));
+
+        UploadSession saved = uploadSessionRepository.save(session);
+        int totalParts = (int) Math.ceil(req.fileSizeBytes() / (double) UploadConfig.MULTIPART_PART_SIZE_BYTES);
+        return new UploadSessionResponse(saved.getId(), null, storageKey, saved.getExpiresAt(),
+            handle.uploadId(), UploadConfig.MULTIPART_PART_SIZE_BYTES, totalParts);
+    }
+
+    private UploadSessionResponse createSinglePutSession(UploadSession session, String storageKey, CreateUploadSessionRequest req, long maxBytes) {
+        PresignedUploadResult presigned = storageService.generateUploadUrl(
+            storageKey, req.mimeType(), maxBytes, UploadConfig.PRESIGNED_URL_TTL);
+        // Use the confirmed storage key returned by the storage service (may differ from the hint)
+        String confirmedKey = presigned.storageKey();
+        session.setStorageKey(confirmedKey);
         session.setPresignedUrl(presigned.uploadUrl());
         session.setExpiresAt(presigned.expiresAt());
 
         UploadSession saved = uploadSessionRepository.save(session);
-        return new UploadSessionResponse(saved.getId(), presigned.uploadUrl(), confirmedKey, presigned.expiresAt());
+        return new UploadSessionResponse(saved.getId(), presigned.uploadUrl(), confirmedKey, presigned.expiresAt(),
+            null, null, null);
     }
 
     @Transactional

@@ -19,6 +19,7 @@ import com.tinniestudio.api.shared.entity.Subtitle;
 import com.tinniestudio.api.shared.entity.UploadSession;
 import com.tinniestudio.api.shared.entity.VideoAsset;
 import com.tinniestudio.api.shared.queue.QueuePublisher;
+import com.tinniestudio.api.shared.storage.MultipartUploadHandle;
 import com.tinniestudio.api.shared.storage.PresignedUploadResult;
 import com.tinniestudio.api.shared.storage.StorageService;
 import org.junit.jupiter.api.*;
@@ -78,16 +79,23 @@ class UploadServiceTest {
     @Nested @DisplayName("createSession()")
     class CreateSessionTests {
 
-        @Test @DisplayName("returns presigned URL response for valid RAW_VIDEO request")
-        void createsSessionForRawVideo() {
+        // NOTE: this test originally used RAW_VIDEO here, exercising the single-PUT flow. Task 8
+        // (the RAW_VIDEO/TRAILER multipart branch below) made that premise impossible — RAW_VIDEO
+        // now always goes through createMultipartSession(), never generateUploadUrl(). Switched to
+        // PARTNER_LOGO so this test keeps covering the single-PUT response shape (sessionId,
+        // storageKey, expiresAt) that the newer, narrower thumbnailStaysSinglePut() test doesn't
+        // assert on. RAW_VIDEO's own (multipart) coverage now lives in
+        // createsMultipartSessionForRawVideo() below.
+        @Test @DisplayName("returns presigned URL response for valid PARTNER_LOGO request")
+        void createsSessionForPartnerLogo() {
             var req = new CreateUploadSessionRequest(
-                UploadType.RAW_VIDEO, TargetEntityType.EPISODE, targetId,
-                "video.mp4", "video/mp4", 1_000_000L);
-            when(uploadConfig.isMimeTypeAllowed(UploadType.RAW_VIDEO, "video/mp4")).thenReturn(true);
-            when(uploadConfig.getMaxBytes(UploadType.RAW_VIDEO)).thenReturn(10_737_418_240L);
+                UploadType.PARTNER_LOGO, TargetEntityType.CONTENT, targetId,
+                "logo.jpg", "image/jpeg", 1_000_000L);
+            when(uploadConfig.isMimeTypeAllowed(UploadType.PARTNER_LOGO, "image/jpeg")).thenReturn(true);
+            when(uploadConfig.getMaxBytes(UploadType.PARTNER_LOGO)).thenReturn(5_242_880L);
             Instant expiry = Instant.now().plusSeconds(1800);
-            when(storageService.generateUploadUrl(any(), eq("video/mp4"), anyLong(), any()))
-                .thenReturn(new PresignedUploadResult("https://minio/upload", "raw/uuid/original.mp4", expiry));
+            when(storageService.generateUploadUrl(any(), eq("image/jpeg"), anyLong(), any()))
+                .thenReturn(new PresignedUploadResult("https://minio/upload", "partner-logos/uuid/logo.jpg", expiry));
             when(uploadSessionRepository.save(any())).thenAnswer(inv -> {
                 UploadSession s = inv.getArgument(0);
                 s.setId(UUID.randomUUID());
@@ -97,7 +105,7 @@ class UploadServiceTest {
             UploadSessionResponse result = uploadService.createSession(userId, req);
 
             assertThat(result.uploadUrl()).isEqualTo("https://minio/upload");
-            assertThat(result.storageKey()).isEqualTo("raw/uuid/original.mp4");
+            assertThat(result.storageKey()).isEqualTo("partner-logos/uuid/logo.jpg");
             assertThat(result.expiresAt()).isEqualTo(expiry);
             assertThat(result.sessionId()).isNotNull();
         }
@@ -168,6 +176,52 @@ class UploadServiceTest {
             uploadService.createSession(userId, req);
 
             assertThat(keyCaptor.getValue()).endsWith(".bin");
+        }
+
+        @Test @DisplayName("RAW_VIDEO initiates a multipart upload instead of a single presigned PUT")
+        void createsMultipartSessionForRawVideo() {
+            var req = new CreateUploadSessionRequest(
+                UploadType.RAW_VIDEO, TargetEntityType.CONTENT, targetId,
+                "movie.mp4", "video/mp4", 100_000_000L); // ~100MB -> 4 parts at 25MB
+            when(uploadConfig.isMimeTypeAllowed(UploadType.RAW_VIDEO, "video/mp4")).thenReturn(true);
+            when(uploadConfig.getMaxBytes(UploadType.RAW_VIDEO)).thenReturn(10_737_418_240L);
+            when(storageService.initiateMultipartUpload(any(), eq("video/mp4")))
+                .thenReturn(new MultipartUploadHandle("s3-upload-id"));
+            when(uploadSessionRepository.save(any())).thenAnswer(inv -> {
+                UploadSession s = inv.getArgument(0);
+                s.setId(UUID.randomUUID());
+                return s;
+            });
+
+            UploadSessionResponse result = uploadService.createSession(userId, req);
+
+            assertThat(result.uploadUrl()).isNull();
+            assertThat(result.uploadId()).isEqualTo("s3-upload-id");
+            assertThat(result.partSizeBytes()).isEqualTo(UploadConfig.MULTIPART_PART_SIZE_BYTES);
+            assertThat(result.totalParts()).isEqualTo(4);
+            verify(storageService, never()).generateUploadUrl(any(), any(), anyLong(), any());
+        }
+
+        @Test @DisplayName("THUMBNAIL still uses the single-PUT flow, unaffected by the RAW_VIDEO/TRAILER multipart branch")
+        void thumbnailStaysSinglePut() {
+            var req = new CreateUploadSessionRequest(
+                UploadType.THUMBNAIL, TargetEntityType.CONTENT, targetId,
+                "poster.jpg", "image/jpeg", 500_000L);
+            when(uploadConfig.isMimeTypeAllowed(UploadType.THUMBNAIL, "image/jpeg")).thenReturn(true);
+            when(uploadConfig.getMaxBytes(UploadType.THUMBNAIL)).thenReturn(10_485_760L);
+            when(storageService.generateUploadUrl(any(), eq("image/jpeg"), anyLong(), any()))
+                .thenReturn(new PresignedUploadResult("https://minio/upload", "thumbnails/uuid/uuid.jpg", Instant.now().plusSeconds(1800)));
+            when(uploadSessionRepository.save(any())).thenAnswer(inv -> {
+                UploadSession s = inv.getArgument(0);
+                s.setId(UUID.randomUUID());
+                return s;
+            });
+
+            UploadSessionResponse result = uploadService.createSession(userId, req);
+
+            assertThat(result.uploadUrl()).isEqualTo("https://minio/upload");
+            assertThat(result.uploadId()).isNull();
+            verify(storageService, never()).initiateMultipartUpload(any(), any());
         }
     }
 
