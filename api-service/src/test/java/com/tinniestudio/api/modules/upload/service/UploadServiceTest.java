@@ -402,6 +402,37 @@ class UploadServiceTest {
             verify(queuePublisher).publish(eq("media.video.process"), eq("VIDEO_PROCESSING_JOB"), any());
         }
 
+        @Test @DisplayName("completes a multipart session even when getObjectSize fails after S3 assembly already succeeded")
+        void completesMultipartSessionEvenWhenGetObjectSizeFailsAfterS3AssemblySucceeds() {
+            UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");
+            session.setMultipartUploadId("s3-upload-id");
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+            when(mediaFileRepository.save(any())).thenAnswer(inv -> {
+                MediaFile f = inv.getArgument(0);
+                f.setId(UUID.randomUUID());
+                return f;
+            });
+            when(videoAssetRepository.save(any())).thenAnswer(inv -> {
+                VideoAsset a = inv.getArgument(0);
+                a.setId(UUID.randomUUID());
+                return a;
+            });
+            when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            // completeMultipartUpload succeeds (S3 has already assembled the object and invalidated
+            // the multipart uploadId at this point) but the subsequent getObjectSize call fails —
+            // this must NOT surface as a "please retry" 503, since retrying would re-call
+            // completeMultipartUpload() with a now-invalid uploadId and fail forever.
+            when(storageService.getObjectSize("raw/uuid/original.mp4")).thenThrow(new RuntimeException("transient S3 error"));
+
+            var parts = java.util.List.of(new CompletedPartInfo(1, "etag-1"), new CompletedPartInfo(2, "etag-2"));
+            var body = new CompleteUploadRequest(null, null, null, parts);
+
+            var result = uploadService.completeSession(userId, session.getId(), body);
+
+            verify(storageService).completeMultipartUpload("raw/uuid/original.mp4", "s3-upload-id", parts);
+            assertThat(result.videoAssetId()).isNotNull();
+        }
+
         @Test @DisplayName("throws 400 when completing a multipart session without a parts list")
         void throws400WhenMultipartCompleteMissingParts() {
             UploadSession session = pendingSession(UploadType.RAW_VIDEO, "raw/uuid/original.mp4");

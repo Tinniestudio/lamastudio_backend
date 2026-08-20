@@ -25,6 +25,7 @@ import com.tinniestudio.api.shared.storage.MultipartUploadHandle;
 import com.tinniestudio.api.shared.storage.PresignedUploadResult;
 import com.tinniestudio.api.shared.storage.StorageService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +38,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UploadService {
 
     private final UploadSessionRepository uploadSessionRepository;
@@ -140,10 +142,25 @@ public class UploadService {
             }
             try {
                 storageService.completeMultipartUpload(session.getStorageKey(), session.getMultipartUploadId(), body.parts());
-                actualSizeBytes = storageService.getObjectSize(session.getStorageKey());
             } catch (RuntimeException ex) {
+                // Nothing committed to S3 in this branch (or the attempt itself is what failed) —
+                // safe to tell the caller to retry, completeMultipartUpload() hasn't invalidated
+                // the multipart uploadId here.
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Storage check failed — please retry", ex);
+            }
+            // completeMultipartUpload() succeeded past this point — S3 has assembled the object
+            // and invalidated the multipart uploadId, so retrying this whole method from the top
+            // would fail forever (NoSuchUpload). A failure past here must never surface as a
+            // "please retry" 503 — degrade to a best-effort size and let completion proceed
+            // instead, since actualSizeBytes only feeds session.fileSizeBytes (storage
+            // accounting), not anything correctness-critical to VideoAsset creation/processing.
+            try {
+                actualSizeBytes = storageService.getObjectSize(session.getStorageKey());
+            } catch (RuntimeException ex) {
+                log.warn("getObjectSize failed after completeMultipartUpload succeeded for key={} — " +
+                    "proceeding with fileSizeBytes=0, needs reconciliation", session.getStorageKey(), ex);
+                actualSizeBytes = 0L;
             }
         } else {
             boolean objectPresent;
