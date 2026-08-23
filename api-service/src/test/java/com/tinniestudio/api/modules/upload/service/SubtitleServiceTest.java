@@ -62,6 +62,28 @@ class SubtitleServiceTest {
             assertThat(result.get(0).languageCode()).isEqualTo("en");
         }
 
+        @Test @DisplayName("returns every subtitle attached to the video, not just one")
+        void returnsMultipleSubtitles() {
+            VideoAsset asset = ownedAsset();
+            Subtitle en = new Subtitle();
+            en.setId(UUID.randomUUID());
+            en.setVideoAsset(asset);
+            en.setLanguageCode("en");
+            en.setFormat(SubtitleFormat.VTT);
+            Subtitle fr = new Subtitle();
+            fr.setId(UUID.randomUUID());
+            fr.setVideoAsset(asset);
+            fr.setLanguageCode("fr");
+            fr.setFormat(SubtitleFormat.SRT);
+            when(videoAssetRepository.findById(videoAssetId)).thenReturn(Optional.of(asset));
+            when(subtitleRepository.findByVideoAsset_Id(videoAssetId)).thenReturn(List.of(en, fr));
+
+            List<PartnerSubtitleResponse> result = subtitleService.list(ownerId, videoAssetId);
+
+            assertThat(result).hasSize(2);
+            assertThat(result).extracting(PartnerSubtitleResponse::languageCode).containsExactly("en", "fr");
+        }
+
         @Test @DisplayName("throws 404 when the video doesn't belong to the caller")
         void throws404WhenNotOwner() {
             VideoAsset asset = new VideoAsset();
