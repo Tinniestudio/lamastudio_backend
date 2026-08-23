@@ -13,5 +13,7 @@ public record UploadSessionResponse(
     Instant expiresAt,
     String uploadId,
     Long partSizeBytes,
-    Integer totalParts
+    Integer totalParts,
+    String originalFilename,
+    Long expectedMaxSizeBytes
 ) {}

@@ -200,6 +200,8 @@ class UploadServiceTest {
             assertThat(result.uploadId()).isEqualTo("s3-upload-id");
             assertThat(result.partSizeBytes()).isEqualTo(UploadConfig.MULTIPART_PART_SIZE_BYTES);
             assertThat(result.totalParts()).isEqualTo(4);
+            assertThat(result.originalFilename()).isEqualTo("movie.mp4");
+            assertThat(result.expectedMaxSizeBytes()).isEqualTo(100_000_000L);
             verify(storageService, never()).generateUploadUrl(any(), any(), anyLong(), any());
         }
 
@@ -222,6 +224,8 @@ class UploadServiceTest {
 
             assertThat(result.uploadUrl()).isEqualTo("https://minio/upload");
             assertThat(result.uploadId()).isNull();
+            assertThat(result.originalFilename()).isEqualTo("poster.jpg");
+            assertThat(result.expectedMaxSizeBytes()).isEqualTo(500_000L);
             verify(storageService, never()).initiateMultipartUpload(any(), any());
         }
     }
@@ -891,6 +895,7 @@ class UploadServiceTest {
             session.setMultipartUploadId("s3-upload-id");
             session.setPartSizeBytes(UploadConfig.MULTIPART_PART_SIZE_BYTES);
             session.setExpectedMaxSizeBytes(100_000_000L);
+            session.setOriginalFilename("movie.mp4");
             when(uploadSessionRepository.findActiveSessions(
                     eq(userId), eq(TargetEntityType.CONTENT), eq(targetId), eq(UploadType.RAW_VIDEO), any()))
                 .thenReturn(java.util.List.of(session));
@@ -900,6 +905,8 @@ class UploadServiceTest {
             assertThat(result).isPresent();
             assertThat(result.get().sessionId()).isEqualTo(session.getId());
             assertThat(result.get().uploadId()).isEqualTo("s3-upload-id");
+            assertThat(result.get().originalFilename()).isEqualTo("movie.mp4");
+            assertThat(result.get().expectedMaxSizeBytes()).isEqualTo(100_000_000L);
         }
 
         @Test @DisplayName("findActiveSession returns empty when none exists")

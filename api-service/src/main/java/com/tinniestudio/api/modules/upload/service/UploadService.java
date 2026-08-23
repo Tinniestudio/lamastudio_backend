@@ -99,7 +99,8 @@ public class UploadService {
         UploadSession saved = uploadSessionRepository.save(session);
         int totalParts = (int) Math.ceil(req.fileSizeBytes() / (double) UploadConfig.MULTIPART_PART_SIZE_BYTES);
         return new UploadSessionResponse(saved.getId(), null, storageKey, saved.getExpiresAt(),
-            handle.uploadId(), UploadConfig.MULTIPART_PART_SIZE_BYTES, totalParts);
+            handle.uploadId(), UploadConfig.MULTIPART_PART_SIZE_BYTES, totalParts,
+            req.originalFilename(), req.fileSizeBytes());
     }
 
     private UploadSessionResponse createSinglePutSession(UploadSession session, String storageKey, CreateUploadSessionRequest req, long maxBytes) {
@@ -113,7 +114,7 @@ public class UploadService {
 
         UploadSession saved = uploadSessionRepository.save(session);
         return new UploadSessionResponse(saved.getId(), presigned.uploadUrl(), confirmedKey, presigned.expiresAt(),
-            null, null, null);
+            null, null, null, req.originalFilename(), req.fileSizeBytes());
     }
 
     @Transactional
@@ -340,7 +341,8 @@ public class UploadService {
                     ? (int) Math.ceil(s.getExpectedMaxSizeBytes() / (double) s.getPartSizeBytes())
                     : null;
                 return new UploadSessionResponse(s.getId(), null, s.getStorageKey(), s.getExpiresAt(),
-                    s.getMultipartUploadId(), s.getPartSizeBytes(), totalParts);
+                    s.getMultipartUploadId(), s.getPartSizeBytes(), totalParts,
+                    s.getOriginalFilename(), s.getExpectedMaxSizeBytes());
             });
     }
 
