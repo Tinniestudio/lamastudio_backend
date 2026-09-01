@@ -17,7 +17,8 @@ import java.util.UUID;
  */
 public record PartnerContentResponse(
     UUID id, String title, String slug, String description, String shortDescription,
-    String type, String status, String maturityRating,
+    com.tinniestudio.api.modules.contenttype.dto.ContentTypeResponse contentType,
+    String status, String maturityRating,
     LocalDate releaseDate, String language, String country,
     Boolean featured, Boolean comingSoon, Long viewCount,
     Integer durationSeconds, String posterUrl, String thumbnailUrl,
@@ -28,7 +29,8 @@ public record PartnerContentResponse(
         return new PartnerContentResponse(
             c.getId(), c.getTitle(), c.getSlug(),
             c.getDescription(), c.getShortDescription(),
-            c.getType().name(), c.getStatus().name(), c.getMaturityRating().name(),
+            com.tinniestudio.api.modules.contenttype.dto.ContentTypeResponse.from(c.getContentType()),
+            c.getStatus().name(), c.getMaturityRating().name(),
             c.getReleaseDate(), c.getLanguage(), c.getCountry(),
             c.getFeatured(), c.getComingSoon(), c.getViewCount(),
             c.getDurationSeconds(), c.getPosterUrl(), c.getThumbnailUrl(),
@@ -42,7 +44,7 @@ public record PartnerContentResponse(
     public static PartnerContentResponse from(ContentResponse c) {
         return new PartnerContentResponse(
             c.id(), c.title(), c.slug(), c.description(), c.shortDescription(),
-            c.type(), c.status(), c.maturityRating(),
+            c.contentType(), c.status(), c.maturityRating(),
             c.releaseDate(), c.language(), c.country(),
             c.featured(), c.comingSoon(), c.viewCount(),
             c.durationSeconds(), c.posterUrl(), c.thumbnailUrl(),
