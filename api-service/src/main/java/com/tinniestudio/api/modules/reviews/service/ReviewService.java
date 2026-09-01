@@ -15,4 +15,5 @@ public interface ReviewService {
     ReviewResponse update(UUID userId, UUID reviewId, UpdateReviewRequest request);
     void delete(UUID userId, UUID reviewId);
     ReviewResponse moderateStatus(UUID reviewId, UpdateReviewStatusRequest request);
+    ReviewResponse getMine(UUID userId, UUID contentId);
 }

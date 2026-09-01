@@ -377,4 +377,35 @@ class ReviewServiceTest {
 
         verify(reviewRepo, never()).save(any());
     }
+
+    // ─── getMine() ───────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("getMine: returns the review regardless of its status when it exists")
+    void getMine_returnsReviewOfAnyStatus() {
+        ContentReview pending = new ContentReview();
+        ReflectionTestUtils.setField(pending, "id", reviewId);
+        pending.setUserId(userId);
+        pending.setContentId(contentId);
+        pending.setRating((short) 4);
+        pending.setStatus(ReviewStatus.PENDING);
+
+        when(reviewRepo.findByUserIdAndContentId(userId, contentId)).thenReturn(Optional.of(pending));
+
+        ReviewResponse result = reviewService.getMine(userId, contentId);
+
+        assertThat(result.status()).isEqualTo("PENDING");
+        assertThat(result.author()).isNull();
+    }
+
+    @Test
+    @DisplayName("getMine: throws 404 when the user has no review on this content")
+    void getMine_throwsNotFoundWhenNoneExists() {
+        when(reviewRepo.findByUserIdAndContentId(userId, contentId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reviewService.getMine(userId, contentId))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
+                        .isEqualTo(NOT_FOUND));
+    }
 }

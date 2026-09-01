@@ -124,4 +124,13 @@ public class ReviewServiceImpl implements ReviewService {
 
         return ReviewResponse.from(reviewRepo.save(review));
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ReviewResponse getMine(UUID userId, UUID contentId) {
+        return reviewRepo.findByUserIdAndContentId(userId, contentId)
+                .map(ReviewResponse::from)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "No review found for this content"));
+    }
 }

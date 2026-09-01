@@ -15,4 +15,5 @@ public interface ReviewRepository extends JpaRepository<ContentReview, UUID> {
     Page<ContentReview> findByContentIdAndStatusOrderByCreatedAtDesc(UUID contentId, ReviewStatus status, Pageable pageable);
     boolean existsByUserIdAndContentId(UUID userId, UUID contentId);
     Optional<ContentReview> findByIdAndUserId(UUID id, UUID userId);
+    Optional<ContentReview> findByUserIdAndContentId(UUID userId, UUID contentId);
 }
