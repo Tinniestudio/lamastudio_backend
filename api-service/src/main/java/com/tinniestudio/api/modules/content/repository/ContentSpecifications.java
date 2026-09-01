@@ -2,7 +2,6 @@ package com.tinniestudio.api.modules.content.repository;
 
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
-import com.tinniestudio.api.shared.entity.DomainEnums.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import jakarta.persistence.criteria.JoinType;
 import org.springframework.data.jpa.domain.Specification;
@@ -28,9 +27,9 @@ public class ContentSpecifications {
             : cb.like(cb.lower(root.get("title")), "%" + q.toLowerCase() + "%");
     }
 
-    public static Specification<Content> hasType(ContentType type) {
-        return (root, query, cb) -> type == null ? cb.conjunction()
-            : cb.equal(root.get("type"), type);
+    public static Specification<Content> hasType(String contentTypeSlug) {
+        return (root, query, cb) -> contentTypeSlug == null ? cb.conjunction()
+            : cb.equal(root.join("contentType", JoinType.INNER).get("slug"), contentTypeSlug);
     }
 
     public static Specification<Content> hasMaturityRating(MaturityRating rating) {
@@ -86,6 +85,25 @@ public class ContentSpecifications {
         return (root, query, cb) -> {
             if (ids == null || ids.isEmpty()) return cb.conjunction();
             return cb.not(root.get("id").in(ids));
+        };
+    }
+
+    /**
+     * AND semantics: content must belong to ALL given category slugs, not just one of them.
+     * One join per slug — each loop iteration gets its own alias in Hibernate's Criteria API, so
+     * N slugs correctly requires N distinct category memberships (the standard tag-AND-filter
+     * pattern). Contrast with hasAnyCategory, which is OR-by-id and used elsewhere.
+     */
+    public static Specification<Content> hasCategories(java.util.List<String> slugs) {
+        return (root, query, cb) -> {
+            if (slugs == null || slugs.isEmpty()) return cb.conjunction();
+            if (query != null && !Long.class.equals(query.getResultType())) {
+                query.distinct(true);
+            }
+            var predicates = slugs.stream()
+                .map(slug -> cb.equal(root.join("categories", JoinType.INNER).get("slug"), slug))
+                .toArray(jakarta.persistence.criteria.Predicate[]::new);
+            return cb.and(predicates);
         };
     }
 }
