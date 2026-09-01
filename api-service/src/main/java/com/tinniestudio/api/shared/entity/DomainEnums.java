@@ -20,6 +20,17 @@ public final class DomainEnums {
         SERIES
     }
 
+    /**
+     * Fixed, non-admin-editable — unlike ContentType itself (see the ContentType entity), this
+     * is what upload/season logic actually branches on. Adding LIVE here later (once live
+     * streaming is built) is a one-line addition; the content_types.structural_kind column is
+     * string-backed, so no migration is needed when that happens.
+     */
+    public enum StructuralKind {
+        SINGLE_VIDEO,
+        MULTI_EPISODE
+    }
+
     public enum ContentStatus {
         DRAFT,
         REVIEW,

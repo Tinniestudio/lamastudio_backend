@@ -13,7 +13,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import com.tinniestudio.api.shared.entity.DomainEnums.*;
+import com.tinniestudio.api.shared.entity.DomainEnums.ContentType;
+import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
+import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 
 @Entity
 @Table(name = "contents", indexes = {
