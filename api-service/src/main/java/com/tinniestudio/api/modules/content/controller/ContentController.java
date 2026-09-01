@@ -4,7 +4,6 @@ import com.tinniestudio.api.shared.security.CurrentUser;
 import com.tinniestudio.api.modules.content.dto.ContentResponse;
 import com.tinniestudio.api.modules.content.dto.ContentSummaryResponse;
 import com.tinniestudio.api.modules.content.service.ContentService;
-import com.tinniestudio.api.shared.entity.DomainEnums.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import com.tinniestudio.api.shared.ratelimit.RateLimit;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,7 +31,7 @@ public class ContentController {
     @RateLimit(maxRequests = 60, windowMinutes = 1, keyStrategy = "IP_ONLY")
     @GetMapping
     public ResponseEntity<Page<ContentSummaryResponse>> list(
-            @RequestParam(required = false) ContentType type,
+            @RequestParam(required = false) String type,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) MaturityRating maturityRating,
             @RequestParam(required = false) Boolean comingSoon,

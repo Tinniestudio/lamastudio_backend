@@ -38,6 +38,7 @@ public class ContentService {
 
     private final ContentRepository contentRepository;
     private final CategoryRepository categoryRepository;
+    private final com.tinniestudio.api.modules.contenttype.repository.ContentTypeRepository contentTypeRepository;
     private final RabbitTemplate rabbitTemplate;
 
     @Transactional(readOnly = true)
@@ -127,7 +128,9 @@ public class ContentService {
     public ContentResponse create(CreateContentRequest req, UUID createdBy) {
         Content content = new Content();
         content.setTitle(req.title());
-        content.setType(req.type());
+        content.setContentType(contentTypeRepository.findById(req.contentTypeId())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Unknown contentTypeId: " + req.contentTypeId())));
         content.setStatus(ContentStatus.DRAFT);
         content.setMaturityRating(req.maturityRating() != null ? req.maturityRating() : MaturityRating.NOT_RATED);
         content.setDescription(req.description());
