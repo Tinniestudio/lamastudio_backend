@@ -29,7 +29,7 @@ public class PlaybackController {
     public ResponseEntity<AccessCheckResponse> checkAccess(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID contentId) {
-        return ResponseEntity.ok(playbackService.checkAccess(CurrentUser.id(principal), contentId));
+        return ResponseEntity.ok(playbackService.checkAccess(principal, contentId));
     }
 
     @Operation(summary = "Get HLS manifest for a movie or standalone content")
@@ -37,7 +37,7 @@ public class PlaybackController {
     public ResponseEntity<PlaybackManifestResponse> getContentManifest(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID contentId) {
-        return ResponseEntity.ok(playbackService.getContentManifest(CurrentUser.id(principal), contentId));
+        return ResponseEntity.ok(playbackService.getContentManifest(principal, contentId));
     }
 
     @Operation(summary = "Get HLS manifest for a specific episode")
@@ -45,7 +45,7 @@ public class PlaybackController {
     public ResponseEntity<PlaybackManifestResponse> getEpisodeManifest(
             @AuthenticationPrincipal UserDetails principal,
             @PathVariable UUID episodeId) {
-        return ResponseEntity.ok(playbackService.getEpisodeManifest(CurrentUser.id(principal), episodeId));
+        return ResponseEntity.ok(playbackService.getEpisodeManifest(principal, episodeId));
     }
 
     @Operation(summary = "Record or update watch progress for a content item or episode")

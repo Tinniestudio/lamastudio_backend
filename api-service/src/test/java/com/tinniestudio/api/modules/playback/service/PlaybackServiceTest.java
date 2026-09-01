@@ -52,6 +52,26 @@ class PlaybackServiceTest {
         );
     }
 
+    /** Non-admin principal, username = the given user id (matches JwtAuthenticationFilter's convention). */
+    private org.springframework.security.core.userdetails.UserDetails principalFor(UUID userId) {
+        org.springframework.security.core.userdetails.UserDetails principal =
+            org.mockito.Mockito.mock(org.springframework.security.core.userdetails.UserDetails.class);
+        org.mockito.Mockito.lenient().when(principal.getUsername()).thenReturn(userId.toString());
+        java.util.List<org.springframework.security.core.GrantedAuthority> authorities =
+            java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER"));
+        org.mockito.Mockito.lenient().doReturn(authorities).when(principal).getAuthorities();
+        return principal;
+    }
+
+    private org.springframework.security.core.userdetails.UserDetails adminPrincipal() {
+        org.springframework.security.core.userdetails.UserDetails principal =
+            org.mockito.Mockito.mock(org.springframework.security.core.userdetails.UserDetails.class);
+        java.util.List<org.springframework.security.core.GrantedAuthority> authorities =
+            java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"));
+        org.mockito.Mockito.lenient().doReturn(authorities).when(principal).getAuthorities();
+        return principal;
+    }
+
     @Nested
     class checkAccess {
 
@@ -62,7 +82,7 @@ class PlaybackServiceTest {
             content.setStatus(ContentStatus.DRAFT);
             when(contentRepo.findById(any())).thenReturn(Optional.of(content));
 
-            AccessCheckResponse resp = service.checkAccess(userId, UUID.randomUUID());
+            AccessCheckResponse resp = service.checkAccess(principalFor(userId), UUID.randomUUID());
 
             assertThat(resp.isHasAccess()).isFalse();
             assertThat(resp.getReason()).isEqualTo("CONTENT_NOT_PUBLISHED");
@@ -77,7 +97,7 @@ class PlaybackServiceTest {
             when(subscriptionRepo.findByUserIdAndStatus(eq(userId), eq(SubscriptionStatus.ACTIVE)))
                 .thenReturn(Optional.empty());
 
-            AccessCheckResponse resp = service.checkAccess(userId, UUID.randomUUID());
+            AccessCheckResponse resp = service.checkAccess(principalFor(userId), UUID.randomUUID());
 
             assertThat(resp.isHasAccess()).isFalse();
             assertThat(resp.getReason()).isEqualTo("NO_ACTIVE_SUBSCRIPTION");
@@ -94,9 +114,21 @@ class PlaybackServiceTest {
             when(subscriptionRepo.findByUserIdAndStatus(eq(userId), eq(SubscriptionStatus.ACTIVE)))
                 .thenReturn(Optional.of(sub));
 
-            AccessCheckResponse resp = service.checkAccess(userId, UUID.randomUUID());
+            AccessCheckResponse resp = service.checkAccess(principalFor(userId), UUID.randomUUID());
 
             assertThat(resp.isHasAccess()).isTrue();
+        }
+
+        @Test
+        void grantsAdminEvenWithoutActiveSubscription() {
+            Content content = new Content();
+            content.setStatus(ContentStatus.PUBLISHED);
+            when(contentRepo.findById(any())).thenReturn(Optional.of(content));
+
+            AccessCheckResponse resp = service.checkAccess(adminPrincipal(), UUID.randomUUID());
+
+            assertThat(resp.isHasAccess()).isTrue();
+            verify(subscriptionRepo, never()).findByUserIdAndStatus(any(), any());
         }
     }
 
@@ -109,7 +141,7 @@ class PlaybackServiceTest {
             content.setStatus(ContentStatus.DRAFT);
             when(contentRepo.findById(any())).thenReturn(Optional.of(content));
 
-            assertThatThrownBy(() -> service.getContentManifest(UUID.randomUUID(), UUID.randomUUID()))
+            assertThatThrownBy(() -> service.getContentManifest(principalFor(UUID.randomUUID()), UUID.randomUUID()))
                 .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
                 .extracting("statusCode")
                 .isEqualTo(HttpStatus.FORBIDDEN);
@@ -127,7 +159,7 @@ class PlaybackServiceTest {
                 any(), eq(VideoAssetType.MAIN_VIDEO)))
                 .thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> service.getContentManifest(UUID.randomUUID(), UUID.randomUUID()))
+            assertThatThrownBy(() -> service.getContentManifest(principalFor(UUID.randomUUID()), UUID.randomUUID()))
                 .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
         }
 
@@ -165,7 +197,7 @@ class PlaybackServiceTest {
             when(watchProgressRepo.findMovieProgress(userId, contentId))
                 .thenReturn(Optional.of(progress));
 
-            PlaybackManifestResponse resp = service.getContentManifest(userId, contentId);
+            PlaybackManifestResponse resp = service.getContentManifest(principalFor(userId), contentId);
 
             assertThat(resp.getManifestUrl()).isEqualTo("http://cdn.test/processed/abc/master.m3u8");
             assertThat(resp.getDuration()).isEqualTo(3600);
