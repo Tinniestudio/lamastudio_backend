@@ -9,7 +9,6 @@ import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.content.repository.ContentSpecifications;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
-import com.tinniestudio.api.shared.entity.DomainEnums.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import com.tinniestudio.api.shared.queue.RabbitConfig;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -42,17 +42,32 @@ public class ContentService {
 
     @Transactional(readOnly = true)
     public Page<ContentSummaryResponse> list(
-            ContentType type, String categorySlug,
+            String typeSlug, String category,
             MaturityRating maturityRating, Boolean comingSoon,
             Pageable pageable) {
 
+        List<String> categorySlugs = splitCategorySlugs(category);
+
         Specification<Content> spec = ContentSpecifications.isPublished()
-            .and(ContentSpecifications.hasType(type))
-            .and(ContentSpecifications.hasCategory(categorySlug))
+            .and(ContentSpecifications.hasType(typeSlug))
+            .and(ContentSpecifications.hasCategories(categorySlugs))
             .and(ContentSpecifications.hasMaturityRating(maturityRating))
             .and(ContentSpecifications.isComingSoon(comingSoon));
 
         return contentRepository.findAll(spec, pageable).map(ContentSummaryResponse::from);
+    }
+
+    /**
+     * "category" is a comma-separated list of slugs, AND-matched (Multi-Category Content
+     * Filtering spec). A single slug with no comma behaves exactly as before — this is fully
+     * backward compatible, no new query param name.
+     */
+    private List<String> splitCategorySlugs(String category) {
+        if (category == null || category.isBlank()) return List.of();
+        return java.util.Arrays.stream(category.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .toList();
     }
 
     @Cacheable(value = "content-detail", key = "#slug")
