@@ -42,6 +42,9 @@ class ReviewServiceTest {
     @Mock
     private ContentRepository contentRepo;
 
+    @Mock
+    private com.tinniestudio.api.modules.user.repository.UserRepository userRepo;
+
     @InjectMocks
     private ReviewServiceImpl reviewService;
 
@@ -85,6 +88,84 @@ class ReviewServiceTest {
         assertThat(resp.rating()).isEqualTo((short) 4);
         assertThat(resp.body()).isEqualTo("Great content!");
         assertThat(resp.status()).isEqualTo("APPROVED");
+    }
+
+    @Test
+    @DisplayName("list: populates author displayName/avatarUrl from a batch user lookup")
+    void list_populatesAuthorFromBatchLookup() {
+        ContentReview review = new ContentReview();
+        ReflectionTestUtils.setField(review, "id", reviewId);
+        review.setUserId(userId);
+        review.setContentId(contentId);
+        review.setRating((short) 4);
+        review.setStatus(ReviewStatus.APPROVED);
+
+        com.tinniestudio.api.shared.entity.User author = new com.tinniestudio.api.shared.entity.User();
+        ReflectionTestUtils.setField(author, "id", userId);
+        author.setDisplayName("Jane D.");
+        author.setAvatarUrl("avatars/jane.jpg");
+
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<ContentReview> page = new PageImpl<>(List.of(review), pageable, 1);
+
+        when(reviewRepo.findByContentIdAndStatusOrderByCreatedAtDesc(contentId, ReviewStatus.APPROVED, pageable))
+                .thenReturn(page);
+        when(userRepo.findAllById(List.of(userId))).thenReturn(List.of(author));
+
+        Page<ReviewResponse> result = reviewService.list(contentId, pageable);
+
+        assertThat(result.getContent().get(0).author().displayName()).isEqualTo("Jane D.");
+        assertThat(result.getContent().get(0).author().avatarUrl()).isEqualTo("avatars/jane.jpg");
+    }
+
+    @Test
+    @DisplayName("list: falls back to a generic label when the author has no displayName or firstName")
+    void list_fallsBackToGenericLabelWhenNoName() {
+        ContentReview review = new ContentReview();
+        ReflectionTestUtils.setField(review, "id", reviewId);
+        review.setUserId(userId);
+        review.setContentId(contentId);
+        review.setRating((short) 3);
+        review.setStatus(ReviewStatus.APPROVED);
+
+        com.tinniestudio.api.shared.entity.User author = new com.tinniestudio.api.shared.entity.User();
+        ReflectionTestUtils.setField(author, "id", userId);
+        // displayName and firstName both left null
+
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<ContentReview> page = new PageImpl<>(List.of(review), pageable, 1);
+
+        when(reviewRepo.findByContentIdAndStatusOrderByCreatedAtDesc(contentId, ReviewStatus.APPROVED, pageable))
+                .thenReturn(page);
+        when(userRepo.findAllById(List.of(userId))).thenReturn(List.of(author));
+
+        Page<ReviewResponse> result = reviewService.list(contentId, pageable);
+
+        assertThat(result.getContent().get(0).author().displayName()).isEqualTo("Member");
+    }
+
+    @Test
+    @DisplayName("create: leaves author null — mutation responses are always about the caller's own review")
+    void create_leavesAuthorNull() {
+        CreateReviewRequest request = new CreateReviewRequest();
+        request.setRating((short) 5);
+
+        when(contentRepo.existsById(contentId)).thenReturn(true);
+        when(reviewRepo.existsByUserIdAndContentId(userId, contentId)).thenReturn(false);
+
+        ContentReview savedReview = new ContentReview();
+        ReflectionTestUtils.setField(savedReview, "id", reviewId);
+        savedReview.setUserId(userId);
+        savedReview.setContentId(contentId);
+        savedReview.setRating((short) 5);
+        savedReview.setStatus(ReviewStatus.APPROVED);
+
+        when(reviewRepo.saveAndFlush(any(ContentReview.class))).thenReturn(savedReview);
+
+        ReviewResponse result = reviewService.create(userId, contentId, request);
+
+        assertThat(result.author()).isNull();
+        verifyNoInteractions(userRepo);
     }
 
     // ─── create() ────────────────────────────────────────────────────────────

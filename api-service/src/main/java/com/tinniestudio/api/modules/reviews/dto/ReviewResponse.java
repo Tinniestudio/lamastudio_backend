@@ -10,13 +10,20 @@ import java.util.UUID;
 public record ReviewResponse(
     UUID id, UUID contentId, UUID userId,
     Short rating, String body, String status,
-    Instant createdAt, Instant updatedAt
+    Instant createdAt, Instant updatedAt,
+    ReviewAuthorResponse author
 ) {
+    /** Used by create/update/moderateStatus/getMine — author is always null; see the two-arg overload for list(). */
     public static ReviewResponse from(ContentReview r) {
+        return from(r, null);
+    }
+
+    public static ReviewResponse from(ContentReview r, ReviewAuthorResponse author) {
         return new ReviewResponse(
             r.getId(), r.getContentId(), r.getUserId(),
             r.getRating(), r.getBody(), r.getStatus().name(),
-            r.getCreatedAt(), r.getUpdatedAt()
+            r.getCreatedAt(), r.getUpdatedAt(),
+            author
         );
     }
 }

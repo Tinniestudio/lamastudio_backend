@@ -68,7 +68,7 @@ class ReviewControllerTest {
         ReviewResponse reviewResponse = new ReviewResponse(
             UUID.randomUUID(), contentId, UUID.fromString(USER_ID),
             (short) 4, "Great content!", "APPROVED",
-            Instant.now(), Instant.now()
+            Instant.now(), Instant.now(), null
         );
 
         when(reviewService.list(any(UUID.class), any()))
@@ -87,7 +87,7 @@ class ReviewControllerTest {
         ReviewResponse reviewResponse = new ReviewResponse(
             UUID.randomUUID(), contentId, UUID.fromString(USER_ID),
             (short) 5, "Amazing!", "PENDING",
-            Instant.now(), Instant.now()
+            Instant.now(), Instant.now(), null
         );
 
         CreateReviewRequest request = new CreateReviewRequest();
@@ -112,7 +112,7 @@ class ReviewControllerTest {
         ReviewResponse reviewResponse = new ReviewResponse(
             reviewId, UUID.randomUUID(), UUID.fromString(USER_ID),
             (short) 3, "Updated review", "PENDING",
-            Instant.now(), Instant.now()
+            Instant.now(), Instant.now(), null
         );
 
         UpdateReviewRequest request = new UpdateReviewRequest();
