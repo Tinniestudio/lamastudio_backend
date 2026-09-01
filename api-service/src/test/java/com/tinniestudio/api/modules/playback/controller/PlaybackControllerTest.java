@@ -96,6 +96,22 @@ class PlaybackControllerTest {
     }
 
     @Test
+    @DisplayName("GET /playback/manifest/content/{contentId}/trailer returns 200 with no auth required")
+    void getTrailerManifest_returnsManifestWithoutAuth() throws Exception {
+        UUID contentId = UUID.randomUUID();
+        PlaybackManifestResponse manifest = new PlaybackManifestResponse(
+            "http://cdn.test/trailer.m3u8", List.of(), null, 90);
+        when(playbackService.getTrailerManifest(any(UUID.class)))
+            .thenReturn(manifest);
+
+        // Deliberately no @WithMockUser — proves this endpoint needs no authentication.
+        mockMvc.perform(getWithContext("/playback/manifest/content/" + contentId + "/trailer"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.manifestUrl").value("http://cdn.test/trailer.m3u8"))
+            .andExpect(jsonPath("$.data.resumeAt").doesNotExist());
+    }
+
+    @Test
     @DisplayName("POST /playback/progress returns 204 No Content")
     @WithMockUser(username = USER_ID, roles = "USER")
     void recordProgress_returns200() throws Exception {

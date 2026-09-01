@@ -112,14 +112,22 @@ public class PlaybackServiceImpl implements PlaybackService {
     }
 
     // -------------------------------------------------------------------------
-    // Trailer manifest
+    // Trailer manifest — deliberately public: no auth, no checkAccess() call.
+    // Trailers are promotional and must stay reachable by anonymous/free visitors.
     // -------------------------------------------------------------------------
 
     @Override
     @Transactional(readOnly = true)
     public PlaybackManifestResponse getTrailerManifest(UUID contentId) {
-        // Implemented in Task 2 (2026-09-01-trailer-playback-manifest-design.md).
-        throw new UnsupportedOperationException("implemented in Task 2");
+        Content content = contentRepo.findById(contentId)
+            .filter(c -> c.getStatus() == ContentStatus.PUBLISHED)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId));
+
+        VideoAsset asset = videoAssetRepo
+            .findByContent_IdAndAssetTypeAndIsActiveTrue(contentId, VideoAssetType.TRAILER)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No trailer available"));
+
+        return buildManifestResponse(asset, null);
     }
 
     // -------------------------------------------------------------------------

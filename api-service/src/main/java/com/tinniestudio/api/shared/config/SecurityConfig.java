@@ -186,6 +186,11 @@ public class SecurityConfig {
         "/api/v1/search",
         "/subscriptions/plans",
         "/api/v1/subscriptions/plans",
+        // Trailers are promotional and must stay reachable by anonymous/free visitors — an
+        // exact-path exception, not a broader /playback/** rule; every other /playback/* route
+        // (access checks, main manifests, progress, continue-watching) still requires auth.
+        "/playback/manifest/content/*/trailer",
+        "/api/v1/playback/manifest/content/*/trailer",
         "/webhooks/stripe",
         "/api/v1/webhooks/stripe",
         "/swagger-ui.html",

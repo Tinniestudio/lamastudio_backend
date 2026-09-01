@@ -208,6 +208,68 @@ class PlaybackServiceTest {
     }
 
     @Nested
+    class getTrailerManifest {
+
+        @Test
+        void throws404WhenContentNotFound() {
+            when(contentRepo.findById(any())).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.getTrailerManifest(UUID.randomUUID()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting("statusCode")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        void throws404WhenContentNotPublished() {
+            Content content = new Content();
+            content.setStatus(ContentStatus.DRAFT);
+            when(contentRepo.findById(any())).thenReturn(Optional.of(content));
+
+            assertThatThrownBy(() -> service.getTrailerManifest(UUID.randomUUID()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting("statusCode")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        void throws404WhenNoTrailerAsset() {
+            Content content = new Content();
+            content.setStatus(ContentStatus.PUBLISHED);
+            when(contentRepo.findById(any())).thenReturn(Optional.of(content));
+            when(videoAssetRepo.findByContent_IdAndAssetTypeAndIsActiveTrue(any(), eq(VideoAssetType.TRAILER)))
+                .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.getTrailerManifest(UUID.randomUUID()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting("statusCode")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        void returnsManifestWithNullResumeAt() {
+            UUID contentId = UUID.randomUUID();
+            Content content = new Content();
+            content.setStatus(ContentStatus.PUBLISHED);
+
+            VideoAsset asset = new VideoAsset();
+            asset.setManifestUrl("processed/trailer/master.m3u8");
+            asset.setDurationSeconds(90);
+            asset.setSubtitles(List.of());
+
+            when(contentRepo.findById(contentId)).thenReturn(Optional.of(content));
+            when(videoAssetRepo.findByContent_IdAndAssetTypeAndIsActiveTrue(eq(contentId), eq(VideoAssetType.TRAILER)))
+                .thenReturn(Optional.of(asset));
+
+            PlaybackManifestResponse resp = service.getTrailerManifest(contentId);
+
+            assertThat(resp.getManifestUrl()).isEqualTo("http://cdn.test/processed/trailer/master.m3u8");
+            assertThat(resp.getResumeAt()).isNull();
+            assertThat(resp.getDuration()).isEqualTo(90);
+        }
+    }
+
+    @Nested
     class recordProgress {
 
         @Test
