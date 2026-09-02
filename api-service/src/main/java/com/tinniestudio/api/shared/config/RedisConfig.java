@@ -128,6 +128,7 @@ public class RedisConfig {
 
         Map<String, RedisCacheConfiguration> cacheConfigs = new HashMap<>();
         cacheConfigs.put("categories",        config.entryTtl(Duration.ofMinutes(10)));
+        cacheConfigs.put("content-types",     config.entryTtl(Duration.ofMinutes(10)));
         cacheConfigs.put("homepage-sections", config.entryTtl(Duration.ofMinutes(5)));
         cacheConfigs.put("content-list",      config.entryTtl(Duration.ofMinutes(2)));
         cacheConfigs.put("content-detail",    config.entryTtl(Duration.ofMinutes(5)));
