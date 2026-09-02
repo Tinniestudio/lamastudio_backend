@@ -1,6 +1,7 @@
 package com.tinniestudio.api.modules.discover.controller;
 
 import com.tinniestudio.api.modules.content.dto.ContentSummaryResponse;
+import com.tinniestudio.api.modules.contenttype.dto.ContentTypeResponse;
 import com.tinniestudio.api.modules.discover.service.DiscoverService;
 import com.tinniestudio.api.modules.user.service.UserDetailsServiceImpl;
 import com.tinniestudio.api.shared.security.jwt.JwtAuthenticationFilter;
@@ -39,7 +40,8 @@ class DiscoverRecommendedControllerTest {
 
     private static final ContentSummaryResponse MOVIE = new ContentSummaryResponse(
         UUID.randomUUID(), "Interstellar", "interstellar", "Space odyssey",
-        "MOVIE", "PUBLISHED", "PG", LocalDate.of(2014, 11, 7),
+        new ContentTypeResponse(UUID.randomUUID(), "Movie", "movie", "SINGLE_VIDEO", 0, true),
+        "PUBLISHED", "PG", LocalDate.of(2014, 11, 7),
         false, false, 1500L, BigDecimal.ZERO, 0, null, null
     );
 

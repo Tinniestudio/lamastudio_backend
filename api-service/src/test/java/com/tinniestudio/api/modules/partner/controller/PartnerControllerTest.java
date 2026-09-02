@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tinniestudio.api.modules.admin.dto.PartnerApplicationResponse;
 import com.tinniestudio.api.modules.admin.service.PartnerApplicationService;
 import com.tinniestudio.api.modules.content.dto.CreateContentRequest;
+import com.tinniestudio.api.modules.contenttype.dto.ContentTypeResponse;
 import com.tinniestudio.api.modules.partner.dto.*;
 import com.tinniestudio.api.modules.user.service.UserDetailsServiceImpl;
 import com.tinniestudio.api.shared.security.jwt.JwtAuthenticationFilter;
@@ -172,7 +173,7 @@ class PartnerControllerTest {
         when(partnerService.createContent(any(), any())).thenReturn(created);
 
         CreateContentRequest req = new CreateContentRequest(
-            "My Movie", com.tinniestudio.api.shared.entity.DomainEnums.ContentType.MOVIE,
+            "My Movie", UUID.randomUUID(),
             null, null, null, null, null, null, null);
 
         mockMvc.perform(post("/partners/contents")
@@ -199,7 +200,8 @@ class PartnerControllerTest {
     private PartnerContentResponse samplePartnerContent() {
         return new PartnerContentResponse(
             UUID.randomUUID(), "My Movie", "my-movie", "desc", "short",
-            "MOVIE", "DRAFT", "NOT_RATED",
+            new ContentTypeResponse(UUID.randomUUID(), "Movie", "movie", "SINGLE_VIDEO", 0, true),
+            "DRAFT", "NOT_RATED",
             null, null, null,
             false, false, 0L,
             null, null, null,

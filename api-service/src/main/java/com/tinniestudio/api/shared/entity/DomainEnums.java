@@ -15,11 +15,6 @@ public final class DomainEnums {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    public enum ContentType {
-        MOVIE,
-        SERIES
-    }
-
     /**
      * Fixed, non-admin-editable — unlike ContentType itself (see the ContentType entity), this
      * is what upload/season logic actually branches on. Adding LIVE here later (once live

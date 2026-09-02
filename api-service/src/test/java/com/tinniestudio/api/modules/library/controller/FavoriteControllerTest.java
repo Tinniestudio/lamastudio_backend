@@ -2,6 +2,7 @@ package com.tinniestudio.api.modules.library.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tinniestudio.api.modules.content.dto.ContentSummaryResponse;
+import com.tinniestudio.api.modules.contenttype.dto.ContentTypeResponse;
 import com.tinniestudio.api.modules.library.dto.FavoriteResponse;
 import com.tinniestudio.api.modules.library.service.FavoriteService;
 import com.tinniestudio.api.modules.user.service.UserDetailsServiceImpl;
@@ -64,7 +65,8 @@ class FavoriteControllerTest {
         UUID contentId = UUID.randomUUID();
         ContentSummaryResponse contentSummary = new ContentSummaryResponse(
             contentId, "Test Movie", "test-movie", "A test movie",
-            "MOVIE", "PUBLISHED", "PG",
+            new ContentTypeResponse(UUID.randomUUID(), "Movie", "movie", "SINGLE_VIDEO", 0, true),
+            "PUBLISHED", "PG",
             LocalDate.of(2024, 1, 1), false, false,
             100L, BigDecimal.ZERO, 0, "http://cdn.test/poster.jpg", "http://cdn.test/thumbnail.jpg"
         );
