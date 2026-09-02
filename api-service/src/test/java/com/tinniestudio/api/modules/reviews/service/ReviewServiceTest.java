@@ -6,8 +6,10 @@ import com.tinniestudio.api.modules.reviews.dto.ReviewResponse;
 import com.tinniestudio.api.modules.reviews.dto.UpdateReviewRequest;
 import com.tinniestudio.api.modules.reviews.dto.UpdateReviewStatusRequest;
 import com.tinniestudio.api.modules.reviews.repository.ReviewRepository;
+import com.tinniestudio.api.modules.user.repository.UserRepository;
 import com.tinniestudio.api.shared.entity.ContentReview;
 import com.tinniestudio.api.shared.entity.DomainEnums.ReviewStatus;
+import com.tinniestudio.api.shared.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,7 +45,7 @@ class ReviewServiceTest {
     private ContentRepository contentRepo;
 
     @Mock
-    private com.tinniestudio.api.modules.user.repository.UserRepository userRepo;
+    private UserRepository userRepo;
 
     @InjectMocks
     private ReviewServiceImpl reviewService;
@@ -100,7 +102,7 @@ class ReviewServiceTest {
         review.setRating((short) 4);
         review.setStatus(ReviewStatus.APPROVED);
 
-        com.tinniestudio.api.shared.entity.User author = new com.tinniestudio.api.shared.entity.User();
+        User author = new User();
         ReflectionTestUtils.setField(author, "id", userId);
         author.setDisplayName("Jane D.");
         author.setAvatarUrl("avatars/jane.jpg");
@@ -128,7 +130,7 @@ class ReviewServiceTest {
         review.setRating((short) 3);
         review.setStatus(ReviewStatus.APPROVED);
 
-        com.tinniestudio.api.shared.entity.User author = new com.tinniestudio.api.shared.entity.User();
+        User author = new User();
         ReflectionTestUtils.setField(author, "id", userId);
         // displayName and firstName both left null
 
