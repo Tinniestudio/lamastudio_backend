@@ -41,6 +41,12 @@ public class ContentService {
     private final com.tinniestudio.api.modules.contenttype.repository.ContentTypeRepository contentTypeRepository;
     private final RabbitTemplate rabbitTemplate;
 
+    /**
+     * ContentSpecifications.hasCategories() adds one INNER JOIN per slug, so an unbounded
+     * comma-separated "category" param is a cheap way to force an expensive query — cap it.
+     */
+    private static final int MAX_CATEGORY_SLUGS = 10;
+
     @Transactional(readOnly = true)
     public Page<ContentSummaryResponse> list(
             String typeSlug, String category,
@@ -61,14 +67,20 @@ public class ContentService {
     /**
      * "category" is a comma-separated list of slugs, AND-matched (Multi-Category Content
      * Filtering spec). A single slug with no comma behaves exactly as before — this is fully
-     * backward compatible, no new query param name.
+     * backward compatible, no new query param name. Rejects more than MAX_CATEGORY_SLUGS with
+     * a 400 (see the field's javadoc for why).
      */
     private List<String> splitCategorySlugs(String category) {
         if (category == null || category.isBlank()) return List.of();
-        return java.util.Arrays.stream(category.split(","))
+        List<String> slugs = java.util.Arrays.stream(category.split(","))
             .map(String::trim)
             .filter(s -> !s.isEmpty())
             .toList();
+        if (slugs.size() > MAX_CATEGORY_SLUGS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Too many category filters (max " + MAX_CATEGORY_SLUGS + ")");
+        }
+        return slugs;
     }
 
     @Cacheable(value = "content-detail", key = "#slug")

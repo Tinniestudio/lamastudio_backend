@@ -124,6 +124,20 @@ class ContentServiceTest {
 
             assertThat(result.getContent()).hasSize(1);
         }
+
+        @Test
+        @DisplayName("throws 400 when given more than 10 comma-separated category slugs")
+        void throws400WhenTooManyCategorySlugs() {
+            String tooMany = java.util.stream.IntStream.rangeClosed(1, 11)
+                .mapToObj(i -> "cat" + i)
+                .collect(java.util.stream.Collectors.joining(","));
+
+            assertThatThrownBy(() -> contentService.list(null, tooMany, null, null, Pageable.unpaged()))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
+
+            verify(contentRepository, never()).findAll(any(Specification.class), any(Pageable.class));
+        }
     }
 
     @Nested
