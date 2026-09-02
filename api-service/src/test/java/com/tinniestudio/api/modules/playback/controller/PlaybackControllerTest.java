@@ -57,7 +57,7 @@ class PlaybackControllerTest {
     @WithMockUser(username = USER_ID, roles = "USER")
     void checkAccess_returnsAccessGranted() throws Exception {
         UUID contentId = UUID.randomUUID();
-        when(playbackService.checkAccess(any(UUID.class), any(UUID.class)))
+        when(playbackService.checkAccess(any(org.springframework.security.core.userdetails.UserDetails.class), any(UUID.class)))
             .thenReturn(AccessCheckResponse.granted());
 
         mockMvc.perform(getWithContext("/playback/access/" + contentId))
@@ -72,7 +72,7 @@ class PlaybackControllerTest {
         UUID contentId = UUID.randomUUID();
         PlaybackManifestResponse manifest = new PlaybackManifestResponse(
             "http://cdn.test/manifest.m3u8", List.of(), 120, 3600);
-        when(playbackService.getContentManifest(any(UUID.class), any(UUID.class)))
+        when(playbackService.getContentManifest(any(org.springframework.security.core.userdetails.UserDetails.class), any(UUID.class)))
             .thenReturn(manifest);
 
         mockMvc.perform(getWithContext("/playback/manifest/content/" + contentId))
@@ -87,12 +87,28 @@ class PlaybackControllerTest {
         UUID episodeId = UUID.randomUUID();
         PlaybackManifestResponse manifest = new PlaybackManifestResponse(
             "http://cdn.test/episode.m3u8", List.of(), null, 1800);
-        when(playbackService.getEpisodeManifest(any(UUID.class), any(UUID.class)))
+        when(playbackService.getEpisodeManifest(any(org.springframework.security.core.userdetails.UserDetails.class), any(UUID.class)))
             .thenReturn(manifest);
 
         mockMvc.perform(getWithContext("/playback/manifest/episode/" + episodeId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.manifestUrl").value("http://cdn.test/episode.m3u8"));
+    }
+
+    @Test
+    @DisplayName("GET /playback/manifest/content/{contentId}/trailer returns 200 with no auth required")
+    void getTrailerManifest_returnsManifestWithoutAuth() throws Exception {
+        UUID contentId = UUID.randomUUID();
+        PlaybackManifestResponse manifest = new PlaybackManifestResponse(
+            "http://cdn.test/trailer.m3u8", List.of(), null, 90);
+        when(playbackService.getTrailerManifest(any(UUID.class)))
+            .thenReturn(manifest);
+
+        // Deliberately no @WithMockUser — proves this endpoint needs no authentication.
+        mockMvc.perform(getWithContext("/playback/manifest/content/" + contentId + "/trailer"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.manifestUrl").value("http://cdn.test/trailer.m3u8"))
+            .andExpect(jsonPath("$.data.resumeAt").doesNotExist());
     }
 
     @Test

@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -48,7 +49,7 @@ public class PlaybackServiceImpl implements PlaybackService {
     // -------------------------------------------------------------------------
 
     @Override
-    public AccessCheckResponse checkAccess(UUID userId, UUID contentId) {
+    public AccessCheckResponse checkAccess(UserDetails principal, UUID contentId) {
         Content content = contentRepo.findById(contentId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found"));
 
@@ -56,6 +57,14 @@ public class PlaybackServiceImpl implements PlaybackService {
             return AccessCheckResponse.denied("CONTENT_NOT_PUBLISHED");
         }
 
+        // Admins bypass the subscription requirement (routine QA/ops — verifying a newly
+        // published title actually plays) but not the PUBLISHED check above; unpublished
+        // preview goes through the admin content endpoints, not this public playback path.
+        if (com.tinniestudio.api.shared.security.CurrentUser.isAdmin(principal)) {
+            return AccessCheckResponse.granted();
+        }
+
+        UUID userId = com.tinniestudio.api.shared.security.CurrentUser.id(principal);
         boolean hasSubscription = subscriptionRepo
             .findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE)
             .isPresent();
@@ -73,11 +82,12 @@ public class PlaybackServiceImpl implements PlaybackService {
 
     @Override
     @Transactional(readOnly = true)
-    public PlaybackManifestResponse getContentManifest(UUID userId, UUID contentId) {
-        AccessCheckResponse access = checkAccess(userId, contentId);
+    public PlaybackManifestResponse getContentManifest(UserDetails principal, UUID contentId) {
+        AccessCheckResponse access = checkAccess(principal, contentId);
         if (!access.isHasAccess()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, access.getReason());
         }
+        UUID userId = com.tinniestudio.api.shared.security.CurrentUser.id(principal);
 
         VideoAsset asset = videoAssetRepo
             .findByContent_IdAndAssetTypeAndIsActiveTrue(contentId, VideoAssetType.MAIN_VIDEO)
@@ -102,21 +112,41 @@ public class PlaybackServiceImpl implements PlaybackService {
     }
 
     // -------------------------------------------------------------------------
+    // Trailer manifest — deliberately public: no auth, no checkAccess() call.
+    // Trailers are promotional and must stay reachable by anonymous/free visitors.
+    // -------------------------------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public PlaybackManifestResponse getTrailerManifest(UUID contentId) {
+        Content content = contentRepo.findById(contentId)
+            .filter(c -> c.getStatus() == ContentStatus.PUBLISHED)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId));
+
+        VideoAsset asset = videoAssetRepo
+            .findByContent_IdAndAssetTypeAndIsActiveTrue(contentId, VideoAssetType.TRAILER)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No trailer available"));
+
+        return buildManifestResponse(asset, null);
+    }
+
+    // -------------------------------------------------------------------------
     // Episode manifest
     // -------------------------------------------------------------------------
 
     @Override
     @Transactional(readOnly = true)
-    public PlaybackManifestResponse getEpisodeManifest(UUID userId, UUID episodeId) {
+    public PlaybackManifestResponse getEpisodeManifest(UserDetails principal, UUID episodeId) {
         Episode episode = episodeRepo.findById(episodeId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found"));
 
         UUID contentId = episode.getSeason().getContent().getId();
 
-        AccessCheckResponse access = checkAccess(userId, contentId);
+        AccessCheckResponse access = checkAccess(principal, contentId);
         if (!access.isHasAccess()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, access.getReason());
         }
+        UUID userId = com.tinniestudio.api.shared.security.CurrentUser.id(principal);
 
         VideoAsset asset = videoAssetRepo
             .findByEpisode_IdAndAssetTypeAndIsActiveTrue(episodeId, VideoAssetType.MAIN_VIDEO)
@@ -247,18 +277,21 @@ public class PlaybackServiceImpl implements PlaybackService {
         return progresses.stream()
             .map(p -> {
                 String title;
+                String thumbnailUrl;
                 if (p.getEpisodeId() != null) {
                     Episode ep = episodeMap.get(p.getEpisodeId());
                     title = ep != null ? ep.getTitle() : "Unknown Episode";
+                    thumbnailUrl = ep != null ? ep.getThumbnailUrl() : null;
                 } else {
                     Content c = contentMap.get(p.getContentId());
                     title = c != null ? c.getTitle() : "Unknown Content";
+                    thumbnailUrl = c != null ? c.getThumbnailUrl() : null;
                 }
                 return new ContinueWatchingItem(
                     p.getContentId(),
                     p.getEpisodeId(),
                     title,
-                    null,  // thumbnailUrl — enriched in Batch 12
+                    thumbnailUrl,
                     p.getProgressSeconds() != null ? p.getProgressSeconds() : 0,
                     p.getDurationSeconds() != null ? p.getDurationSeconds() : 0,
                     p.getCompletionPercentage(),
