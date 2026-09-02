@@ -1,0 +1,5 @@
+{
+  "name": "backend-code-review",
+  "description": "Backend code review: full-codebase audits and changes-only reviews that pull in connected files (callers, tests, migrations). Stack-agnostic — works on Java/Spring, Node, Python, Go, Ruby, etc.",
+  "version": "0.1.0"
+}

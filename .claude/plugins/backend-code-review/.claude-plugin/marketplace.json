@@ -1,0 +1,14 @@
+{
+  "name": "backend-code-review-marketplace",
+  "owner": {
+    "name": "TinnieStudio"
+  },
+  "plugins": [
+    {
+      "name": "backend-code-review",
+      "source": "./",
+      "description": "Backend code review: full-codebase audits and changes-only reviews that pull in connected files.",
+      "version": "0.1.0"
+    }
+  ]
+}
