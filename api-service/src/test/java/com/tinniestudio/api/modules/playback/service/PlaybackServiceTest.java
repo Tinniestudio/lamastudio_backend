@@ -405,5 +405,59 @@ class PlaybackServiceTest {
             assertThat(result.get(0).getTitle()).isEqualTo("My Movie");
             assertThat(result.get(0).getContentId()).isEqualTo(contentId);
         }
+
+        @Test
+        void populatesThumbnailUrlFromContent() {
+            UUID userId = UUID.randomUUID();
+            UUID contentId = UUID.randomUUID();
+
+            WatchProgress p = new WatchProgress();
+            p.setContentId(contentId);
+            p.setProgressSeconds(300);
+            p.setDurationSeconds(3600);
+            p.setCompletionPercentage(new java.math.BigDecimal("8.33"));
+            p.setLastWatchedAt(java.time.Instant.now());
+
+            Content content = new Content();
+            content.setTitle("My Movie");
+            content.setId(contentId);
+            content.setThumbnailUrl("posters/my-movie-thumb.jpg");
+
+            when(watchProgressRepo.findByUserIdAndCompletedFalseOrderByLastWatchedAtDesc(eq(userId), any()))
+                .thenReturn(List.of(p));
+            when(contentRepo.findAllById(any())).thenReturn(List.of(content));
+            when(episodeRepo.findAllById(any())).thenReturn(List.of());
+
+            List<ContinueWatchingItem> result = service.getContinueWatching(userId);
+
+            assertThat(result.get(0).getThumbnailUrl()).isEqualTo("posters/my-movie-thumb.jpg");
+        }
+
+        @Test
+        void populatesThumbnailUrlFromEpisode() {
+            UUID userId = UUID.randomUUID();
+            UUID episodeId = UUID.randomUUID();
+
+            WatchProgress p = new WatchProgress();
+            p.setEpisodeId(episodeId);
+            p.setProgressSeconds(300);
+            p.setDurationSeconds(1800);
+            p.setCompletionPercentage(new java.math.BigDecimal("16.67"));
+            p.setLastWatchedAt(java.time.Instant.now());
+
+            Episode episode = new Episode();
+            episode.setTitle("Pilot");
+            episode.setThumbnailUrl("posters/pilot-thumb.jpg");
+            episode.setId(episodeId);
+
+            when(watchProgressRepo.findByUserIdAndCompletedFalseOrderByLastWatchedAtDesc(eq(userId), any()))
+                .thenReturn(List.of(p));
+            when(contentRepo.findAllById(any())).thenReturn(List.of());
+            when(episodeRepo.findAllById(any())).thenReturn(List.of(episode));
+
+            List<ContinueWatchingItem> result = service.getContinueWatching(userId);
+
+            assertThat(result.get(0).getThumbnailUrl()).isEqualTo("posters/pilot-thumb.jpg");
+        }
     }
 }
