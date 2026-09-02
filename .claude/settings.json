@@ -4,5 +4,16 @@
       "Bash(bash .specify/scripts/bash/setup-plan.sh --json)",
       "Bash(mvn test *)"
     ]
+  },
+  "extraKnownMarketplaces": {
+    "backend-code-review-marketplace": {
+      "source": {
+        "source": "directory",
+        "path": ".claude/plugins/backend-code-review"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "backend-code-review@backend-code-review-marketplace": true
   }
 }
