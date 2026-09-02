@@ -40,14 +40,15 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
 
     @Query(
         value = "SELECT c.id, c.title, c.slug, c.description, c.short_description," +
-                " c.type, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
+                " c.content_type_id, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
                 " c.featured, c.poster_url, c.thumbnail_url, c.created_by, c.published_at," +
                 " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at," +
                 " c.average_rating, c.review_count, c.deleted_at" +
                 " FROM contents c" +
+                " JOIN content_types ct ON ct.id = c.content_type_id" +
                 " WHERE c.status = 'PUBLISHED'" +
                 " AND c.search_vector @@ plainto_tsquery('english', :q)" +
-                " AND (:type IS NULL OR c.type = :type)" +
+                " AND (:type IS NULL OR ct.slug = :type)" +
                 " AND (:language IS NULL OR c.language = :language)" +
                 " AND (:country IS NULL OR c.country = :country)" +
                 " AND (:categorySlug IS NULL OR EXISTS (" +
@@ -58,9 +59,10 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
                 " ORDER BY ts_rank(c.search_vector, plainto_tsquery('english', :q)) DESC",
         countQuery =
                 "SELECT count(*) FROM contents c" +
+                " JOIN content_types ct ON ct.id = c.content_type_id" +
                 " WHERE c.status = 'PUBLISHED'" +
                 " AND c.search_vector @@ plainto_tsquery('english', :q)" +
-                " AND (:type IS NULL OR c.type = :type)" +
+                " AND (:type IS NULL OR ct.slug = :type)" +
                 " AND (:language IS NULL OR c.language = :language)" +
                 " AND (:country IS NULL OR c.country = :country)" +
                 " AND (:categorySlug IS NULL OR EXISTS (" +
@@ -81,14 +83,15 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
 
     @Query(
         value = "SELECT c.id, c.title, c.slug, c.description, c.short_description," +
-                " c.type, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
+                " c.content_type_id, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
                 " c.featured, c.poster_url, c.thumbnail_url, c.created_by, c.published_at," +
                 " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at," +
                 " c.average_rating, c.review_count, c.deleted_at" +
                 " FROM contents c" +
+                " JOIN content_types ct ON ct.id = c.content_type_id" +
                 " WHERE c.status = 'PUBLISHED'" +
                 " AND c.search_vector @@ plainto_tsquery('english', :q)" +
-                " AND (:type IS NULL OR c.type = :type)" +
+                " AND (:type IS NULL OR ct.slug = :type)" +
                 " AND (:language IS NULL OR c.language = :language)" +
                 " AND (:country IS NULL OR c.country = :country)" +
                 " AND (:categorySlug IS NULL OR EXISTS (" +
@@ -99,9 +102,10 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
                 " ORDER BY c.published_at DESC NULLS LAST",
         countQuery =
                 "SELECT count(*) FROM contents c" +
+                " JOIN content_types ct ON ct.id = c.content_type_id" +
                 " WHERE c.status = 'PUBLISHED'" +
                 " AND c.search_vector @@ plainto_tsquery('english', :q)" +
-                " AND (:type IS NULL OR c.type = :type)" +
+                " AND (:type IS NULL OR ct.slug = :type)" +
                 " AND (:language IS NULL OR c.language = :language)" +
                 " AND (:country IS NULL OR c.country = :country)" +
                 " AND (:categorySlug IS NULL OR EXISTS (" +
@@ -122,14 +126,15 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
 
     @Query(
         value = "SELECT c.id, c.title, c.slug, c.description, c.short_description," +
-                " c.type, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
+                " c.content_type_id, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
                 " c.featured, c.poster_url, c.thumbnail_url, c.created_by, c.published_at," +
                 " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at," +
                 " c.average_rating, c.review_count, c.deleted_at" +
                 " FROM contents c" +
+                " JOIN content_types ct ON ct.id = c.content_type_id" +
                 " WHERE c.status = 'PUBLISHED'" +
                 " AND c.search_vector @@ plainto_tsquery('english', :q)" +
-                " AND (:type IS NULL OR c.type = :type)" +
+                " AND (:type IS NULL OR ct.slug = :type)" +
                 " AND (:language IS NULL OR c.language = :language)" +
                 " AND (:country IS NULL OR c.country = :country)" +
                 " AND (:categorySlug IS NULL OR EXISTS (" +
@@ -140,9 +145,10 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
                 " ORDER BY c.view_count DESC",
         countQuery =
                 "SELECT count(*) FROM contents c" +
+                " JOIN content_types ct ON ct.id = c.content_type_id" +
                 " WHERE c.status = 'PUBLISHED'" +
                 " AND c.search_vector @@ plainto_tsquery('english', :q)" +
-                " AND (:type IS NULL OR c.type = :type)" +
+                " AND (:type IS NULL OR ct.slug = :type)" +
                 " AND (:language IS NULL OR c.language = :language)" +
                 " AND (:country IS NULL OR c.country = :country)" +
                 " AND (:categorySlug IS NULL OR EXISTS (" +

@@ -23,7 +23,7 @@ public class SearchServiceImpl implements SearchService {
 
     @Override
     @Cacheable(value = "search", key = "(#request.q != null ? #request.q.trim().toLowerCase() : '') + '::' "
-        + "+ (#request.type != null ? #request.type.name() : '') + '::' "
+        + "+ (#request.type != null ? #request.type : '') + '::' "
         + "+ (#request.categorySlug != null ? #request.categorySlug : '') + '::' "
         + "+ (#request.language != null ? #request.language : '') + '::' "
         + "+ (#request.country != null ? #request.country : '') + '::' "
@@ -37,7 +37,7 @@ public class SearchServiceImpl implements SearchService {
                 "Search query must be at least 2 characters");
         }
 
-        String typeStr      = request.getType() != null ? request.getType().name() : null;
+        String typeStr      = request.getType();
         String language     = request.getLanguage();
         String country      = request.getCountry();
         String categorySlug = request.getCategorySlug();
