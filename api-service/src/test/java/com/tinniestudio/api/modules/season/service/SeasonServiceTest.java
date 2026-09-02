@@ -419,6 +419,24 @@ class SeasonServiceTest {
 
             assertThat(result.seasonNumber()).isEqualTo(1);
         }
+
+        @Test
+        @DisplayName("throws 409 when content's structuralKind is not MULTI_EPISODE")
+        void throwsWhenContentIsNotMultiEpisode() {
+            com.tinniestudio.api.shared.entity.ContentType movieType = new com.tinniestudio.api.shared.entity.ContentType();
+            movieType.setSlug("movie");
+            movieType.setStructuralKind(com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind.SINGLE_VIDEO);
+            seriesContent.setContentType(movieType); // reusing the fixture but overriding its type for this one test
+
+            CreateSeasonRequest req = new CreateSeasonRequest(1, "Season 1", null, null, null, null);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
+
+            assertThatThrownBy(() -> seasonService.create(contentId, req, ownerPrincipal()))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(409));
+
+            verify(seasonRepository, never()).saveAndFlush(any());
+        }
     }
 
     @Nested

@@ -75,6 +75,10 @@ public class SeasonService {
         Content content = contentRepository.findById(contentId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId));
         assertOwnedByCallerOrAdmin(content, principal);
+        if (content.getContentType().getStructuralKind() != com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind.MULTI_EPISODE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Cannot add seasons to content whose type is not multi-episode: " + content.getContentType().getName());
+        }
 
         int seasonNumber;
         if (req.seasonNumber() != null) {
