@@ -7,6 +7,7 @@ import com.tinniestudio.api.modules.season.dto.UpdateSeasonRequest;
 import com.tinniestudio.api.modules.season.repository.SeasonRepository;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
+import com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind;
 import com.tinniestudio.api.shared.entity.Season;
 import com.tinniestudio.api.shared.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
@@ -75,7 +76,7 @@ public class SeasonService {
         Content content = contentRepository.findById(contentId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId));
         assertOwnedByCallerOrAdmin(content, principal);
-        if (content.getContentType().getStructuralKind() != com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind.MULTI_EPISODE) {
+        if (content.getContentType().getStructuralKind() != StructuralKind.MULTI_EPISODE) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Cannot add seasons to content whose type is not multi-episode: " + content.getContentType().getName());
         }

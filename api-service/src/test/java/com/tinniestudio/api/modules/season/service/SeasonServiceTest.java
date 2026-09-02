@@ -423,9 +423,9 @@ class SeasonServiceTest {
         @Test
         @DisplayName("throws 409 when content's structuralKind is not MULTI_EPISODE")
         void throwsWhenContentIsNotMultiEpisode() {
-            com.tinniestudio.api.shared.entity.ContentType movieType = new com.tinniestudio.api.shared.entity.ContentType();
+            ContentType movieType = new ContentType();
             movieType.setSlug("movie");
-            movieType.setStructuralKind(com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind.SINGLE_VIDEO);
+            movieType.setStructuralKind(StructuralKind.SINGLE_VIDEO);
             seriesContent.setContentType(movieType); // reusing the fixture but overriding its type for this one test
 
             CreateSeasonRequest req = new CreateSeasonRequest(1, "Season 1", null, null, null, null);
