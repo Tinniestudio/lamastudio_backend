@@ -54,7 +54,7 @@ class AdminReviewControllerTest {
         ReviewResponse reviewResponse = new ReviewResponse(
             reviewId, UUID.randomUUID(), UUID.randomUUID(),
             (short) 1, "Spam content", "REJECTED",
-            Instant.now(), Instant.now()
+            Instant.now(), Instant.now(), null
         );
 
         UpdateReviewStatusRequest request = new UpdateReviewStatusRequest();

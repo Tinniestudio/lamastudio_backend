@@ -15,16 +15,19 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -68,7 +71,7 @@ class ReviewControllerTest {
         ReviewResponse reviewResponse = new ReviewResponse(
             UUID.randomUUID(), contentId, UUID.fromString(USER_ID),
             (short) 4, "Great content!", "APPROVED",
-            Instant.now(), Instant.now()
+            Instant.now(), Instant.now(), null
         );
 
         when(reviewService.list(any(UUID.class), any()))
@@ -87,7 +90,7 @@ class ReviewControllerTest {
         ReviewResponse reviewResponse = new ReviewResponse(
             UUID.randomUUID(), contentId, UUID.fromString(USER_ID),
             (short) 5, "Amazing!", "PENDING",
-            Instant.now(), Instant.now()
+            Instant.now(), Instant.now(), null
         );
 
         CreateReviewRequest request = new CreateReviewRequest();
@@ -112,7 +115,7 @@ class ReviewControllerTest {
         ReviewResponse reviewResponse = new ReviewResponse(
             reviewId, UUID.randomUUID(), UUID.fromString(USER_ID),
             (short) 3, "Updated review", "PENDING",
-            Instant.now(), Instant.now()
+            Instant.now(), Instant.now(), null
         );
 
         UpdateReviewRequest request = new UpdateReviewRequest();
@@ -139,5 +142,34 @@ class ReviewControllerTest {
         mockMvc.perform(deleteWithContext("/reviews/" + reviewId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.message").value("Review deleted successfully"));
+    }
+
+    @Test
+    @DisplayName("GET /contents/{contentId}/reviews/mine returns 200 when a review exists")
+    @WithMockUser(username = USER_ID, roles = "USER")
+    void getMine_returnsReview() throws Exception {
+        UUID contentId = UUID.randomUUID();
+        ReviewResponse response = new ReviewResponse(
+            UUID.randomUUID(), contentId, UUID.fromString(USER_ID),
+            (short) 4, "Great!", "PENDING",
+            Instant.now(), Instant.now(), null);
+        when(reviewService.getMine(any(UUID.class), eq(contentId))).thenReturn(response);
+
+        mockMvc.perform(getWithContext("/contents/" + contentId + "/reviews/mine"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.status").value("PENDING"));
+    }
+
+    @Test
+    @DisplayName("GET /contents/{contentId}/reviews/mine returns 404 when no review exists")
+    @WithMockUser(username = USER_ID, roles = "USER")
+    void getMine_returns404WhenNoneExists() throws Exception {
+        UUID contentId = UUID.randomUUID();
+        when(reviewService.getMine(any(UUID.class), eq(contentId)))
+            .thenThrow(new ResponseStatusException(
+                HttpStatus.NOT_FOUND, "No review found for this content"));
+
+        mockMvc.perform(getWithContext("/contents/" + contentId + "/reviews/mine"))
+            .andExpect(status().isNotFound());
     }
 }

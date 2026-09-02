@@ -37,6 +37,14 @@ public class ReviewController {
         return ResponseEntity.ok(reviewService.list(contentId, pageable));
     }
 
+    @Operation(summary = "Get the authenticated user's own review for a content item, regardless of moderation status")
+    @GetMapping("/contents/{contentId}/reviews/mine")
+    public ResponseEntity<ReviewResponse> getMine(
+            @AuthenticationPrincipal UserDetails principal,
+            @PathVariable UUID contentId) {
+        return ResponseEntity.ok(reviewService.getMine(CurrentUser.id(principal), contentId));
+    }
+
     @Operation(summary = "Create a review for a content item")
     @RateLimit(maxRequests = 10, windowMinutes = 60, keyStrategy = "USER_OR_IP")
     @PostMapping("/contents/{contentId}/reviews")

@@ -2,12 +2,15 @@ package com.tinniestudio.api.modules.reviews.service;
 
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.reviews.dto.CreateReviewRequest;
+import com.tinniestudio.api.modules.reviews.dto.ReviewAuthorResponse;
 import com.tinniestudio.api.modules.reviews.dto.ReviewResponse;
 import com.tinniestudio.api.modules.reviews.dto.UpdateReviewRequest;
 import com.tinniestudio.api.modules.reviews.dto.UpdateReviewStatusRequest;
 import com.tinniestudio.api.modules.reviews.repository.ReviewRepository;
+import com.tinniestudio.api.modules.user.repository.UserRepository;
 import com.tinniestudio.api.shared.entity.ContentReview;
 import com.tinniestudio.api.shared.entity.DomainEnums.ReviewStatus;
+import com.tinniestudio.api.shared.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -17,7 +20,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -25,13 +31,25 @@ public class ReviewServiceImpl implements ReviewService {
 
     private final ReviewRepository reviewRepo;
     private final ContentRepository contentRepo;
+    private final UserRepository userRepo;
 
     @Override
     @Transactional(readOnly = true)
     public Page<ReviewResponse> list(UUID contentId, Pageable pageable) {
-        return reviewRepo
-                .findByContentIdAndStatusOrderByCreatedAtDesc(contentId, ReviewStatus.APPROVED, pageable)
-                .map(ReviewResponse::from);
+        Page<ContentReview> reviews = reviewRepo
+                .findByContentIdAndStatusOrderByCreatedAtDesc(contentId, ReviewStatus.APPROVED, pageable);
+
+        List<UUID> userIds = reviews.getContent().stream()
+                .map(ContentReview::getUserId)
+                .distinct()
+                .toList();
+        Map<UUID, User> usersById = userRepo.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
+        return reviews.map(r -> {
+            User author = usersById.get(r.getUserId());
+            return ReviewResponse.from(r, author != null ? ReviewAuthorResponse.from(author) : null);
+        });
     }
 
     @Override
@@ -105,5 +123,14 @@ public class ReviewServiceImpl implements ReviewService {
         review.setStatus(request.getStatus());
 
         return ReviewResponse.from(reviewRepo.save(review));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ReviewResponse getMine(UUID userId, UUID contentId) {
+        return reviewRepo.findByUserIdAndContentId(userId, contentId)
+                .map(ReviewResponse::from)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "No review found for this content"));
     }
 }
