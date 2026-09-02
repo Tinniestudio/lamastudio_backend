@@ -6,6 +6,7 @@ import com.tinniestudio.api.modules.content.dto.CreateContentRequest;
 import com.tinniestudio.api.modules.content.dto.UpdateContentRequest;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.content.service.ContentService;
+import com.tinniestudio.api.modules.contenttype.dto.ContentTypeResponse;
 import com.tinniestudio.api.modules.partner.dto.AdminUpdatePartnerProfileRequest;
 import com.tinniestudio.api.modules.partner.dto.PartnerContentResponse;
 import com.tinniestudio.api.modules.partner.dto.PartnerDashboardResponse;
@@ -16,9 +17,9 @@ import com.tinniestudio.api.modules.upload.repository.UploadSessionRepository;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
-import com.tinniestudio.api.shared.entity.DomainEnums.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import com.tinniestudio.api.shared.entity.DomainEnums.ProcessingStatus;
+import com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind;
 import com.tinniestudio.api.shared.entity.PartnerProfile;
 import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
@@ -201,7 +202,10 @@ class PartnerServiceTest {
         ReflectionTestUtils.setField(c, "id", id);
         c.setTitle("My Movie");
         c.setSlug("my-movie");
-        c.setType(ContentType.MOVIE);
+        com.tinniestudio.api.shared.entity.ContentType movieType = new com.tinniestudio.api.shared.entity.ContentType();
+        movieType.setSlug("movie");
+        movieType.setStructuralKind(StructuralKind.SINGLE_VIDEO);
+        c.setContentType(movieType);
         c.setStatus(ContentStatus.DRAFT);
         c.setMaturityRating(MaturityRating.NOT_RATED);
         c.setCreatedBy(createdBy);
@@ -231,10 +235,11 @@ class PartnerServiceTest {
     void createContent_delegatesToContentServiceWithCallerAsOwner() {
         UUID partnerId = UUID.randomUUID();
         CreateContentRequest req = new CreateContentRequest(
-            "New Show", ContentType.SERIES, null, null, null, null, null, null, null);
+            "New Show", UUID.randomUUID(), null, null, null, null, null, null, null);
         ContentResponse created = new ContentResponse(
             UUID.randomUUID(), "New Show", "new-show", null, null,
-            "SERIES", "DRAFT", "NOT_RATED", null, null, null,
+            new ContentTypeResponse(UUID.randomUUID(), "Series", "series", "MULTI_EPISODE", 0, true),
+            "DRAFT", "NOT_RATED", null, null, null,
             false, false, 0L, null, null, null,
             BigDecimal.ZERO, 0, java.util.List.of(), null, null);
         when(contentService.create(req, partnerId)).thenReturn(created);
@@ -255,7 +260,8 @@ class PartnerServiceTest {
             "Renamed", null, null, null, null, null, null, null, null, null, null, null);
         ContentResponse updated = new ContentResponse(
             contentId, "Renamed", "my-movie", null, null,
-            "MOVIE", "DRAFT", "NOT_RATED", null, null, null,
+            new ContentTypeResponse(UUID.randomUUID(), "Movie", "movie", "SINGLE_VIDEO", 0, true),
+            "DRAFT", "NOT_RATED", null, null, null,
             false, false, 0L, null, null, null,
             BigDecimal.ZERO, 0, java.util.List.of(), null, null);
         when(contentService.update(contentId, req)).thenReturn(updated);

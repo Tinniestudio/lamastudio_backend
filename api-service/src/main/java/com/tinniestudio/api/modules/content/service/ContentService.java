@@ -9,7 +9,6 @@ import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.content.repository.ContentSpecifications;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
-import com.tinniestudio.api.shared.entity.DomainEnums.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import com.tinniestudio.api.shared.queue.RabbitConfig;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -38,21 +38,49 @@ public class ContentService {
 
     private final ContentRepository contentRepository;
     private final CategoryRepository categoryRepository;
+    private final com.tinniestudio.api.modules.contenttype.repository.ContentTypeRepository contentTypeRepository;
     private final RabbitTemplate rabbitTemplate;
+
+    /**
+     * ContentSpecifications.hasCategories() adds one INNER JOIN per slug, so an unbounded
+     * comma-separated "category" param is a cheap way to force an expensive query — cap it.
+     */
+    private static final int MAX_CATEGORY_SLUGS = 10;
 
     @Transactional(readOnly = true)
     public Page<ContentSummaryResponse> list(
-            ContentType type, String categorySlug,
+            String typeSlug, String category,
             MaturityRating maturityRating, Boolean comingSoon,
             Pageable pageable) {
 
+        List<String> categorySlugs = splitCategorySlugs(category);
+
         Specification<Content> spec = ContentSpecifications.isPublished()
-            .and(ContentSpecifications.hasType(type))
-            .and(ContentSpecifications.hasCategory(categorySlug))
+            .and(ContentSpecifications.hasType(typeSlug))
+            .and(ContentSpecifications.hasCategories(categorySlugs))
             .and(ContentSpecifications.hasMaturityRating(maturityRating))
             .and(ContentSpecifications.isComingSoon(comingSoon));
 
         return contentRepository.findAll(spec, pageable).map(ContentSummaryResponse::from);
+    }
+
+    /**
+     * "category" is a comma-separated list of slugs, AND-matched (Multi-Category Content
+     * Filtering spec). A single slug with no comma behaves exactly as before — this is fully
+     * backward compatible, no new query param name. Rejects more than MAX_CATEGORY_SLUGS with
+     * a 400 (see the field's javadoc for why).
+     */
+    private List<String> splitCategorySlugs(String category) {
+        if (category == null || category.isBlank()) return List.of();
+        List<String> slugs = java.util.Arrays.stream(category.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .toList();
+        if (slugs.size() > MAX_CATEGORY_SLUGS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Too many category filters (max " + MAX_CATEGORY_SLUGS + ")");
+        }
+        return slugs;
     }
 
     @Cacheable(value = "content-detail", key = "#slug")
@@ -112,7 +140,9 @@ public class ContentService {
     public ContentResponse create(CreateContentRequest req, UUID createdBy) {
         Content content = new Content();
         content.setTitle(req.title());
-        content.setType(req.type());
+        content.setContentType(contentTypeRepository.findById(req.contentTypeId())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Unknown contentTypeId: " + req.contentTypeId())));
         content.setStatus(ContentStatus.DRAFT);
         content.setMaturityRating(req.maturityRating() != null ? req.maturityRating() : MaturityRating.NOT_RATED);
         content.setDescription(req.description());

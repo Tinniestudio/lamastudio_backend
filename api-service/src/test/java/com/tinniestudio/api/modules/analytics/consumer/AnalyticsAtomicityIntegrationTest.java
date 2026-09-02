@@ -3,9 +3,10 @@ package com.tinniestudio.api.modules.analytics.consumer;
 import com.tinniestudio.api.modules.analytics.repository.ContentAnalyticsDailyRepository;
 import com.tinniestudio.api.modules.analytics.service.AnalyticsEventProcessor;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
+import com.tinniestudio.api.modules.contenttype.repository.ContentTypeRepository;
 import com.tinniestudio.api.shared.entity.Content;
+import com.tinniestudio.api.shared.entity.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
-import com.tinniestudio.api.shared.entity.DomainEnums.ContentType;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,6 +73,9 @@ class AnalyticsAtomicityIntegrationTest {
     private ContentRepository contentRepo;
 
     @Autowired
+    private ContentTypeRepository contentTypeRepo;
+
+    @Autowired
     private AnalyticsConsumer consumer;
 
     @MockBean
@@ -81,9 +85,11 @@ class AnalyticsAtomicityIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        ContentType movieType = contentTypeRepo.findBySlug("movie")
+            .orElseThrow(() -> new IllegalStateException("V53 seed row 'movie' not found"));
         Content content = new Content();
         content.setTitle("Atomicity Test Content " + UUID.randomUUID());
-        content.setType(ContentType.MOVIE);
+        content.setContentType(movieType);
         content.setStatus(ContentStatus.DRAFT);
         content.setCreatedBy(UUID.randomUUID());
         content = contentRepo.saveAndFlush(content);

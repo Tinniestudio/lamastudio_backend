@@ -6,10 +6,11 @@ import com.tinniestudio.api.modules.season.dto.SeasonResponse;
 import com.tinniestudio.api.modules.season.dto.UpdateSeasonRequest;
 import com.tinniestudio.api.modules.season.repository.SeasonRepository;
 import com.tinniestudio.api.shared.entity.Content;
+import com.tinniestudio.api.shared.entity.ContentType;
 import com.tinniestudio.api.shared.entity.Season;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
-import com.tinniestudio.api.shared.entity.DomainEnums.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
+import com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -55,7 +56,10 @@ class SeasonServiceTest {
         seriesContent = new Content();
         seriesContent.setId(contentId);
         seriesContent.setTitle("Breaking Bad");
-        seriesContent.setType(ContentType.SERIES);
+        ContentType seriesType = new ContentType();
+        seriesType.setSlug("series");
+        seriesType.setStructuralKind(StructuralKind.MULTI_EPISODE);
+        seriesContent.setContentType(seriesType);
         seriesContent.setStatus(ContentStatus.DRAFT);
         seriesContent.setCreatedBy(ownerId);
         seriesContent.setComingSoon(false);
@@ -414,6 +418,24 @@ class SeasonServiceTest {
             SeasonResponse result = seasonService.create(contentId, req, adminPrincipal());
 
             assertThat(result.seasonNumber()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("throws 409 when content's structuralKind is not MULTI_EPISODE")
+        void throwsWhenContentIsNotMultiEpisode() {
+            ContentType movieType = new ContentType();
+            movieType.setSlug("movie");
+            movieType.setStructuralKind(StructuralKind.SINGLE_VIDEO);
+            seriesContent.setContentType(movieType); // reusing the fixture but overriding its type for this one test
+
+            CreateSeasonRequest req = new CreateSeasonRequest(1, "Season 1", null, null, null, null);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
+
+            assertThatThrownBy(() -> seasonService.create(contentId, req, ownerPrincipal()))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(409));
+
+            verify(seasonRepository, never()).saveAndFlush(any());
         }
     }
 

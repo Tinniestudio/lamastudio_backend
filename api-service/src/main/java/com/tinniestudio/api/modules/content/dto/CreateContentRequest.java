@@ -1,6 +1,5 @@
 package com.tinniestudio.api.modules.content.dto;
 
-import com.tinniestudio.api.shared.entity.DomainEnums.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -10,7 +9,7 @@ import java.util.UUID;
 
 public record CreateContentRequest(
     @NotBlank String title,
-    @NotNull ContentType type,
+    @NotNull UUID contentTypeId,
     MaturityRating maturityRating,
     String description,
     String shortDescription,

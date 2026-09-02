@@ -7,7 +7,8 @@ import java.util.UUID;
 
 public record ContentSummaryResponse(
     UUID id, String title, String slug, String shortDescription,
-    String type, String status, String maturityRating,
+    com.tinniestudio.api.modules.contenttype.dto.ContentTypeResponse contentType,
+    String status, String maturityRating,
     LocalDate releaseDate, Boolean featured, Boolean comingSoon,
     Long viewCount, BigDecimal averageRating, Integer reviewCount,
     String posterUrl, String thumbnailUrl
@@ -15,7 +16,8 @@ public record ContentSummaryResponse(
     public static ContentSummaryResponse from(Content c) {
         return new ContentSummaryResponse(
             c.getId(), c.getTitle(), c.getSlug(), c.getShortDescription(),
-            c.getType().name(), c.getStatus().name(), c.getMaturityRating().name(),
+            com.tinniestudio.api.modules.contenttype.dto.ContentTypeResponse.from(c.getContentType()),
+            c.getStatus().name(), c.getMaturityRating().name(),
             c.getReleaseDate(), c.getFeatured(), c.getComingSoon(),
             c.getViewCount(), c.getAverageRating(), c.getReviewCount(),
             c.getPosterUrl(), c.getThumbnailUrl()

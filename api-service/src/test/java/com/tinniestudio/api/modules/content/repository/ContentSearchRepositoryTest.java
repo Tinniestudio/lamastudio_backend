@@ -1,8 +1,9 @@
 package com.tinniestudio.api.modules.content.repository;
 
+import com.tinniestudio.api.modules.contenttype.repository.ContentTypeRepository;
 import com.tinniestudio.api.shared.entity.Content;
+import com.tinniestudio.api.shared.entity.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
-import com.tinniestudio.api.shared.entity.DomainEnums.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,12 +54,15 @@ class ContentSearchRepositoryTest {
     }
 
     @Autowired private ContentRepository contentRepository;
+    @Autowired private ContentTypeRepository contentTypeRepository;
 
     private Content seedPublishedContent(String title) {
+        ContentType movieType = contentTypeRepository.findBySlug("movie")
+            .orElseThrow(() -> new IllegalStateException("V53 seed row 'movie' not found"));
         Content content = new Content();
         content.setTitle(title);
         content.setSlug(title.toLowerCase().replace(" ", "-") + "-" + System.nanoTime());
-        content.setType(ContentType.MOVIE);
+        content.setContentType(movieType);
         content.setStatus(ContentStatus.PUBLISHED);
         content.setMaturityRating(MaturityRating.PG);
         content.setDescription("A searchable description");

@@ -6,7 +6,6 @@ import com.tinniestudio.api.modules.search.dto.SearchRequest;
 import com.tinniestudio.api.modules.search.dto.SearchResponse;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
-import com.tinniestudio.api.shared.entity.DomainEnums.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -42,7 +41,10 @@ class SearchServiceTest {
         c.setId(UUID.randomUUID());
         c.setTitle("Interstellar");
         c.setSlug("interstellar");
-        c.setType(ContentType.MOVIE);
+        com.tinniestudio.api.shared.entity.ContentType movieType = new com.tinniestudio.api.shared.entity.ContentType();
+        movieType.setSlug("movie");
+        movieType.setStructuralKind(com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind.SINGLE_VIDEO);
+        c.setContentType(movieType);
         c.setStatus(ContentStatus.PUBLISHED);
         c.setMaturityRating(MaturityRating.PG);
         c.setFeatured(false);
@@ -148,13 +150,13 @@ class SearchServiceTest {
         void passesTypeFilter() {
             SearchRequest req = new SearchRequest();
             req.setQ("interstellar");
-            req.setType(ContentType.MOVIE);
+            req.setType("movie");
             req.setSort(SearchRequest.SearchSort.RELEVANT);
             req.setPage(0);
             req.setLimit(20);
 
             when(contentRepository.searchByRelevance(
-                    eq("interstellar"), eq("MOVIE"), isNull(), isNull(), isNull(), any(Pageable.class)))
+                    eq("interstellar"), eq("movie"), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(publishedMovie())));
 
             SearchResponse resp = searchService.search(req);
