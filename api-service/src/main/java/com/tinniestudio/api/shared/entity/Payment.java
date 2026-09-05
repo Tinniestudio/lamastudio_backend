@@ -60,6 +60,9 @@ public class Payment {
     @Column(name = "paid_at")
     private Instant paidAt;
 
+    @Column(name = "cancelled_at")
+    private Instant cancelledAt;
+
     @Column(name = "failure_reason", columnDefinition = "TEXT")
     private String failureReason;
 

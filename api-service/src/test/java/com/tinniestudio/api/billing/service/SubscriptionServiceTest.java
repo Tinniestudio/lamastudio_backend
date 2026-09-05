@@ -185,6 +185,39 @@ class SubscriptionServiceTest {
     }
 
     @Nested
+    @DisplayName("cancelPayment()")
+    class CancelPayment {
+
+        @Test
+        @DisplayName("cancels pending payment and sets cancelledAt")
+        void cancelsPendingPayment() {
+            Payment payment = new Payment();
+            payment.setId(UUID.randomUUID());
+            payment.setUserId(userId);
+            payment.setStatus(PaymentStatus.PENDING);
+            payment.setProviderReference("pi_mine");
+
+            when(paymentRepository.findTopByUserIdAndStatusOrderByCreatedAtDesc(userId, PaymentStatus.PENDING))
+                .thenReturn(Optional.of(payment));
+
+            SubscriptionStatusResponse result = service.cancelPayment(userId);
+
+            assertThat(result.getStatus()).isEqualTo(PaymentStatus.CANCELLED.name());
+            assertThat(payment.getCancelledAt()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("no pending payment throws ResourceNotFoundException")
+        void noPendingPayment_throws() {
+            when(paymentRepository.findByProviderReferenceAndUserId("pi_mine", userId))
+                .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.cancelPayment(userId))
+                .isInstanceOf(ResourceNotFoundException.class);
+        }
+    }
+
+    @Nested
     @DisplayName("verifyPayment()")
     class VerifyPayment {
 

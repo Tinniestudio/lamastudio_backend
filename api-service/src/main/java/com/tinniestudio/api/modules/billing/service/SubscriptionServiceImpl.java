@@ -304,6 +304,20 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     @Transactional
+    public SubscriptionStatusResponse cancelPayment(UUID userId) {
+        Payment payment = paymentRepository.findTopByUserIdAndStatusOrderByCreatedAtDesc(userId, PaymentStatus.PENDING)
+                .orElseThrow(() -> new ResourceNotFoundException("No pending payment found"));
+    
+        payment.setStatus(PaymentStatus.CANCELLED);
+        payment.setCancelledAt(Instant.now());
+        paymentRepository.save(payment);
+        log.info("Pending payment cancelled: userId={}, paymentId={}", userId, payment.getId());
+
+        return getSubscriptionStatus(userId);
+    }
+
+    @Override
+    @Transactional
     public SubscriptionStatusResponse verifyPayment(UUID userId, String paymentReference) {
         Payment payment = paymentRepository.findByProviderReferenceAndUserId(paymentReference, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));

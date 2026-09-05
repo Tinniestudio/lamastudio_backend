@@ -21,5 +21,7 @@ public interface SubscriptionService {
 
     void cancelSubscription(UUID userId);
 
+    SubscriptionStatusResponse cancelPayment(UUID userId);
+
     SubscriptionStatusResponse verifyPayment(UUID userId, String paymentId);
 }

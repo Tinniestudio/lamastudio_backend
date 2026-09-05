@@ -61,6 +61,13 @@ public class SubscriptionController {
         return ResponseEntity.ok(subscriptionService.getSubscriptionStatus(CurrentUser.id(principal)));
     }
 
+     @Operation(summary = "Cancel a pending payment — use when webhook delivery was missed")
+    @PostMapping("/cancel-payment")
+    public ResponseEntity<SubscriptionStatusResponse> cancelPayment(
+            @AuthenticationPrincipal UserDetails principal) {
+        return ResponseEntity.ok(subscriptionService.cancelPayment(CurrentUser.id(principal)));
+    }
+
     @Operation(summary = "Verify a pending payment against Stripe — use when webhook delivery was missed")
     @PostMapping("/verify-payment/{paymentReference}")
     public ResponseEntity<SubscriptionStatusResponse> verifyPayment(

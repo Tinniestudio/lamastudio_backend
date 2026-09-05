@@ -418,3 +418,7 @@ Client                                      api-service
   | measured bandwidth, fetches that variant's .m3u8 + .ts segments
   | directly from CDN/storage, and switches resolution adaptively
   | as bandwidth changes — mid-stream, no new API calls needed.
+
+
+## Tasks
+remove upload load from partner video upload, it should only show the current status, not history

@@ -22,6 +22,8 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
 
     Optional<Payment> findByIdAndUserId(UUID id, UUID userId);
 
+    Optional<Payment> findTopByUserIdAndStatusOrderByCreatedAtDesc(UUID userId, PaymentStatus status);
+
     List<Payment> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
     boolean existsByProviderReferenceAndStatus(String providerReference, PaymentStatus status);

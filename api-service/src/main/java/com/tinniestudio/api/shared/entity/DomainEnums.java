@@ -150,7 +150,8 @@ public final class DomainEnums {
         PENDING,
         SUCCESSFUL,
         FAILED,
-        REFUNDED
+        REFUNDED,
+        CANCELLED
     }
 
     public enum ReviewStatus {
