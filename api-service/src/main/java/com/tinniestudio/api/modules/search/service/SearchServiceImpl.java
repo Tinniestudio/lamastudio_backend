@@ -4,7 +4,6 @@ import com.tinniestudio.api.modules.content.dto.ContentSummaryResponse;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.search.dto.SearchRequest;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -18,14 +17,12 @@ public class SearchServiceImpl implements SearchService {
 
     private final ContentRepository contentRepository;
 
+    // Not @Cacheable: Page (concrete runtime type PageImpl, org.springframework.data.domain)
+    // can't round-trip RedisConfig's cacheObjectMapper() — its BasicPolymorphicTypeValidator
+    // only allows com.tinniestudio.* plus a short JDK allowlist, and PageImpl has no
+    // default constructor/Jackson creator even if the allowlist were widened. Matches
+    // ContentService.list(), the closest analog, which is also uncached for the same reason.
     @Override
-    @Cacheable(value = "search", key = "(#request.q != null ? #request.q.trim().toLowerCase() : '') + '::' "
-        + "+ (#request.type != null ? #request.type : '') + '::' "
-        + "+ (#request.categorySlug != null ? #request.categorySlug : '') + '::' "
-        + "+ (#request.language != null ? #request.language : '') + '::' "
-        + "+ (#request.country != null ? #request.country : '') + '::' "
-        + "+ #request.sort.name() + '::' "
-        + "+ #request.page + '::' + #request.limit")
     @Transactional(readOnly = true)
     public Page<ContentSummaryResponse> search(SearchRequest request) {
         String q = request.getQ() == null ? "" : request.getQ().trim();
