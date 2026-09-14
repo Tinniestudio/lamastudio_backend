@@ -52,8 +52,8 @@ public class RedisConfig {
      * array token) — so serializing a bare List writes it with no outer type wrapper, and the
      * very next read of that same value fails ("expected VALUE_STRING ... got START_OBJECT")
      * because the reader expects type info it never got. Any @Cacheable method returning a List
-     * (categories, content-list, discover, search, recommendations) hit this on every cache read
-     * following a cache write, deterministically. WRAPPER_ARRAY style wraps collections as
+     * (categories, discover, recommendations) hit this on every cache read following a cache
+     * write, deterministically. WRAPPER_ARRAY style wraps collections as
      * {@code ["java.util.ArrayList", [...]]}, which round-trips correctly.
      */
     static ObjectMapper cacheObjectMapper() {
@@ -133,7 +133,6 @@ public class RedisConfig {
         cacheConfigs.put("content-list",      config.entryTtl(Duration.ofMinutes(2)));
         cacheConfigs.put("content-detail",    config.entryTtl(Duration.ofMinutes(5)));
         cacheConfigs.put("discover",          config.entryTtl(Duration.ofMinutes(2)));
-        cacheConfigs.put("search",            config.entryTtl(Duration.ofSeconds(60)));
         cacheConfigs.put("recommendations",   config.entryTtl(Duration.ofMinutes(10)));
 
         log.info("CacheManager configured with default TTL: {} minutes + per-cache overrides",
