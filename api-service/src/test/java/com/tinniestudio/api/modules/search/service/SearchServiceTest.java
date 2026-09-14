@@ -3,7 +3,6 @@ package com.tinniestudio.api.modules.search.service;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.content.dto.ContentSummaryResponse;
 import com.tinniestudio.api.modules.search.dto.SearchRequest;
-import com.tinniestudio.api.modules.search.dto.SearchResponse;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
@@ -14,7 +13,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -94,17 +95,18 @@ class SearchServiceTest {
             req.setPage(0);
             req.setLimit(20);
 
+            Pageable pageable = PageRequest.of(0, 20);
             when(contentRepository.searchByRelevance(
                     eq("action movie"), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(publishedMovie())));
+                .thenReturn(new PageImpl<>(List.of(publishedMovie()), pageable, 1));
 
-            SearchResponse resp = searchService.search(req);
+            Page<ContentSummaryResponse> result = searchService.search(req);
 
-            assertThat(resp.results()).hasSize(1);
-            assertThat(resp.total()).isEqualTo(1L);
-            assertThat(resp.page()).isEqualTo(0);
-            assertThat(resp.limit()).isEqualTo(20);
-            assertThat(resp.results().get(0).title()).isEqualTo("Interstellar");
+            assertThat(result.getContent()).hasSize(1);
+            assertThat(result.getTotalElements()).isEqualTo(1L);
+            assertThat(result.getNumber()).isEqualTo(0);
+            assertThat(result.getSize()).isEqualTo(20);
+            assertThat(result.getContent().get(0).title()).isEqualTo("Interstellar");
         }
 
         @Test
@@ -120,9 +122,9 @@ class SearchServiceTest {
                     eq("action movie"), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(publishedMovie())));
 
-            SearchResponse resp = searchService.search(req);
+            Page<ContentSummaryResponse> result = searchService.search(req);
 
-            assertThat(resp.results()).hasSize(1);
+            assertThat(result.getContent()).hasSize(1);
             verify(contentRepository).searchByLatest(any(), any(), any(), any(), any(), any());
         }
 
@@ -139,9 +141,9 @@ class SearchServiceTest {
                     eq("action movie"), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(publishedMovie())));
 
-            SearchResponse resp = searchService.search(req);
+            Page<ContentSummaryResponse> result = searchService.search(req);
 
-            assertThat(resp.results()).hasSize(1);
+            assertThat(result.getContent()).hasSize(1);
             verify(contentRepository).searchByPopular(any(), any(), any(), any(), any(), any());
         }
 
@@ -159,9 +161,9 @@ class SearchServiceTest {
                     eq("interstellar"), eq("movie"), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(publishedMovie())));
 
-            SearchResponse resp = searchService.search(req);
+            Page<ContentSummaryResponse> result = searchService.search(req);
 
-            assertThat(resp.results()).hasSize(1);
+            assertThat(result.getContent()).hasSize(1);
         }
 
         @Test
@@ -174,13 +176,13 @@ class SearchServiceTest {
             req.setLimit(20);
 
             when(contentRepository.searchByRelevance(any(), any(), any(), any(), any(), any()))
-                .thenReturn(new PageImpl<>(List.of()));
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
-            SearchResponse resp = searchService.search(req);
+            Page<ContentSummaryResponse> result = searchService.search(req);
 
-            assertThat(resp.results()).isEmpty();
-            assertThat(resp.total()).isEqualTo(0L);
-            assertThat(resp.totalPages()).isEqualTo(0);
+            assertThat(result.getContent()).isEmpty();
+            assertThat(result.getTotalElements()).isEqualTo(0L);
+            assertThat(result.getTotalPages()).isEqualTo(0);
         }
     }
 }

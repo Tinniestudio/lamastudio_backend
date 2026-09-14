@@ -1,8 +1,9 @@
 package com.tinniestudio.api.modules.search.service;
 
+import com.tinniestudio.api.modules.content.dto.ContentSummaryResponse;
 import com.tinniestudio.api.modules.search.dto.SearchRequest;
-import com.tinniestudio.api.modules.search.dto.SearchResponse;
+import org.springframework.data.domain.Page;
 
 public interface SearchService {
-    SearchResponse search(SearchRequest request);
+    Page<ContentSummaryResponse> search(SearchRequest request);
 }
