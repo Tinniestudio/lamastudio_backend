@@ -1,6 +1,7 @@
 package com.tinniestudio.api.modules.library.controller;
 
 import com.tinniestudio.api.shared.security.CurrentUser;
+import com.tinniestudio.api.modules.library.dto.FavoriteExistsResponse;
 import com.tinniestudio.api.modules.library.dto.FavoriteResponse;
 import com.tinniestudio.api.modules.library.service.FavoriteService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -50,5 +51,14 @@ public class FavoriteController {
             @PathVariable UUID contentId) {
         favoriteService.remove(CurrentUser.id(principal), contentId);
         return ResponseEntity.ok(Map.of("message", "Removed from favorites successfully"));
+    }
+
+    @Operation(summary = "Check whether a content item is already in the authenticated user's favorites")
+    @GetMapping("/{contentId}/exists")
+    public ResponseEntity<FavoriteExistsResponse> exists(
+            @AuthenticationPrincipal UserDetails principal,
+            @PathVariable UUID contentId) {
+        return ResponseEntity.ok(new FavoriteExistsResponse(
+            favoriteService.exists(CurrentUser.id(principal), contentId)));
     }
 }
