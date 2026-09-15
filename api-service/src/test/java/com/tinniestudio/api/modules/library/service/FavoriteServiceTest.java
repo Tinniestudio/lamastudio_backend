@@ -213,4 +213,26 @@ class FavoriteServiceTest {
         FavoriteResponse response = result.getContent().get(0);
         assertThat(response.content()).isNull();
     }
+
+    // ─── exists() ────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("exists: returns true when the favorite exists")
+    void exists_returnsTrueWhenFavorited() {
+        when(favoriteRepo.existsByUserIdAndContentId(userId, contentId)).thenReturn(true);
+
+        boolean result = favoriteService.exists(userId, contentId);
+
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    @DisplayName("exists: returns false when not favorited")
+    void exists_returnsFalseWhenNotFavorited() {
+        when(favoriteRepo.existsByUserIdAndContentId(userId, contentId)).thenReturn(false);
+
+        boolean result = favoriteService.exists(userId, contentId);
+
+        assertThat(result).isFalse();
+    }
 }

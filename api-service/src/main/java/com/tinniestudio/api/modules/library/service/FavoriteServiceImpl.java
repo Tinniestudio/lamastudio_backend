@@ -77,4 +77,10 @@ public class FavoriteServiceImpl implements FavoriteService {
                 contentMap.get(fav.getContentId())
         ));
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean exists(UUID userId, UUID contentId) {
+        return favoriteRepo.existsByUserIdAndContentId(userId, contentId);
+    }
 }

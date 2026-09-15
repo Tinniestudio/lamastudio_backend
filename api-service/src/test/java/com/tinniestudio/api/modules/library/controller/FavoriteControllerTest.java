@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -103,5 +104,29 @@ class FavoriteControllerTest {
         mockMvc.perform(deleteWithContext("/favorites/" + contentId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.message").value("Removed from favorites successfully"));
+    }
+
+    @Test
+    @DisplayName("GET /favorites/{contentId}/exists returns true when favorited")
+    @WithMockUser(username = USER_ID, roles = "USER")
+    void exists_returnsTrue() throws Exception {
+        UUID contentId = UUID.randomUUID();
+        when(favoriteService.exists(any(UUID.class), eq(contentId))).thenReturn(true);
+
+        mockMvc.perform(getWithContext("/favorites/" + contentId + "/exists"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.isFavorite").value(true));
+    }
+
+    @Test
+    @DisplayName("GET /favorites/{contentId}/exists returns false when not favorited")
+    @WithMockUser(username = USER_ID, roles = "USER")
+    void exists_returnsFalse() throws Exception {
+        UUID contentId = UUID.randomUUID();
+        when(favoriteService.exists(any(UUID.class), eq(contentId))).thenReturn(false);
+
+        mockMvc.perform(getWithContext("/favorites/" + contentId + "/exists"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.isFavorite").value(false));
     }
 }

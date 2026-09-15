@@ -10,4 +10,5 @@ public interface FavoriteService {
     void add(UUID userId, UUID contentId);
     void remove(UUID userId, UUID contentId);
     Page<FavoriteResponse> list(UUID userId, Pageable pageable);
+    boolean exists(UUID userId, UUID contentId);
 }
