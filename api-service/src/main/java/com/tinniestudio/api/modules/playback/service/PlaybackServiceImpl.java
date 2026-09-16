@@ -278,20 +278,24 @@ public class PlaybackServiceImpl implements PlaybackService {
             .map(p -> {
                 String title;
                 String thumbnailUrl;
+                String contentSlug;
                 if (p.getEpisodeId() != null) {
                     Episode ep = episodeMap.get(p.getEpisodeId());
                     title = ep != null ? ep.getTitle() : "Unknown Episode";
                     thumbnailUrl = ep != null ? ep.getThumbnailUrl() : null;
+                    contentSlug = ep != null ? ep.getSeason().getContent().getSlug() : null;
                 } else {
                     Content c = contentMap.get(p.getContentId());
                     title = c != null ? c.getTitle() : "Unknown Content";
                     thumbnailUrl = c != null ? c.getThumbnailUrl() : null;
+                    contentSlug = c != null ? c.getSlug() : null;
                 }
                 return new ContinueWatchingItem(
                     p.getContentId(),
                     p.getEpisodeId(),
                     title,
                     thumbnailUrl,
+                    contentSlug,
                     p.getProgressSeconds() != null ? p.getProgressSeconds() : 0,
                     p.getDurationSeconds() != null ? p.getDurationSeconds() : 0,
                     p.getCompletionPercentage(),

@@ -445,10 +445,13 @@ class PlaybackServiceTest {
             p.setCompletionPercentage(new java.math.BigDecimal("16.67"));
             p.setLastWatchedAt(java.time.Instant.now());
 
+            Season season = new Season();
+            season.setContent(new Content());
             Episode episode = new Episode();
             episode.setTitle("Pilot");
             episode.setThumbnailUrl("posters/pilot-thumb.jpg");
             episode.setId(episodeId);
+            episode.setSeason(season);
 
             when(watchProgressRepo.findByUserIdAndCompletedFalseOrderByLastWatchedAtDesc(eq(userId), any()))
                 .thenReturn(List.of(p));
@@ -458,6 +461,64 @@ class PlaybackServiceTest {
             List<ContinueWatchingItem> result = service.getContinueWatching(userId);
 
             assertThat(result.get(0).getThumbnailUrl()).isEqualTo("posters/pilot-thumb.jpg");
+        }
+
+        @Test
+        void populatesContentSlugForMovieItem() {
+            UUID userId = UUID.randomUUID();
+            UUID contentId = UUID.randomUUID();
+
+            WatchProgress p = new WatchProgress();
+            p.setContentId(contentId);
+            p.setProgressSeconds(300);
+            p.setDurationSeconds(3600);
+            p.setCompletionPercentage(new java.math.BigDecimal("8.33"));
+            p.setLastWatchedAt(java.time.Instant.now());
+
+            Content content = new Content();
+            content.setId(contentId);
+            content.setTitle("My Movie");
+            content.setSlug("my-movie");
+
+            when(watchProgressRepo.findByUserIdAndCompletedFalseOrderByLastWatchedAtDesc(eq(userId), any()))
+                .thenReturn(List.of(p));
+            when(contentRepo.findAllById(any())).thenReturn(List.of(content));
+            when(episodeRepo.findAllById(any())).thenReturn(List.of());
+
+            List<ContinueWatchingItem> result = service.getContinueWatching(userId);
+
+            assertThat(result.get(0).getContentSlug()).isEqualTo("my-movie");
+        }
+
+        @Test
+        void populatesContentSlugForEpisodeItem_fromParentContent() {
+            UUID userId = UUID.randomUUID();
+            UUID episodeId = UUID.randomUUID();
+
+            WatchProgress p = new WatchProgress();
+            p.setEpisodeId(episodeId);
+            p.setProgressSeconds(300);
+            p.setDurationSeconds(1800);
+            p.setCompletionPercentage(new java.math.BigDecimal("16.67"));
+            p.setLastWatchedAt(java.time.Instant.now());
+
+            Content parentContent = new Content();
+            parentContent.setSlug("breaking-bad");
+            Season season = new Season();
+            season.setContent(parentContent);
+            Episode episode = new Episode();
+            episode.setId(episodeId);
+            episode.setTitle("Pilot");
+            episode.setSeason(season);
+
+            when(watchProgressRepo.findByUserIdAndCompletedFalseOrderByLastWatchedAtDesc(eq(userId), any()))
+                .thenReturn(List.of(p));
+            when(contentRepo.findAllById(any())).thenReturn(List.of());
+            when(episodeRepo.findAllById(any())).thenReturn(List.of(episode));
+
+            List<ContinueWatchingItem> result = service.getContinueWatching(userId);
+
+            assertThat(result.get(0).getContentSlug()).isEqualTo("breaking-bad");
         }
     }
 }
