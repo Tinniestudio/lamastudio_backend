@@ -15,6 +15,7 @@ public class ContinueWatchingItem {
     private final UUID episodeId;
     private final String title;
     private final String thumbnailUrl;
+    private final String contentSlug;
     private final int progressSeconds;
     private final int durationSeconds;
     private final BigDecimal completionPercentage;

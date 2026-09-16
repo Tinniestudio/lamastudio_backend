@@ -134,7 +134,7 @@ class PlaybackControllerTest {
     @WithMockUser(username = USER_ID, roles = "USER")
     void getContinueWatching_returnsArray() throws Exception {
         ContinueWatchingItem item = new ContinueWatchingItem(
-            UUID.randomUUID(), null, "My Movie", null,
+            UUID.randomUUID(), null, "My Movie", null, null,
             300, 3600, new BigDecimal("8.33"), Instant.now());
         when(playbackService.getContinueWatching(any(UUID.class)))
             .thenReturn(List.of(item));
