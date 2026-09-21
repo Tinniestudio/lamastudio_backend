@@ -75,6 +75,7 @@ class ContentServiceTest {
         content.setTitle("Test Movie");
         content.setSlug("test-movie");
         content.setContentType(movieType);
+        content.setMainCategory(DomainEnums.MainCategory.MOVIES);
         content.setStatus(ContentStatus.DRAFT);
         content.setMaturityRating(MaturityRating.NOT_RATED);
         content.setFeatured(false);

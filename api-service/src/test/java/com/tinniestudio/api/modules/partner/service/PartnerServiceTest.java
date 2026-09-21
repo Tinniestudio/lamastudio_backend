@@ -17,6 +17,7 @@ import com.tinniestudio.api.modules.upload.repository.UploadSessionRepository;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
+import com.tinniestudio.api.shared.entity.DomainEnums.MainCategory;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import com.tinniestudio.api.shared.entity.DomainEnums.ProcessingStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind;
@@ -206,6 +207,7 @@ class PartnerServiceTest {
         movieType.setSlug("movie");
         movieType.setStructuralKind(StructuralKind.SINGLE_VIDEO);
         c.setContentType(movieType);
+        c.setMainCategory(MainCategory.MOVIES);
         c.setStatus(ContentStatus.DRAFT);
         c.setMaturityRating(MaturityRating.NOT_RATED);
         c.setCreatedBy(createdBy);

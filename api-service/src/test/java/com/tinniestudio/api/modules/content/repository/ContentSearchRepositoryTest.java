@@ -4,6 +4,7 @@ import com.tinniestudio.api.modules.contenttype.repository.ContentTypeRepository
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
+import com.tinniestudio.api.shared.entity.DomainEnums.MainCategory;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,6 +64,7 @@ class ContentSearchRepositoryTest {
         content.setTitle(title);
         content.setSlug(title.toLowerCase().replace(" ", "-") + "-" + System.nanoTime());
         content.setContentType(movieType);
+        content.setMainCategory(MainCategory.MOVIES);
         content.setStatus(ContentStatus.PUBLISHED);
         content.setMaturityRating(MaturityRating.PG);
         content.setDescription("A searchable description");

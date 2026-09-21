@@ -7,6 +7,7 @@ import com.tinniestudio.api.modules.contenttype.repository.ContentTypeRepository
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
+import com.tinniestudio.api.shared.entity.DomainEnums.MainCategory;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -90,6 +91,7 @@ class AnalyticsAtomicityIntegrationTest {
         Content content = new Content();
         content.setTitle("Atomicity Test Content " + UUID.randomUUID());
         content.setContentType(movieType);
+        content.setMainCategory(MainCategory.MOVIES);
         content.setStatus(ContentStatus.DRAFT);
         content.setCreatedBy(UUID.randomUUID());
         content = contentRepo.saveAndFlush(content);

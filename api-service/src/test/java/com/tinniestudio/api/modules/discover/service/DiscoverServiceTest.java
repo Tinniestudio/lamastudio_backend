@@ -48,6 +48,7 @@ class DiscoverServiceTest {
         movieType.setSlug("movie");
         movieType.setStructuralKind(StructuralKind.SINGLE_VIDEO);
         c.setContentType(movieType);
+        c.setMainCategory(MainCategory.MOVIES);
         c.setStatus(ContentStatus.PUBLISHED);
         c.setMaturityRating(MaturityRating.PG);
         c.setFeatured(true);
