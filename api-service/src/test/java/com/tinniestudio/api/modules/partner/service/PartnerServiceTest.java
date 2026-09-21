@@ -239,6 +239,7 @@ class PartnerServiceTest {
         ContentResponse created = new ContentResponse(
             UUID.randomUUID(), "New Show", "new-show", null, null,
             new ContentTypeResponse(UUID.randomUUID(), "Series", "series", "MULTI_EPISODE", 0, true),
+            "movies",
             "DRAFT", "NOT_RATED", null, null, null,
             false, false, 0L, null, null, null,
             BigDecimal.ZERO, 0, java.util.List.of(), null, null);
@@ -261,6 +262,7 @@ class PartnerServiceTest {
         ContentResponse updated = new ContentResponse(
             contentId, "Renamed", "my-movie", null, null,
             new ContentTypeResponse(UUID.randomUUID(), "Movie", "movie", "SINGLE_VIDEO", 0, true),
+            "movies",
             "DRAFT", "NOT_RATED", null, null, null,
             false, false, 0L, null, null, null,
             BigDecimal.ZERO, 0, java.util.List.of(), null, null);

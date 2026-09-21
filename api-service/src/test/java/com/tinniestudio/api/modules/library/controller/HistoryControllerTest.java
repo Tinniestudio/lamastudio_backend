@@ -61,6 +61,7 @@ class HistoryControllerTest {
         ContentSummaryResponse contentSummary = new ContentSummaryResponse(
             contentId, "Test Movie", "test-movie", "A test movie",
             new ContentTypeResponse(UUID.randomUUID(), "Movie", "movie", "SINGLE_VIDEO", 0, true),
+            "movies",
             "PUBLISHED", "PG",
             LocalDate.of(2024, 1, 1), false, false,
             100L, BigDecimal.ZERO, 0, "http://cdn.test/poster.jpg", "http://cdn.test/thumbnail.jpg"

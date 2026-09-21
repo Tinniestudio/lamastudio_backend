@@ -201,6 +201,7 @@ class PartnerControllerTest {
         return new PartnerContentResponse(
             UUID.randomUUID(), "My Movie", "my-movie", "desc", "short",
             new ContentTypeResponse(UUID.randomUUID(), "Movie", "movie", "SINGLE_VIDEO", 0, true),
+            "movies",
             "DRAFT", "NOT_RATED",
             null, null, null,
             false, false, 0L,

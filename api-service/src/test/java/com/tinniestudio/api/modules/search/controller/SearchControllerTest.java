@@ -41,6 +41,7 @@ class SearchControllerTest {
     private static final ContentSummaryResponse MOVIE = new ContentSummaryResponse(
         UUID.randomUUID(), "Interstellar", "interstellar", "Space odyssey",
         new ContentTypeResponse(UUID.randomUUID(), "Movie", "movie", "SINGLE_VIDEO", 0, true),
+        "movies",
         "PUBLISHED", "PG", LocalDate.of(2014, 11, 7),
         false, false, 1500L, BigDecimal.ZERO, 0, null, null
     );
