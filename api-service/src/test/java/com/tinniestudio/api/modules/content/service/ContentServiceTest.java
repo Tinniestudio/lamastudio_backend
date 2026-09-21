@@ -257,7 +257,8 @@ class ContentServiceTest {
 
             assertThatThrownBy(() -> contentService.create(req, createdBy))
                 .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("Unknown mainCategory");
+                .hasMessageContaining("Unknown mainCategory")
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
         }
     }
 
@@ -408,6 +409,20 @@ class ContentServiceTest {
             contentService.update(contentId, req);
 
             assertThat(content.getMainCategory()).isEqualTo(DomainEnums.MainCategory.MOVIES);
+        }
+
+        @Test
+        @DisplayName("rejects a blank mainCategory with 400 rather than nulling the column")
+        void rejectsBlankMainCategoryOnUpdate() {
+            content.setMainCategory(DomainEnums.MainCategory.MOVIES);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+            UpdateContentRequest req = new UpdateContentRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null, "");
+
+            assertThatThrownBy(() -> contentService.update(contentId, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Unknown mainCategory")
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
         }
     }
 

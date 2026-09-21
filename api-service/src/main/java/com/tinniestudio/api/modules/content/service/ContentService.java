@@ -210,7 +210,7 @@ public class ContentService {
             content.setCategories(new HashSet<>(categoryRepository.findAllById(req.categoryIds())));
         }
         if (req.mainCategory() != null) {
-            content.setMainCategory(parseMainCategoryOrThrow(req.mainCategory()));
+            content.setMainCategory(requireMainCategory(req.mainCategory()));
         }
         return ContentResponse.from(contentRepository.save(content));
     }
