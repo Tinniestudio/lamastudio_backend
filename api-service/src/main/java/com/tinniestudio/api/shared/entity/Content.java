@@ -43,6 +43,10 @@ public class Content extends BaseEntity {
     private ContentType contentType;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "main_category", nullable = false)
+    private DomainEnums.MainCategory mainCategory;
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ContentStatus status;
 
