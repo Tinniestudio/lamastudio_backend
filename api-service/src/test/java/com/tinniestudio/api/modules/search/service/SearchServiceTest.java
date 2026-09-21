@@ -46,6 +46,7 @@ class SearchServiceTest {
         movieType.setSlug("movie");
         movieType.setStructuralKind(com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind.SINGLE_VIDEO);
         c.setContentType(movieType);
+        c.setMainCategory(com.tinniestudio.api.shared.entity.DomainEnums.MainCategory.MOVIES);
         c.setStatus(ContentStatus.PUBLISHED);
         c.setMaturityRating(MaturityRating.PG);
         c.setFeatured(false);
