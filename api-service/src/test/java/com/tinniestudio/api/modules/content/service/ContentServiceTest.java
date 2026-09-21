@@ -10,6 +10,7 @@ import com.tinniestudio.api.modules.contenttype.repository.ContentTypeRepository
 import com.tinniestudio.api.shared.entity.Category;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.ContentType;
+import com.tinniestudio.api.shared.entity.DomainEnums;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind;
@@ -180,7 +181,7 @@ class ContentServiceTest {
         @DisplayName("sets DRAFT status and createdBy when creating content with no categories")
         void setsDraftStatusAndCreatedBy() {
             CreateContentRequest req = new CreateContentRequest(
-                "New Movie", movieTypeId, null, null, null, null, null, null, null
+                "New Movie", movieTypeId, null, null, null, null, null, null, null, "movies"
             );
             when(contentTypeRepository.findById(movieTypeId)).thenReturn(Optional.of(movieType));
             when(contentRepository.saveAndFlush(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -203,7 +204,7 @@ class ContentServiceTest {
             cat.setIsActive(true);
 
             CreateContentRequest req = new CreateContentRequest(
-                "Action Movie", movieTypeId, null, null, null, null, null, null, List.of(catId)
+                "Action Movie", movieTypeId, null, null, null, null, null, null, List.of(catId), "movies"
             );
             when(contentTypeRepository.findById(movieTypeId)).thenReturn(Optional.of(movieType));
             when(categoryRepository.findAllById(List.of(catId))).thenReturn(List.of(cat));
@@ -221,7 +222,7 @@ class ContentServiceTest {
             UUID creatorId = UUID.randomUUID();
             CreateContentRequest req = new CreateContentRequest(
                 "Inception", movieTypeId, MaturityRating.PG_13,
-                null, null, null, false, null, null
+                null, null, null, false, null, null, "movies"
             );
             when(contentTypeRepository.findById(movieTypeId)).thenReturn(Optional.of(movieType));
             when(contentRepository.saveAndFlush(any(Content.class)))
@@ -230,6 +231,33 @@ class ContentServiceTest {
             assertThatThrownBy(() -> contentService.create(req, creatorId))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(409));
+        }
+
+        @Test
+        @DisplayName("sets mainCategory from a valid slug")
+        void setsMainCategoryFromSlug() {
+            when(contentTypeRepository.findById(any())).thenReturn(Optional.of(movieType));
+            when(contentRepository.saveAndFlush(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
+            CreateContentRequest req = new CreateContentRequest(
+                "Test Movie", movieType.getId(), null, null, null, null, false, null, null, "movies");
+
+            contentService.create(req, createdBy);
+
+            ArgumentCaptor<Content> captor = ArgumentCaptor.forClass(Content.class);
+            verify(contentRepository).saveAndFlush(captor.capture());
+            assertThat(captor.getValue().getMainCategory()).isEqualTo(DomainEnums.MainCategory.MOVIES);
+        }
+
+        @Test
+        @DisplayName("rejects an unknown mainCategory slug with 400")
+        void rejectsUnknownMainCategoryOnCreate() {
+            when(contentTypeRepository.findById(any())).thenReturn(Optional.of(movieType));
+            CreateContentRequest req = new CreateContentRequest(
+                "Test Movie", movieType.getId(), null, null, null, null, false, null, null, "not-real");
+
+            assertThatThrownBy(() -> contentService.create(req, createdBy))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Unknown mainCategory");
         }
     }
 
@@ -317,7 +345,7 @@ class ContentServiceTest {
         @DisplayName("updates only non-null fields")
         void updatesOnlyNonNullFields() {
             UpdateContentRequest req = new UpdateContentRequest(
-                "Updated Title", null, null, null, null, null, null, null, null, null, null, null
+                "Updated Title", null, null, null, null, null, null, null, null, null, null, null, null
             );
             when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
             when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -342,7 +370,8 @@ class ContentServiceTest {
 
             UpdateContentRequest req = new UpdateContentRequest(
                 null, null, null, null, null, null, null, null, null, null, null,
-                java.util.List.of() // empty — should clear categories
+                java.util.List.of(), // empty — should clear categories
+                null
             );
             when(contentRepository.findById(content.getId())).thenReturn(Optional.of(content));
             when(categoryRepository.findAllById(java.util.List.of())).thenReturn(java.util.List.of());
@@ -351,6 +380,34 @@ class ContentServiceTest {
             ContentResponse result = contentService.update(content.getId(), req);
 
             assertThat(result.categoryNames()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("updates mainCategory when provided")
+        void updatesMainCategoryWhenProvided() {
+            content.setMainCategory(DomainEnums.MainCategory.MOVIES);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+            when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
+            UpdateContentRequest req = new UpdateContentRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null, "kids");
+
+            contentService.update(contentId, req);
+
+            assertThat(content.getMainCategory()).isEqualTo(DomainEnums.MainCategory.KIDS);
+        }
+
+        @Test
+        @DisplayName("leaves mainCategory unchanged when null")
+        void leavesMainCategoryUnchangedWhenNull() {
+            content.setMainCategory(DomainEnums.MainCategory.MOVIES);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+            when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
+            UpdateContentRequest req = new UpdateContentRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
+
+            contentService.update(contentId, req);
+
+            assertThat(content.getMainCategory()).isEqualTo(DomainEnums.MainCategory.MOVIES);
         }
     }
 

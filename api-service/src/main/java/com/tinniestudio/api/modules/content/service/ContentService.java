@@ -78,6 +78,15 @@ public class ContentService {
         }
     }
 
+    /** Required field — @NotBlank on CreateContentRequest guarantees non-null/non-blank by the time this runs. */
+    private MainCategory requireMainCategory(String mainCategorySlug) {
+        try {
+            return MainCategory.fromSlug(mainCategorySlug);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
     /**
      * "category" is a comma-separated list of slugs, AND-matched (Multi-Category Content
      * Filtering spec). A single slug with no comma behaves exactly as before — this is fully
@@ -158,6 +167,7 @@ public class ContentService {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Unknown contentTypeId: " + req.contentTypeId())));
         content.setStatus(ContentStatus.DRAFT);
+        content.setMainCategory(requireMainCategory(req.mainCategory()));
         content.setMaturityRating(req.maturityRating() != null ? req.maturityRating() : MaturityRating.NOT_RATED);
         content.setDescription(req.description());
         content.setShortDescription(req.shortDescription());
@@ -198,6 +208,9 @@ public class ContentService {
         if (req.thumbnailUrl() != null)     content.setThumbnailUrl(req.thumbnailUrl());
         if (req.categoryIds() != null) {
             content.setCategories(new HashSet<>(categoryRepository.findAllById(req.categoryIds())));
+        }
+        if (req.mainCategory() != null) {
+            content.setMainCategory(parseMainCategoryOrThrow(req.mainCategory()));
         }
         return ContentResponse.from(contentRepository.save(content));
     }

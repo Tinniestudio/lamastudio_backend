@@ -235,7 +235,7 @@ class PartnerServiceTest {
     void createContent_delegatesToContentServiceWithCallerAsOwner() {
         UUID partnerId = UUID.randomUUID();
         CreateContentRequest req = new CreateContentRequest(
-            "New Show", UUID.randomUUID(), null, null, null, null, null, null, null);
+            "New Show", UUID.randomUUID(), null, null, null, null, null, null, null, "movies");
         ContentResponse created = new ContentResponse(
             UUID.randomUUID(), "New Show", "new-show", null, null,
             new ContentTypeResponse(UUID.randomUUID(), "Series", "series", "MULTI_EPISODE", 0, true),
@@ -257,7 +257,7 @@ class PartnerServiceTest {
         Content owned = makeContent(contentId, partnerId);
         when(contentRepo.findById(contentId)).thenReturn(Optional.of(owned));
         UpdateContentRequest req = new UpdateContentRequest(
-            "Renamed", null, null, null, null, null, null, null, null, null, null, null);
+            "Renamed", null, null, null, null, null, null, null, null, null, null, null, null);
         ContentResponse updated = new ContentResponse(
             contentId, "Renamed", "my-movie", null, null,
             new ContentTypeResponse(UUID.randomUUID(), "Movie", "movie", "SINGLE_VIDEO", 0, true),
@@ -280,7 +280,7 @@ class PartnerServiceTest {
         Content ownedBySomeoneElse = makeContent(contentId, UUID.randomUUID());
         when(contentRepo.findById(contentId)).thenReturn(Optional.of(ownedBySomeoneElse));
         UpdateContentRequest req = new UpdateContentRequest(
-            "Hijacked", null, null, null, null, null, null, null, null, null, null, null);
+            "Hijacked", null, null, null, null, null, null, null, null, null, null, null, null);
 
         assertThatThrownBy(() -> partnerService.updateContent(partnerId, contentId, req))
             .isInstanceOf(ResponseStatusException.class)
@@ -294,7 +294,7 @@ class PartnerServiceTest {
         UUID contentId = UUID.randomUUID();
         when(contentRepo.findById(contentId)).thenReturn(Optional.empty());
         UpdateContentRequest req = new UpdateContentRequest(
-            "X", null, null, null, null, null, null, null, null, null, null, null);
+            "X", null, null, null, null, null, null, null, null, null, null, null, null);
 
         assertThatThrownBy(() -> partnerService.updateContent(partnerId, contentId, req))
             .isInstanceOf(ResponseStatusException.class)

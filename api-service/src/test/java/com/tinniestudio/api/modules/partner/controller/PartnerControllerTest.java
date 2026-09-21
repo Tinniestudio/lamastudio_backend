@@ -174,7 +174,7 @@ class PartnerControllerTest {
 
         CreateContentRequest req = new CreateContentRequest(
             "My Movie", UUID.randomUUID(),
-            null, null, null, null, null, null, null);
+            null, null, null, null, null, null, null, "movies");
 
         mockMvc.perform(post("/partners/contents")
                 .contentType(MediaType.APPLICATION_JSON)

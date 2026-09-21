@@ -16,5 +16,6 @@ public record CreateContentRequest(
     LocalDate releaseDate,
     Boolean comingSoon,
     Integer durationSeconds,
-    List<UUID> categoryIds
+    List<UUID> categoryIds,
+    @NotBlank String mainCategory
 ) {}
