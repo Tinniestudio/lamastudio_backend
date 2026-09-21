@@ -93,7 +93,7 @@ class ContentServiceTest {
             Page<Content> page = new PageImpl<>(List.of(content));
             when(contentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
 
-            Page<ContentSummaryResponse> result = contentService.list(null, null, null, null, Pageable.unpaged());
+            Page<ContentSummaryResponse> result = contentService.list(null, null, null, null, null, Pageable.unpaged());
 
             assertThat(result.getContent()).hasSize(1);
             assertThat(result.getContent().get(0).title()).isEqualTo("Test Movie");
@@ -106,7 +106,7 @@ class ContentServiceTest {
             Page<Content> page = new PageImpl<>(List.of(content));
             when(contentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
 
-            contentService.list(null, "sermons,bible-study", null, null, Pageable.unpaged());
+            contentService.list(null, "sermons,bible-study", null, null, null, Pageable.unpaged());
 
             verify(contentRepository).findAll(any(Specification.class), any(Pageable.class));
             // Behavior itself (the AND join) is proven by ContentSpecificationsTest / the
@@ -120,7 +120,7 @@ class ContentServiceTest {
             Page<Content> page = new PageImpl<>(List.of(content));
             when(contentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
 
-            Page<ContentSummaryResponse> result = contentService.list(null, "sermons", null, null, Pageable.unpaged());
+            Page<ContentSummaryResponse> result = contentService.list(null, "sermons", null, null, null, Pageable.unpaged());
 
             assertThat(result.getContent()).hasSize(1);
         }
@@ -132,11 +132,42 @@ class ContentServiceTest {
                 .mapToObj(i -> "cat" + i)
                 .collect(java.util.stream.Collectors.joining(","));
 
-            assertThatThrownBy(() -> contentService.list(null, tooMany, null, null, Pageable.unpaged()))
+            assertThatThrownBy(() -> contentService.list(null, tooMany, null, null, null, Pageable.unpaged()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
 
             verify(contentRepository, never()).findAll(any(Specification.class), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("parses a valid mainCategory slug and filters by it")
+        void filtersByMainCategory() {
+            Page<Content> page = new PageImpl<>(List.of(content));
+            when(contentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+
+            contentService.list(null, null, null, null, "tv-shows", Pageable.unpaged());
+
+            verify(contentRepository).findAll(any(Specification.class), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("rejects an unknown mainCategory slug with 400")
+        void rejectsUnknownMainCategory() {
+            assertThatThrownBy(() ->
+                contentService.list(null, null, null, null, "not-a-real-category", Pageable.unpaged()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Unknown mainCategory");
+        }
+
+        @Test
+        @DisplayName("omitting mainCategory returns content across all main categories")
+        void nullMainCategoryMeansNoFilter() {
+            Page<Content> page = new PageImpl<>(List.of(content));
+            when(contentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+
+            contentService.list(null, null, null, null, null, Pageable.unpaged());
+
+            verify(contentRepository).findAll(any(Specification.class), any(Pageable.class));
         }
     }
 

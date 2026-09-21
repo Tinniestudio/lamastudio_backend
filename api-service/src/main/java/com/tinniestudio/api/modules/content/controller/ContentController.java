@@ -35,8 +35,9 @@ public class ContentController {
             @RequestParam(required = false) String category,
             @RequestParam(required = false) MaturityRating maturityRating,
             @RequestParam(required = false) Boolean comingSoon,
+            @RequestParam(required = false) String mainCategory,
             @PageableDefault(size = 20, sort = "publishedAt") Pageable pageable) {
-        return ResponseEntity.ok(contentService.list(type, category, maturityRating, comingSoon, pageable));
+        return ResponseEntity.ok(contentService.list(type, category, maturityRating, comingSoon, mainCategory, pageable));
     }
 
     @Operation(summary = "Get content by slug")

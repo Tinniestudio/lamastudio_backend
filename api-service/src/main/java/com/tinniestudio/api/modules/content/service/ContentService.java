@@ -9,6 +9,7 @@ import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.content.repository.ContentSpecifications;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
+import com.tinniestudio.api.shared.entity.DomainEnums.MainCategory;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import com.tinniestudio.api.shared.queue.RabbitConfig;
 import lombok.RequiredArgsConstructor;
@@ -51,17 +52,30 @@ public class ContentService {
     public Page<ContentSummaryResponse> list(
             String typeSlug, String category,
             MaturityRating maturityRating, Boolean comingSoon,
+            String mainCategorySlug,
             Pageable pageable) {
 
         List<String> categorySlugs = splitCategorySlugs(category);
+        MainCategory mainCategory = parseMainCategoryOrThrow(mainCategorySlug);
 
         Specification<Content> spec = ContentSpecifications.isPublished()
             .and(ContentSpecifications.hasType(typeSlug))
             .and(ContentSpecifications.hasCategories(categorySlugs))
             .and(ContentSpecifications.hasMaturityRating(maturityRating))
-            .and(ContentSpecifications.isComingSoon(comingSoon));
+            .and(ContentSpecifications.isComingSoon(comingSoon))
+            .and(ContentSpecifications.hasMainCategory(mainCategory));
 
         return contentRepository.findAll(spec, pageable).map(ContentSummaryResponse::from);
+    }
+
+    /** Optional filter — null/blank slug means "all main categories"; an unrecognized non-null slug is a 400. */
+    private MainCategory parseMainCategoryOrThrow(String mainCategorySlug) {
+        if (mainCategorySlug == null || mainCategorySlug.isBlank()) return null;
+        try {
+            return MainCategory.fromSlug(mainCategorySlug);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
     }
 
     /**

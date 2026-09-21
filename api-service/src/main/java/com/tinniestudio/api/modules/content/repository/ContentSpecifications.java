@@ -37,6 +37,11 @@ public class ContentSpecifications {
             : cb.equal(root.get("maturityRating"), rating);
     }
 
+    public static Specification<Content> hasMainCategory(com.tinniestudio.api.shared.entity.DomainEnums.MainCategory mainCategory) {
+        return (root, query, cb) -> mainCategory == null ? cb.conjunction()
+            : cb.equal(root.get("mainCategory"), mainCategory);
+    }
+
     public static Specification<Content> isComingSoon(Boolean comingSoon) {
         return (root, query, cb) -> comingSoon == null ? cb.conjunction()
             : cb.equal(root.get("comingSoon"), comingSoon);
