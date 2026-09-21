@@ -81,7 +81,7 @@ class ContentSearchRepositoryTest {
 
         assertThatCode(() -> {
             Page<Content> result = contentRepository.searchByRelevance(
-                    "Relevance", null, null, null, null, PageRequest.of(0, 10));
+                    "Relevance", null, null, null, null, null, PageRequest.of(0, 10));
             assertThat(result.getTotalElements()).isGreaterThanOrEqualTo(1);
         }).doesNotThrowAnyException();
     }
@@ -91,7 +91,7 @@ class ContentSearchRepositoryTest {
         seedPublishedContent("Searchable Latest Title");
 
         assertThatCode(() -> contentRepository.searchByLatest(
-                "Latest", null, null, null, null, PageRequest.of(0, 10)))
+                "Latest", null, null, null, null, null, PageRequest.of(0, 10)))
                 .doesNotThrowAnyException();
     }
 
@@ -100,7 +100,7 @@ class ContentSearchRepositoryTest {
         seedPublishedContent("Searchable Popular Title");
 
         assertThatCode(() -> contentRepository.searchByPopular(
-                "Popular", null, null, null, null, PageRequest.of(0, 10)))
+                "Popular", null, null, null, null, null, PageRequest.of(0, 10)))
                 .doesNotThrowAnyException();
     }
 }

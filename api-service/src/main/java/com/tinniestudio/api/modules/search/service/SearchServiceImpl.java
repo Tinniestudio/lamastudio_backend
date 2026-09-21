@@ -35,14 +35,25 @@ public class SearchServiceImpl implements SearchService {
         String language     = request.getLanguage();
         String country      = request.getCountry();
         String categorySlug = request.getCategorySlug();
+        String mainCategory = parseMainCategoryName(request.getMainCategory());
         var pageable        = PageRequest.of(request.getPage(), request.getLimit());
 
         Page<com.tinniestudio.api.shared.entity.Content> page = switch (request.getSort()) {
-            case LATEST  -> contentRepository.searchByLatest(q, typeStr, language, country, categorySlug, pageable);
-            case POPULAR -> contentRepository.searchByPopular(q, typeStr, language, country, categorySlug, pageable);
-            default      -> contentRepository.searchByRelevance(q, typeStr, language, country, categorySlug, pageable);
+            case LATEST  -> contentRepository.searchByLatest(q, typeStr, language, country, categorySlug, mainCategory, pageable);
+            case POPULAR -> contentRepository.searchByPopular(q, typeStr, language, country, categorySlug, mainCategory, pageable);
+            default      -> contentRepository.searchByRelevance(q, typeStr, language, country, categorySlug, mainCategory, pageable);
         };
 
         return page.map(ContentSummaryResponse::from);
+    }
+
+    /** Converts the external slug to the enum's stored .name() (e.g. "tv-shows" -> "TV_SHOWS"); null/blank means no filter. */
+    private String parseMainCategoryName(String mainCategorySlug) {
+        if (mainCategorySlug == null || mainCategorySlug.isBlank()) return null;
+        try {
+            return com.tinniestudio.api.shared.entity.DomainEnums.MainCategory.fromSlug(mainCategorySlug).name();
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
     }
 }
