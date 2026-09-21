@@ -43,7 +43,7 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
                 " c.content_type_id, c.main_category, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
                 " c.featured, c.poster_url, c.thumbnail_url, c.created_by, c.published_at," +
                 " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at," +
-                " c.average_rating, c.review_count, c.deleted_at" +
+                " c.average_rating, c.review_count, c.deleted_at, c.rejection_reason" +
                 " FROM contents c" +
                 " JOIN content_types ct ON ct.id = c.content_type_id" +
                 " WHERE c.status = 'PUBLISHED'" +
@@ -89,7 +89,7 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
                 " c.content_type_id, c.main_category, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
                 " c.featured, c.poster_url, c.thumbnail_url, c.created_by, c.published_at," +
                 " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at," +
-                " c.average_rating, c.review_count, c.deleted_at" +
+                " c.average_rating, c.review_count, c.deleted_at, c.rejection_reason" +
                 " FROM contents c" +
                 " JOIN content_types ct ON ct.id = c.content_type_id" +
                 " WHERE c.status = 'PUBLISHED'" +
@@ -135,7 +135,7 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
                 " c.content_type_id, c.main_category, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
                 " c.featured, c.poster_url, c.thumbnail_url, c.created_by, c.published_at," +
                 " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at," +
-                " c.average_rating, c.review_count, c.deleted_at" +
+                " c.average_rating, c.review_count, c.deleted_at, c.rejection_reason" +
                 " FROM contents c" +
                 " JOIN content_types ct ON ct.id = c.content_type_id" +
                 " WHERE c.status = 'PUBLISHED'" +
