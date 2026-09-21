@@ -6,6 +6,7 @@ import com.tinniestudio.api.shared.entity.Category;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
+import com.tinniestudio.api.shared.entity.DomainEnums.MainCategory;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -99,12 +100,18 @@ class ContentSpecificationsTest {
     }
 
     private Content saveContent(String title, ContentType contentType, Set<Category> categories) {
+        return saveContent(title, contentType, categories, MainCategory.MOVIES);
+    }
+
+    private Content saveContent(String title, ContentType contentType, Set<Category> categories,
+                                 MainCategory mainCategory) {
         Content content = new Content();
         content.setTitle(title);
         content.setSlug(title.toLowerCase().replace(" ", "-") + "-" + System.nanoTime());
         content.setContentType(contentType);
         content.setStatus(ContentStatus.PUBLISHED);
         content.setMaturityRating(MaturityRating.PG);
+        content.setMainCategory(mainCategory);
         content.setComingSoon(false);
         content.setFeatured(false);
         content.setViewCount(0L);
@@ -167,5 +174,41 @@ class ContentSpecificationsTest {
         assertThat(result.getContent())
             .extracting(Content::getId)
             .containsExactlyInAnyOrder(bothTags.getId(), oneTagOnly.getId(), neitherTag.getId());
+    }
+
+    @Test
+    @DisplayName("hasMainCategory() matches only content with the given mainCategory")
+    void hasMainCategoryMatchesOnlyGivenCategory() {
+        ContentType movieType = contentTypeRepository.findBySlug("movie")
+            .orElseThrow(() -> new IllegalStateException("V53 seed row 'movie' not found"));
+        Content moviesContent = saveContent("Movies Content", movieType, Set.of(), MainCategory.MOVIES);
+        Content kidsContent = saveContent("Kids Content", movieType, Set.of(), MainCategory.KIDS);
+
+        Page<Content> result = contentRepository.findAll(
+            ContentSpecifications.hasMainCategory(MainCategory.KIDS),
+            PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+            .extracting(Content::getId)
+            .containsExactly(kidsContent.getId())
+            .doesNotContain(moviesContent.getId());
+    }
+
+    @Test
+    @DisplayName("hasMainCategory() with null matches everything (no filter)")
+    void hasMainCategoryNullMatchesEverything() {
+        ContentType movieType = contentTypeRepository.findBySlug("movie")
+            .orElseThrow(() -> new IllegalStateException("V53 seed row 'movie' not found"));
+        Content moviesContent = saveContent("Movies Content Null Filter", movieType, Set.of(), MainCategory.MOVIES);
+        Content kidsContent = saveContent("Kids Content Null Filter", movieType, Set.of(), MainCategory.KIDS);
+
+        Page<Content> result = contentRepository.findAll(
+            ContentSpecifications.hasMainCategory(null),
+            PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+            .extracting(Content::getId)
+            .containsExactlyInAnyOrder(bothTags.getId(), oneTagOnly.getId(), neitherTag.getId(),
+                moviesContent.getId(), kidsContent.getId());
     }
 }

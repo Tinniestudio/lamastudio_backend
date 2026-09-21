@@ -156,7 +156,8 @@ class ContentServiceTest {
             assertThatThrownBy(() ->
                 contentService.list(null, null, null, null, "not-a-real-category", Pageable.unpaged()))
                 .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("Unknown mainCategory");
+                .hasMessageContaining("Unknown mainCategory")
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
         }
 
         @Test
