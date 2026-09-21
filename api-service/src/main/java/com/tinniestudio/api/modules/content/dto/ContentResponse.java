@@ -10,6 +10,7 @@ import java.util.UUID;
 public record ContentResponse(
     UUID id, String title, String slug, String description, String shortDescription,
     com.tinniestudio.api.modules.contenttype.dto.ContentTypeResponse contentType,
+    String mainCategory,
     String status, String maturityRating,
     LocalDate releaseDate, String language, String country,
     Boolean featured, Boolean comingSoon, Long viewCount,
@@ -22,6 +23,7 @@ public record ContentResponse(
             c.getId(), c.getTitle(), c.getSlug(),
             c.getDescription(), c.getShortDescription(),
             com.tinniestudio.api.modules.contenttype.dto.ContentTypeResponse.from(c.getContentType()),
+            c.getMainCategory().getSlug(),
             c.getStatus().name(), c.getMaturityRating().name(),
             c.getReleaseDate(), c.getLanguage(), c.getCountry(),
             c.getFeatured(), c.getComingSoon(), c.getViewCount(),
