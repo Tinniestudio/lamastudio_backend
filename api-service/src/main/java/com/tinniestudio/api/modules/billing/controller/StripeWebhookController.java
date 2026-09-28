@@ -59,6 +59,19 @@ public class StripeWebhookController {
                     subscriptionService.failPayment(pi.getId(), reason);
                 }
             }
+            case "checkout.session.expired" -> {
+                Optional<StripeObject> obj = event.getDataObjectDeserializer().getObject();
+                if (obj.isPresent() && obj.get() instanceof Session session) {
+                    // Mirrors the exact fallback SubscriptionServiceImpl.initiateCheckout() used to
+                    // decide Payment.providerReference at checkout-creation time: the PaymentIntent id
+                    // when one exists (the normal case — Mode.PAYMENT creates it synchronously), else
+                    // the Checkout Session id.
+                    String reference = session.getPaymentIntent() != null
+                        ? session.getPaymentIntent()
+                        : session.getId();
+                    subscriptionService.failPayment(reference, "Checkout session expired");
+                }
+            }
             default -> log.debug("Unhandled Stripe event type: {}", event.getType());
         }
 

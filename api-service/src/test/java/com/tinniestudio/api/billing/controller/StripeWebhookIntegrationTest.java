@@ -7,6 +7,7 @@ import com.tinniestudio.api.shared.exception.BadRequestException;
 import com.stripe.model.Event;
 import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.model.PaymentIntent;
+import com.stripe.model.checkout.Session;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -108,6 +109,61 @@ class StripeWebhookIntegrationTest {
                .andExpect(jsonPath("$.received").value(true));
 
         verify(subscriptionService).activateSubscription(isNull(), eq("pi_test_123"));
+    }
+
+    @Test
+    @DisplayName("POST /webhooks/stripe with checkout.session.expired fails the payment by its payment intent id")
+    void checkoutSessionExpired_failsPaymentByPaymentIntentId() throws Exception {
+        Session session = new Session();
+        session.setId("cs_expired_123");
+        session.setPaymentIntent("pi_expired_123");
+
+        EventDataObjectDeserializer des = mock(EventDataObjectDeserializer.class);
+        when(des.getObject()).thenReturn(Optional.of(session));
+
+        Event event = mock(Event.class);
+        when(event.getType()).thenReturn("checkout.session.expired");
+        when(event.getId()).thenReturn("evt_expired_123");
+        when(event.getDataObjectDeserializer()).thenReturn(des);
+
+        when(stripeService.constructWebhookEvent(anyString(), anyString())).thenReturn(event);
+
+        mockMvc.perform(postCtx("/webhooks/stripe")
+                   .contentType(MediaType.APPLICATION_JSON)
+                   .header("Stripe-Signature", "t=valid,v1=validsig")
+                   .content("{\"type\":\"checkout.session.expired\"}"))
+               .andExpect(status().isOk())
+               .andExpect(jsonPath("$.received").value(true));
+
+        verify(subscriptionService).failPayment(eq("pi_expired_123"), eq("Checkout session expired"));
+    }
+
+    @Test
+    @DisplayName("POST /webhooks/stripe with checkout.session.expired falls back to the session id when no payment intent exists")
+    void checkoutSessionExpired_fallsBackToSessionIdWhenNoPaymentIntent() throws Exception {
+        Session session = new Session();
+        session.setId("cs_expired_456");
+        // No payment intent set on this session — the handler must fall back to the session id,
+        // matching the exact fallback SubscriptionServiceImpl.initiateCheckout() used when it
+        // originally decided what to store as Payment.providerReference.
+
+        EventDataObjectDeserializer des = mock(EventDataObjectDeserializer.class);
+        when(des.getObject()).thenReturn(Optional.of(session));
+
+        Event event = mock(Event.class);
+        when(event.getType()).thenReturn("checkout.session.expired");
+        when(event.getId()).thenReturn("evt_expired_456");
+        when(event.getDataObjectDeserializer()).thenReturn(des);
+
+        when(stripeService.constructWebhookEvent(anyString(), anyString())).thenReturn(event);
+
+        mockMvc.perform(postCtx("/webhooks/stripe")
+                   .contentType(MediaType.APPLICATION_JSON)
+                   .header("Stripe-Signature", "t=valid,v1=validsig")
+                   .content("{\"type\":\"checkout.session.expired\"}"))
+               .andExpect(status().isOk());
+
+        verify(subscriptionService).failPayment(eq("cs_expired_456"), eq("Checkout session expired"));
     }
 
     @Test
