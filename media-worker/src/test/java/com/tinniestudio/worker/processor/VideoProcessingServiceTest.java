@@ -229,5 +229,67 @@ class VideoProcessingServiceTest {
             assertThat(last.getProcessingStatus()).isEqualTo("FAILED");
             assertThat(last.getProcessingError()).contains("no audio stream");
         }
+
+        @Test
+        void stopsBeforeTranscodingWhenCancelledDuringEarlierStages() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            VideoAsset cancelledAsset = buildAsset(assetId);
+            cancelledAsset.setProcessingStatus("CANCELLED");
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "DONE")).thenReturn(false);
+            // 1st findById: initial load at the top of process(). 2nd: the cancellation check
+            // before the first (and, at 1080p source, only-first-of-four) transcode tier.
+            when(videoAssetRepo.findById(assetId))
+                .thenReturn(Optional.of(asset))
+                .thenReturn(Optional.of(cancelledAsset));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            stubDownloadCreatesFile(1_000L);
+
+            FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
+                60, 1920, 1080, "h264", 5_000_000L, true);
+            when(ffprobeRunner.probe(anyString())).thenReturn(meta);
+
+            service.process(payload);
+
+            verify(ffmpegRunner, never()).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString());
+            verify(storageService, never()).uploadDirectory(anyString(), any(Path.class));
+            verify(videoAssetRepo, never()).save(argThat(a -> "READY".equals(a.getProcessingStatus())));
+        }
+
+        @Test
+        void stopsBeforeUploadingWhenCancelledAfterTranscoding() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            VideoAsset cancelledAsset = buildAsset(assetId);
+            cancelledAsset.setProcessingStatus("CANCELLED");
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "DONE")).thenReturn(false);
+            // 360p source -> exactly 1 tier (see ResolutionLadder), so the in-loop check only
+            // fires once (not cancelled yet); the pre-upload check is what catches it.
+            // 1st findById: initial load. 2nd: in-loop check before the single 360p tier
+            // (not cancelled). 3rd: the pre-UPLOADING_OUTPUT check (cancelled).
+            when(videoAssetRepo.findById(assetId))
+                .thenReturn(Optional.of(asset))
+                .thenReturn(Optional.of(asset))
+                .thenReturn(Optional.of(cancelledAsset));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            stubDownloadCreatesFile(1_000L);
+
+            FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
+                30, 640, 360, "h264", 800_000L, true);
+            when(ffprobeRunner.probe(anyString())).thenReturn(meta);
+
+            service.process(payload);
+
+            verify(ffmpegRunner, times(1)).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString());
+            verify(storageService, never()).uploadDirectory(anyString(), any(Path.class));
+            verify(videoVariantRepo, never()).save(any(VideoVariant.class));
+            verify(videoAssetRepo, never()).save(argThat(a -> "READY".equals(a.getProcessingStatus())));
+        }
     }
 }

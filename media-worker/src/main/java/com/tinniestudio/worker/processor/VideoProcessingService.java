@@ -97,6 +97,10 @@ public class VideoProcessingService {
             // 5. TRANSCODING
             updateJobStatus(job, "TRANSCODING");
             for (ResolutionLadder.Tier tier : tiers) {
+                if (isCancelled(videoAssetId)) {
+                    log.info("VideoAsset {} was cancelled; stopping before transcoding {}", videoAssetId, tier.label());
+                    return;
+                }
                 Path tierDir = jobDir.resolve(tier.label());
                 Files.createDirectories(tierDir);
                 ffmpegRunner.transcode(inputFile.toString(), tierDir.toString(),
@@ -109,6 +113,10 @@ public class VideoProcessingService {
             ffmpegRunner.generateThumbnail(inputFile.toString(), thumbnailPath.toString());
 
             // 7. UPLOADING_OUTPUT
+            if (isCancelled(videoAssetId)) {
+                log.info("VideoAsset {} was cancelled; stopping before uploading output", videoAssetId);
+                return;
+            }
             updateJobStatus(job, "UPLOADING_OUTPUT");
             String assetPrefix = "processed/" + videoAssetId;
             for (ResolutionLadder.Tier tier : tiers) {
@@ -180,6 +188,22 @@ public class VideoProcessingService {
         job.setStatus(status);
         job.setStageStartedAt(Instant.now());
         processingJobRepo.save(job);
+    }
+
+    /**
+     * Best-effort cancellation check (design spec §3): re-reads the VideoAsset from the DB on
+     * every call — never trusts the in-memory `asset` held by process(), since
+     * PartnerVideoService.cancel() (api-service) sets processingStatus="CANCELLED" directly in
+     * the DB from a separate process, independent of and concurrent with this worker's progress.
+     * A resolution already mid-transcode when cancellation lands still finishes that one
+     * ffmpeg shell-out — only the next loop iteration (or the final upload stage) is skipped.
+     * Never writes processingStatus itself; that value was already set by the API layer.
+     * Returns false if the asset row is gone (defensive — nothing left to act on).
+     */
+    private boolean isCancelled(UUID videoAssetId) {
+        return videoAssetRepo.findById(videoAssetId)
+            .map(a -> "CANCELLED".equals(a.getProcessingStatus()))
+            .orElse(false);
     }
 
     private void applyMetadataToAsset(VideoAsset asset, FFprobeRunner.VideoMetadata meta) {
