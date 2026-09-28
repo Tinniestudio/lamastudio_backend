@@ -40,10 +40,10 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
 
     @Query(
         value = "SELECT c.id, c.title, c.slug, c.description, c.short_description," +
-                " c.content_type_id, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
+                " c.content_type_id, c.main_category, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
                 " c.featured, c.poster_url, c.thumbnail_url, c.created_by, c.published_at," +
                 " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at," +
-                " c.average_rating, c.review_count, c.deleted_at" +
+                " c.average_rating, c.review_count, c.deleted_at, c.rejection_reason" +
                 " FROM contents c" +
                 " JOIN content_types ct ON ct.id = c.content_type_id" +
                 " WHERE c.status = 'PUBLISHED'" +
@@ -51,6 +51,7 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
                 " AND (:type IS NULL OR ct.slug = :type)" +
                 " AND (:language IS NULL OR c.language = :language)" +
                 " AND (:country IS NULL OR c.country = :country)" +
+                " AND (:mainCategory IS NULL OR c.main_category = :mainCategory)" +
                 " AND (:categorySlug IS NULL OR EXISTS (" +
                 "   SELECT 1 FROM content_categories cc" +
                 "   JOIN categories cat ON cat.id = cc.category_id" +
@@ -65,6 +66,7 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
                 " AND (:type IS NULL OR ct.slug = :type)" +
                 " AND (:language IS NULL OR c.language = :language)" +
                 " AND (:country IS NULL OR c.country = :country)" +
+                " AND (:mainCategory IS NULL OR c.main_category = :mainCategory)" +
                 " AND (:categorySlug IS NULL OR EXISTS (" +
                 "   SELECT 1 FROM content_categories cc" +
                 "   JOIN categories cat ON cat.id = cc.category_id" +
@@ -78,15 +80,16 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
         @Param("language") String language,
         @Param("country") String country,
         @Param("categorySlug") String categorySlug,
+        @Param("mainCategory") String mainCategory,
         Pageable pageable
     );
 
     @Query(
         value = "SELECT c.id, c.title, c.slug, c.description, c.short_description," +
-                " c.content_type_id, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
+                " c.content_type_id, c.main_category, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
                 " c.featured, c.poster_url, c.thumbnail_url, c.created_by, c.published_at," +
                 " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at," +
-                " c.average_rating, c.review_count, c.deleted_at" +
+                " c.average_rating, c.review_count, c.deleted_at, c.rejection_reason" +
                 " FROM contents c" +
                 " JOIN content_types ct ON ct.id = c.content_type_id" +
                 " WHERE c.status = 'PUBLISHED'" +
@@ -94,6 +97,7 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
                 " AND (:type IS NULL OR ct.slug = :type)" +
                 " AND (:language IS NULL OR c.language = :language)" +
                 " AND (:country IS NULL OR c.country = :country)" +
+                " AND (:mainCategory IS NULL OR c.main_category = :mainCategory)" +
                 " AND (:categorySlug IS NULL OR EXISTS (" +
                 "   SELECT 1 FROM content_categories cc" +
                 "   JOIN categories cat ON cat.id = cc.category_id" +
@@ -108,6 +112,7 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
                 " AND (:type IS NULL OR ct.slug = :type)" +
                 " AND (:language IS NULL OR c.language = :language)" +
                 " AND (:country IS NULL OR c.country = :country)" +
+                " AND (:mainCategory IS NULL OR c.main_category = :mainCategory)" +
                 " AND (:categorySlug IS NULL OR EXISTS (" +
                 "   SELECT 1 FROM content_categories cc" +
                 "   JOIN categories cat ON cat.id = cc.category_id" +
@@ -121,15 +126,16 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
         @Param("language") String language,
         @Param("country") String country,
         @Param("categorySlug") String categorySlug,
+        @Param("mainCategory") String mainCategory,
         Pageable pageable
     );
 
     @Query(
         value = "SELECT c.id, c.title, c.slug, c.description, c.short_description," +
-                " c.content_type_id, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
+                " c.content_type_id, c.main_category, c.status, c.maturity_rating, c.release_date, c.language, c.country," +
                 " c.featured, c.poster_url, c.thumbnail_url, c.created_by, c.published_at," +
                 " c.view_count, c.coming_soon, c.duration_seconds, c.created_at, c.updated_at," +
-                " c.average_rating, c.review_count, c.deleted_at" +
+                " c.average_rating, c.review_count, c.deleted_at, c.rejection_reason" +
                 " FROM contents c" +
                 " JOIN content_types ct ON ct.id = c.content_type_id" +
                 " WHERE c.status = 'PUBLISHED'" +
@@ -137,6 +143,7 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
                 " AND (:type IS NULL OR ct.slug = :type)" +
                 " AND (:language IS NULL OR c.language = :language)" +
                 " AND (:country IS NULL OR c.country = :country)" +
+                " AND (:mainCategory IS NULL OR c.main_category = :mainCategory)" +
                 " AND (:categorySlug IS NULL OR EXISTS (" +
                 "   SELECT 1 FROM content_categories cc" +
                 "   JOIN categories cat ON cat.id = cc.category_id" +
@@ -151,6 +158,7 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
                 " AND (:type IS NULL OR ct.slug = :type)" +
                 " AND (:language IS NULL OR c.language = :language)" +
                 " AND (:country IS NULL OR c.country = :country)" +
+                " AND (:mainCategory IS NULL OR c.main_category = :mainCategory)" +
                 " AND (:categorySlug IS NULL OR EXISTS (" +
                 "   SELECT 1 FROM content_categories cc" +
                 "   JOIN categories cat ON cat.id = cc.category_id" +
@@ -164,6 +172,7 @@ public interface ContentRepository extends JpaRepository<Content, UUID>, JpaSpec
         @Param("language") String language,
         @Param("country") String country,
         @Param("categorySlug") String categorySlug,
+        @Param("mainCategory") String mainCategory,
         Pageable pageable
     );
 }

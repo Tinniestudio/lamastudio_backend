@@ -10,5 +10,5 @@ public record UpdateContentRequest(
     MaturityRating maturityRating, LocalDate releaseDate,
     String language, String country, Boolean comingSoon,
     Integer durationSeconds, String posterUrl, String thumbnailUrl,
-    List<UUID> categoryIds
+    List<UUID> categoryIds, String mainCategory
 ) {}

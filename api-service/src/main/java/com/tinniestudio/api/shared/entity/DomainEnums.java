@@ -26,6 +26,39 @@ public final class DomainEnums {
         MULTI_EPISODE
     }
 
+    /**
+     * Independent of ContentType/structuralKind by design — a MULTI_EPISODE title is typically
+     * TV_SHOWS, but nothing enforces it (e.g. a SINGLE_VIDEO kids film is KIDS, not MOVIES).
+     * Fixed at exactly these 4 values; "Lives" is deliberately excluded until live-streaming
+     * infrastructure exists (see StructuralKind's LIVE comment above). External representation
+     * (API JSON, query params) is the slug below, not the Java constant name — TV_SHOWS
+     * serializes/deserializes as "tv-shows" everywhere outside this enum.
+     */
+    public enum MainCategory {
+        MOVIES("movies"),
+        TV_SHOWS("tv-shows"),
+        KIDS("kids"),
+        SERMONS("sermons");
+
+        private final String slug;
+
+        MainCategory(String slug) {
+            this.slug = slug;
+        }
+
+        public String getSlug() {
+            return slug;
+        }
+
+        /** @throws IllegalArgumentException if slug doesn't match any value — callers translate this to a 400. */
+        public static MainCategory fromSlug(String slug) {
+            for (MainCategory mc : values()) {
+                if (mc.slug.equals(slug)) return mc;
+            }
+            throw new IllegalArgumentException("Unknown mainCategory: " + slug);
+        }
+    }
+
     public enum ContentStatus {
         DRAFT,
         REVIEW,

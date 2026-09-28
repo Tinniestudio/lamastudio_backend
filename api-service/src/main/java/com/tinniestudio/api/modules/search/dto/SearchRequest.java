@@ -17,6 +17,7 @@ public class SearchRequest {
 
     private String type;                // content-type slug, null = all types
     private String categorySlug;        // null = all categories
+    private String mainCategory;        // main-category slug (movies/tv-shows/kids/sermons), null = all
     private String language;            // null = all languages
     private String country;             // null = all countries
 

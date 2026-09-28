@@ -10,6 +10,7 @@ import com.tinniestudio.api.modules.contenttype.repository.ContentTypeRepository
 import com.tinniestudio.api.shared.entity.Category;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.ContentType;
+import com.tinniestudio.api.shared.entity.DomainEnums;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind;
@@ -74,6 +75,7 @@ class ContentServiceTest {
         content.setTitle("Test Movie");
         content.setSlug("test-movie");
         content.setContentType(movieType);
+        content.setMainCategory(DomainEnums.MainCategory.MOVIES);
         content.setStatus(ContentStatus.DRAFT);
         content.setMaturityRating(MaturityRating.NOT_RATED);
         content.setFeatured(false);
@@ -93,7 +95,7 @@ class ContentServiceTest {
             Page<Content> page = new PageImpl<>(List.of(content));
             when(contentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
 
-            Page<ContentSummaryResponse> result = contentService.list(null, null, null, null, Pageable.unpaged());
+            Page<ContentSummaryResponse> result = contentService.list(null, null, null, null, null, Pageable.unpaged());
 
             assertThat(result.getContent()).hasSize(1);
             assertThat(result.getContent().get(0).title()).isEqualTo("Test Movie");
@@ -106,7 +108,7 @@ class ContentServiceTest {
             Page<Content> page = new PageImpl<>(List.of(content));
             when(contentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
 
-            contentService.list(null, "sermons,bible-study", null, null, Pageable.unpaged());
+            contentService.list(null, "sermons,bible-study", null, null, null, Pageable.unpaged());
 
             verify(contentRepository).findAll(any(Specification.class), any(Pageable.class));
             // Behavior itself (the AND join) is proven by ContentSpecificationsTest / the
@@ -120,7 +122,7 @@ class ContentServiceTest {
             Page<Content> page = new PageImpl<>(List.of(content));
             when(contentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
 
-            Page<ContentSummaryResponse> result = contentService.list(null, "sermons", null, null, Pageable.unpaged());
+            Page<ContentSummaryResponse> result = contentService.list(null, "sermons", null, null, null, Pageable.unpaged());
 
             assertThat(result.getContent()).hasSize(1);
         }
@@ -132,11 +134,43 @@ class ContentServiceTest {
                 .mapToObj(i -> "cat" + i)
                 .collect(java.util.stream.Collectors.joining(","));
 
-            assertThatThrownBy(() -> contentService.list(null, tooMany, null, null, Pageable.unpaged()))
+            assertThatThrownBy(() -> contentService.list(null, tooMany, null, null, null, Pageable.unpaged()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
 
             verify(contentRepository, never()).findAll(any(Specification.class), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("parses a valid mainCategory slug and filters by it")
+        void filtersByMainCategory() {
+            Page<Content> page = new PageImpl<>(List.of(content));
+            when(contentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+
+            contentService.list(null, null, null, null, "tv-shows", Pageable.unpaged());
+
+            verify(contentRepository).findAll(any(Specification.class), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("rejects an unknown mainCategory slug with 400")
+        void rejectsUnknownMainCategory() {
+            assertThatThrownBy(() ->
+                contentService.list(null, null, null, null, "not-a-real-category", Pageable.unpaged()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Unknown mainCategory")
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
+        }
+
+        @Test
+        @DisplayName("omitting mainCategory returns content across all main categories")
+        void nullMainCategoryMeansNoFilter() {
+            Page<Content> page = new PageImpl<>(List.of(content));
+            when(contentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+
+            contentService.list(null, null, null, null, null, Pageable.unpaged());
+
+            verify(contentRepository).findAll(any(Specification.class), any(Pageable.class));
         }
     }
 
@@ -148,7 +182,7 @@ class ContentServiceTest {
         @DisplayName("sets DRAFT status and createdBy when creating content with no categories")
         void setsDraftStatusAndCreatedBy() {
             CreateContentRequest req = new CreateContentRequest(
-                "New Movie", movieTypeId, null, null, null, null, null, null, null
+                "New Movie", movieTypeId, null, null, null, null, null, null, null, "movies"
             );
             when(contentTypeRepository.findById(movieTypeId)).thenReturn(Optional.of(movieType));
             when(contentRepository.saveAndFlush(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -171,7 +205,7 @@ class ContentServiceTest {
             cat.setIsActive(true);
 
             CreateContentRequest req = new CreateContentRequest(
-                "Action Movie", movieTypeId, null, null, null, null, null, null, List.of(catId)
+                "Action Movie", movieTypeId, null, null, null, null, null, null, List.of(catId), "movies"
             );
             when(contentTypeRepository.findById(movieTypeId)).thenReturn(Optional.of(movieType));
             when(categoryRepository.findAllById(List.of(catId))).thenReturn(List.of(cat));
@@ -189,7 +223,7 @@ class ContentServiceTest {
             UUID creatorId = UUID.randomUUID();
             CreateContentRequest req = new CreateContentRequest(
                 "Inception", movieTypeId, MaturityRating.PG_13,
-                null, null, null, false, null, null
+                null, null, null, false, null, null, "movies"
             );
             when(contentTypeRepository.findById(movieTypeId)).thenReturn(Optional.of(movieType));
             when(contentRepository.saveAndFlush(any(Content.class)))
@@ -198,6 +232,34 @@ class ContentServiceTest {
             assertThatThrownBy(() -> contentService.create(req, creatorId))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(409));
+        }
+
+        @Test
+        @DisplayName("sets mainCategory from a valid slug")
+        void setsMainCategoryFromSlug() {
+            when(contentTypeRepository.findById(any())).thenReturn(Optional.of(movieType));
+            when(contentRepository.saveAndFlush(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
+            CreateContentRequest req = new CreateContentRequest(
+                "Test Movie", movieType.getId(), null, null, null, null, false, null, null, "movies");
+
+            contentService.create(req, createdBy);
+
+            ArgumentCaptor<Content> captor = ArgumentCaptor.forClass(Content.class);
+            verify(contentRepository).saveAndFlush(captor.capture());
+            assertThat(captor.getValue().getMainCategory()).isEqualTo(DomainEnums.MainCategory.MOVIES);
+        }
+
+        @Test
+        @DisplayName("rejects an unknown mainCategory slug with 400")
+        void rejectsUnknownMainCategoryOnCreate() {
+            when(contentTypeRepository.findById(any())).thenReturn(Optional.of(movieType));
+            CreateContentRequest req = new CreateContentRequest(
+                "Test Movie", movieType.getId(), null, null, null, null, false, null, null, "not-real");
+
+            assertThatThrownBy(() -> contentService.create(req, createdBy))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Unknown mainCategory")
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
         }
     }
 
@@ -285,7 +347,7 @@ class ContentServiceTest {
         @DisplayName("updates only non-null fields")
         void updatesOnlyNonNullFields() {
             UpdateContentRequest req = new UpdateContentRequest(
-                "Updated Title", null, null, null, null, null, null, null, null, null, null, null
+                "Updated Title", null, null, null, null, null, null, null, null, null, null, null, null
             );
             when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
             when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -310,7 +372,8 @@ class ContentServiceTest {
 
             UpdateContentRequest req = new UpdateContentRequest(
                 null, null, null, null, null, null, null, null, null, null, null,
-                java.util.List.of() // empty — should clear categories
+                java.util.List.of(), // empty — should clear categories
+                null
             );
             when(contentRepository.findById(content.getId())).thenReturn(Optional.of(content));
             when(categoryRepository.findAllById(java.util.List.of())).thenReturn(java.util.List.of());
@@ -319,6 +382,48 @@ class ContentServiceTest {
             ContentResponse result = contentService.update(content.getId(), req);
 
             assertThat(result.categoryNames()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("updates mainCategory when provided")
+        void updatesMainCategoryWhenProvided() {
+            content.setMainCategory(DomainEnums.MainCategory.MOVIES);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+            when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
+            UpdateContentRequest req = new UpdateContentRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null, "kids");
+
+            contentService.update(contentId, req);
+
+            assertThat(content.getMainCategory()).isEqualTo(DomainEnums.MainCategory.KIDS);
+        }
+
+        @Test
+        @DisplayName("leaves mainCategory unchanged when null")
+        void leavesMainCategoryUnchangedWhenNull() {
+            content.setMainCategory(DomainEnums.MainCategory.MOVIES);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+            when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
+            UpdateContentRequest req = new UpdateContentRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
+
+            contentService.update(contentId, req);
+
+            assertThat(content.getMainCategory()).isEqualTo(DomainEnums.MainCategory.MOVIES);
+        }
+
+        @Test
+        @DisplayName("rejects a blank mainCategory with 400 rather than nulling the column")
+        void rejectsBlankMainCategoryOnUpdate() {
+            content.setMainCategory(DomainEnums.MainCategory.MOVIES);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+            UpdateContentRequest req = new UpdateContentRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null, "");
+
+            assertThatThrownBy(() -> contentService.update(contentId, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Unknown mainCategory")
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
         }
     }
 

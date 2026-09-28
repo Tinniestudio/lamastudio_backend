@@ -6,6 +6,7 @@ import com.tinniestudio.api.modules.library.repository.WatchHistoryRepository;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.ContentType;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
+import com.tinniestudio.api.shared.entity.DomainEnums.MainCategory;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind;
 import com.tinniestudio.api.shared.entity.WatchHistory;
@@ -65,6 +66,7 @@ class WatchHistoryServiceTest {
         movieType.setSlug("movie");
         movieType.setStructuralKind(StructuralKind.SINGLE_VIDEO);
         content.setContentType(movieType);
+        content.setMainCategory(MainCategory.MOVIES);
         content.setStatus(ContentStatus.PUBLISHED);
         content.setMaturityRating(MaturityRating.PG);
         content.setFeatured(false);

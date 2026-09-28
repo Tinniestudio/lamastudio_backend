@@ -17,6 +17,7 @@ import com.tinniestudio.api.modules.upload.repository.UploadSessionRepository;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
+import com.tinniestudio.api.shared.entity.DomainEnums.MainCategory;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import com.tinniestudio.api.shared.entity.DomainEnums.ProcessingStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind;
@@ -206,6 +207,7 @@ class PartnerServiceTest {
         movieType.setSlug("movie");
         movieType.setStructuralKind(StructuralKind.SINGLE_VIDEO);
         c.setContentType(movieType);
+        c.setMainCategory(MainCategory.MOVIES);
         c.setStatus(ContentStatus.DRAFT);
         c.setMaturityRating(MaturityRating.NOT_RATED);
         c.setCreatedBy(createdBy);
@@ -235,10 +237,11 @@ class PartnerServiceTest {
     void createContent_delegatesToContentServiceWithCallerAsOwner() {
         UUID partnerId = UUID.randomUUID();
         CreateContentRequest req = new CreateContentRequest(
-            "New Show", UUID.randomUUID(), null, null, null, null, null, null, null);
+            "New Show", UUID.randomUUID(), null, null, null, null, null, null, null, "movies");
         ContentResponse created = new ContentResponse(
             UUID.randomUUID(), "New Show", "new-show", null, null,
             new ContentTypeResponse(UUID.randomUUID(), "Series", "series", "MULTI_EPISODE", 0, true),
+            "movies",
             "DRAFT", "NOT_RATED", null, null, null,
             false, false, 0L, null, null, null,
             BigDecimal.ZERO, 0, java.util.List.of(), null, null);
@@ -257,10 +260,11 @@ class PartnerServiceTest {
         Content owned = makeContent(contentId, partnerId);
         when(contentRepo.findById(contentId)).thenReturn(Optional.of(owned));
         UpdateContentRequest req = new UpdateContentRequest(
-            "Renamed", null, null, null, null, null, null, null, null, null, null, null);
+            "Renamed", null, null, null, null, null, null, null, null, null, null, null, null);
         ContentResponse updated = new ContentResponse(
             contentId, "Renamed", "my-movie", null, null,
             new ContentTypeResponse(UUID.randomUUID(), "Movie", "movie", "SINGLE_VIDEO", 0, true),
+            "movies",
             "DRAFT", "NOT_RATED", null, null, null,
             false, false, 0L, null, null, null,
             BigDecimal.ZERO, 0, java.util.List.of(), null, null);
@@ -280,7 +284,7 @@ class PartnerServiceTest {
         Content ownedBySomeoneElse = makeContent(contentId, UUID.randomUUID());
         when(contentRepo.findById(contentId)).thenReturn(Optional.of(ownedBySomeoneElse));
         UpdateContentRequest req = new UpdateContentRequest(
-            "Hijacked", null, null, null, null, null, null, null, null, null, null, null);
+            "Hijacked", null, null, null, null, null, null, null, null, null, null, null, null);
 
         assertThatThrownBy(() -> partnerService.updateContent(partnerId, contentId, req))
             .isInstanceOf(ResponseStatusException.class)
@@ -294,7 +298,7 @@ class PartnerServiceTest {
         UUID contentId = UUID.randomUUID();
         when(contentRepo.findById(contentId)).thenReturn(Optional.empty());
         UpdateContentRequest req = new UpdateContentRequest(
-            "X", null, null, null, null, null, null, null, null, null, null, null);
+            "X", null, null, null, null, null, null, null, null, null, null, null, null);
 
         assertThatThrownBy(() -> partnerService.updateContent(partnerId, contentId, req))
             .isInstanceOf(ResponseStatusException.class)

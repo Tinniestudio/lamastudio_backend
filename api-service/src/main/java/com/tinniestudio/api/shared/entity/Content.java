@@ -14,6 +14,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
+import com.tinniestudio.api.shared.entity.DomainEnums.MainCategory;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 
 @Entity
@@ -41,6 +42,10 @@ public class Content extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "content_type_id", nullable = false)
     private ContentType contentType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "main_category", nullable = false)
+    private MainCategory mainCategory;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

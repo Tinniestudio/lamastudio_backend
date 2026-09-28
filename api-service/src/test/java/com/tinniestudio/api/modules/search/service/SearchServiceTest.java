@@ -46,6 +46,7 @@ class SearchServiceTest {
         movieType.setSlug("movie");
         movieType.setStructuralKind(com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind.SINGLE_VIDEO);
         c.setContentType(movieType);
+        c.setMainCategory(com.tinniestudio.api.shared.entity.DomainEnums.MainCategory.MOVIES);
         c.setStatus(ContentStatus.PUBLISHED);
         c.setMaturityRating(MaturityRating.PG);
         c.setFeatured(false);
@@ -97,7 +98,7 @@ class SearchServiceTest {
 
             Pageable pageable = PageRequest.of(0, 20);
             when(contentRepository.searchByRelevance(
-                    eq("action movie"), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
+                    eq("action movie"), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(publishedMovie()), pageable, 1));
 
             Page<ContentSummaryResponse> result = searchService.search(req);
@@ -119,13 +120,13 @@ class SearchServiceTest {
             req.setLimit(10);
 
             when(contentRepository.searchByLatest(
-                    eq("action movie"), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
+                    eq("action movie"), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(publishedMovie())));
 
             Page<ContentSummaryResponse> result = searchService.search(req);
 
             assertThat(result.getContent()).hasSize(1);
-            verify(contentRepository).searchByLatest(any(), any(), any(), any(), any(), any());
+            verify(contentRepository).searchByLatest(any(), any(), any(), any(), any(), any(), any());
         }
 
         @Test
@@ -138,13 +139,13 @@ class SearchServiceTest {
             req.setLimit(10);
 
             when(contentRepository.searchByPopular(
-                    eq("action movie"), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
+                    eq("action movie"), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(publishedMovie())));
 
             Page<ContentSummaryResponse> result = searchService.search(req);
 
             assertThat(result.getContent()).hasSize(1);
-            verify(contentRepository).searchByPopular(any(), any(), any(), any(), any(), any());
+            verify(contentRepository).searchByPopular(any(), any(), any(), any(), any(), any(), any());
         }
 
         @Test
@@ -158,7 +159,7 @@ class SearchServiceTest {
             req.setLimit(20);
 
             when(contentRepository.searchByRelevance(
-                    eq("interstellar"), eq("movie"), isNull(), isNull(), isNull(), any(Pageable.class)))
+                    eq("interstellar"), eq("movie"), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(publishedMovie())));
 
             Page<ContentSummaryResponse> result = searchService.search(req);
@@ -175,7 +176,7 @@ class SearchServiceTest {
             req.setPage(0);
             req.setLimit(20);
 
-            when(contentRepository.searchByRelevance(any(), any(), any(), any(), any(), any()))
+            when(contentRepository.searchByRelevance(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
             Page<ContentSummaryResponse> result = searchService.search(req);
@@ -183,6 +184,20 @@ class SearchServiceTest {
             assertThat(result.getContent()).isEmpty();
             assertThat(result.getTotalElements()).isEqualTo(0L);
             assertThat(result.getTotalPages()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("passes mainCategory through as the stored enum name")
+        void passesMainCategoryAsEnumName() {
+            SearchRequest request = new SearchRequest();
+            request.setQ("test");
+            request.setMainCategory("tv-shows");
+            when(contentRepository.searchByRelevance(any(), any(), any(), any(), any(), eq("TV_SHOWS"), any()))
+                .thenReturn(new PageImpl<>(List.of()));
+
+            searchService.search(request);
+
+            verify(contentRepository).searchByRelevance(any(), any(), any(), any(), any(), eq("TV_SHOWS"), any());
         }
     }
 }
