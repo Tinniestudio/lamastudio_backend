@@ -12,12 +12,22 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class StripeServiceImpl implements StripeService {
+
+    /**
+     * 30 minutes is Stripe's own hard minimum for Checkout Session expires_at (validated
+     * server-side by Stripe's API — a shorter value throws InvalidRequestException). This is the
+     * shortest deadline Stripe allows, matching the Payment Session Expiry design's intent of a
+     * short-lived session even though its literal "15 minutes" isn't achievable.
+     */
+    private static final long SESSION_EXPIRY_MINUTES = 30;
 
     private final StripeProperties stripeProperties;
 
@@ -26,6 +36,8 @@ public class StripeServiceImpl implements StripeService {
                                                       String successUrl, String cancelUrl,
                                                       Map<String, String> metadata) {
         try {
+            Instant expiresAt = Instant.now().plus(SESSION_EXPIRY_MINUTES, ChronoUnit.MINUTES);
+
             SessionCreateParams.Builder paramsBuilder = SessionCreateParams.builder()
                 .setMode(SessionCreateParams.Mode.PAYMENT)
                 .addPaymentMethodType(SessionCreateParams.PaymentMethodType.CARD)
@@ -40,13 +52,14 @@ public class StripeServiceImpl implements StripeService {
                         .build())
                     .build())
                 .setSuccessUrl(successUrl)
-                .setCancelUrl(cancelUrl);
+                .setCancelUrl(cancelUrl)
+                .setExpiresAt(expiresAt.getEpochSecond());
 
             metadata.forEach(paramsBuilder::putMetadata);
 
             Session session = Session.create(paramsBuilder.build());
-            log.info("Stripe Checkout Session created: id={}", session.getId());
-            return new CreateCheckoutResult(session.getId(), session.getPaymentIntent(), session.getUrl());
+            log.info("Stripe Checkout Session created: id={}, expiresAt={}", session.getId(), expiresAt);
+            return new CreateCheckoutResult(session.getId(), session.getPaymentIntent(), session.getUrl(), expiresAt);
 
         } catch (StripeException ex) {
             log.error("Failed to create Stripe Checkout Session: {}", ex.getMessage(), ex);

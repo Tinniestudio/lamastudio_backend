@@ -17,12 +17,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -93,7 +95,8 @@ class SubscriptionServiceTest {
             when(planRepository.findById(silverPlan.getId())).thenReturn(Optional.of(silverPlan));
             when(appProperties.getFrontendUrl()).thenReturn("https://frontend.example.com");
             when(stripeService.createCheckoutSession(anyLong(), anyString(), anyString(), anyString(), anyString(), anyMap()))
-                .thenReturn(new StripeService.CreateCheckoutResult("cs_123", "pi_123", "https://checkout.stripe.com/pay/cs_123"));
+                .thenReturn(new StripeService.CreateCheckoutResult("cs_123", "pi_123",
+                    "https://checkout.stripe.com/pay/cs_123", Instant.now().plus(30, ChronoUnit.MINUTES)));
 
             Payment savedPayment = new Payment();
             savedPayment.setId(UUID.randomUUID());
@@ -114,6 +117,30 @@ class SubscriptionServiceTest {
             assertThat(response.getPaymentUrl()).isEqualTo("https://checkout.stripe.com/pay/cs_123");
             assertThat(response.getPlanName()).isEqualTo("SILVER");
             verify(paymentRepository, times(1)).save(any());
+        }
+
+        @Test
+        @DisplayName("sets Payment.expiresAt from the Stripe checkout result")
+        void setsPaymentExpiresAtFromCheckoutResult() {
+            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+                .thenReturn(Optional.empty());
+            when(planRepository.findById(silverPlan.getId())).thenReturn(Optional.of(silverPlan));
+            when(appProperties.getFrontendUrl()).thenReturn("https://frontend.example.com");
+            Instant expiry = Instant.now().plus(30, ChronoUnit.MINUTES);
+            when(stripeService.createCheckoutSession(anyLong(), anyString(), anyString(), anyString(), anyString(), anyMap()))
+                .thenReturn(new StripeService.CreateCheckoutResult("cs_123", "pi_123",
+                    "https://checkout.stripe.com/pay/cs_123", expiry));
+
+            ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
+            when(paymentRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+            CheckoutRequest request = new CheckoutRequest();
+            request.setPlanId(silverPlan.getId());
+            request.setAutoRenew(true);
+
+            service.initiateCheckout(userId, request);
+
+            assertThat(captor.getValue().getExpiresAt()).isEqualTo(expiry);
         }
 
         @Test

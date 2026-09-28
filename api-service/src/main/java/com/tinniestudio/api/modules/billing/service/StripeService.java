@@ -26,7 +26,7 @@ public interface StripeService {
      */
     VerifySessionResult verifyCheckoutSession(String checkoutSessionId);
 
-    record CreateCheckoutResult(String checkoutSessionId, String paymentIntentId, String checkoutUrl) {}
+    record CreateCheckoutResult(String checkoutSessionId, String paymentIntentId, String checkoutUrl, java.time.Instant expiresAt) {}
 
     record VerifySessionResult(String checkoutSessionId, String paymentIntentId, boolean paid, String status) {}
 }

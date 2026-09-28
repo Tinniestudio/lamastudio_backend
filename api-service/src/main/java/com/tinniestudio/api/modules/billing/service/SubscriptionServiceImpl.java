@@ -133,6 +133,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         payment.setProviderReference(checkout.paymentIntentId() != null
                 ? checkout.paymentIntentId()
                 : checkout.checkoutSessionId());
+        payment.setExpiresAt(checkout.expiresAt());
         paymentRepository.save(payment);
 
         return CheckoutResponse.builder()
