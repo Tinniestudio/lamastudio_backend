@@ -63,6 +63,16 @@ public class Payment {
     @Column(name = "cancelled_at")
     private Instant cancelledAt;
 
+    /**
+     * Stripe Checkout Session deadline, mirrored from the same value sent to Stripe at checkout
+     * creation (see StripeServiceImpl.createCheckoutSession). Nullable: pre-existing PENDING rows
+     * created before this column existed have no known real expiry and are intentionally never
+     * matched by PendingPaymentExpiryJob's sweep — no retroactive backfill (Payment Session Expiry
+     * design, 2026-09-21).
+     */
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
     @Column(name = "failure_reason", columnDefinition = "TEXT")
     private String failureReason;
 
