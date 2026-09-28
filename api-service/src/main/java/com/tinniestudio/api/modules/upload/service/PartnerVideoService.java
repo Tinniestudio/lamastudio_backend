@@ -12,7 +12,9 @@ import com.tinniestudio.api.shared.entity.VideoAsset;
 import com.tinniestudio.api.shared.entity.DomainEnums.ProcessingStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.TargetEntityType;
 import com.tinniestudio.api.shared.entity.DomainEnums.VideoAssetType;
+import com.tinniestudio.api.shared.storage.StorageService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PartnerVideoService {
@@ -30,6 +33,7 @@ public class PartnerVideoService {
     private final SeasonRepository seasonRepository;
     private final EpisodeRepository episodeRepository;
     private final VideoActivationService videoActivationService;
+    private final StorageService storageService;
 
     @Transactional(readOnly = true)
     public List<PartnerVideoAssetResponse> listForTarget(
@@ -100,6 +104,38 @@ public class PartnerVideoService {
         }
         asset.setProcessingStatus(ProcessingStatus.CANCELLED);
         videoAssetRepository.save(asset);
+    }
+
+    /**
+     * Permanently removes the VideoAsset row (cascading to its VideoVariant/Subtitle children via
+     * the entity's existing CascadeType.ALL) and its raw storage object. Only reachable from a
+     * terminal status — PENDING/PROCESSING must be cancel()'d first. Mirrors the exact deletion
+     * pattern FailedVideoAssetCleanupJob already uses for FAILED assets: storage deletion is
+     * best-effort (a storage-layer failure must not block the DB row from being removed, since an
+     * orphaned object with no DB row is a much smaller problem than a stuck row the partner can
+     * never clear from their history).
+     */
+    @Transactional
+    public void delete(UUID userId, UUID videoAssetId) {
+        VideoAsset asset = videoAssetRepository.findById(videoAssetId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found: " + videoAssetId));
+        if (!userId.equals(asset.getUploadedBy())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found: " + videoAssetId);
+        }
+        if (asset.getProcessingStatus() == ProcessingStatus.PENDING
+                || asset.getProcessingStatus() == ProcessingStatus.PROCESSING) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Cancel the video before deleting it, or wait for it to reach a final status");
+        }
+        if (asset.getStorageKey() != null) {
+            try {
+                storageService.deleteObject(asset.getStorageKey());
+            } catch (Exception e) {
+                log.warn("Failed to delete storage object {} for asset {}: {}",
+                    asset.getStorageKey(), asset.getId(), e.getMessage());
+            }
+        }
+        videoAssetRepository.delete(asset);
     }
 
     private void assertOwnsContent(UUID userId, Content content) {

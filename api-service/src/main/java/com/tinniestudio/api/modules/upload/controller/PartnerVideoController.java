@@ -57,4 +57,14 @@ public class PartnerVideoController {
         partnerVideoService.cancel(userId, id);
         return ResponseEntity.ok(Map.of("message", "Video cancelled"));
     }
+
+    @Operation(summary = "Permanently delete a READY/FAILED/CANCELLED video and its raw storage object")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Object> delete(
+            @AuthenticationPrincipal UserDetails principal,
+            @PathVariable UUID id) {
+        UUID userId = CurrentUser.id(principal);
+        partnerVideoService.delete(userId, id);
+        return ResponseEntity.ok(Map.of("message", "Video deleted"));
+    }
 }

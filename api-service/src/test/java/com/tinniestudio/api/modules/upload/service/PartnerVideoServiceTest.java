@@ -36,6 +36,7 @@ class PartnerVideoServiceTest {
     @Mock SeasonRepository seasonRepository;
     @Mock EpisodeRepository episodeRepository;
     @Mock VideoActivationService videoActivationService;
+    @Mock com.tinniestudio.api.shared.storage.StorageService storageService;
 
     @InjectMocks PartnerVideoService partnerVideoService;
 
@@ -280,6 +281,127 @@ class PartnerVideoServiceTest {
             when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
 
             assertThatThrownBy(() -> partnerVideoService.cancel(ownerId, assetId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400");
+        }
+    }
+
+    @Nested @DisplayName("delete()")
+    class DeleteTests {
+
+        @Test @DisplayName("deletes a READY video owned by the caller, including its raw storage object")
+        void deletesOwnedReadyAsset() {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = new VideoAsset();
+            asset.setId(assetId);
+            asset.setUploadedBy(ownerId);
+            asset.setProcessingStatus(ProcessingStatus.READY);
+            asset.setStorageKey("uploads/" + assetId + "/raw.mp4");
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+
+            partnerVideoService.delete(ownerId, assetId);
+
+            verify(storageService).deleteObject("uploads/" + assetId + "/raw.mp4");
+            verify(videoAssetRepository).delete(asset);
+        }
+
+        @Test @DisplayName("deletes a FAILED video owned by the caller")
+        void deletesOwnedFailedAsset() {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = new VideoAsset();
+            asset.setId(assetId);
+            asset.setUploadedBy(ownerId);
+            asset.setProcessingStatus(ProcessingStatus.FAILED);
+            asset.setStorageKey("uploads/" + assetId + "/raw.mp4");
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+
+            partnerVideoService.delete(ownerId, assetId);
+
+            verify(videoAssetRepository).delete(asset);
+        }
+
+        @Test @DisplayName("deletes a CANCELLED video owned by the caller")
+        void deletesOwnedCancelledAsset() {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = new VideoAsset();
+            asset.setId(assetId);
+            asset.setUploadedBy(ownerId);
+            asset.setProcessingStatus(ProcessingStatus.CANCELLED);
+            asset.setStorageKey("uploads/" + assetId + "/raw.mp4");
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+
+            partnerVideoService.delete(ownerId, assetId);
+
+            verify(videoAssetRepository).delete(asset);
+        }
+
+        @Test @DisplayName("does not fail the request when storage deletion throws")
+        void survivesStorageDeletionFailure() {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = new VideoAsset();
+            asset.setId(assetId);
+            asset.setUploadedBy(ownerId);
+            asset.setProcessingStatus(ProcessingStatus.READY);
+            asset.setStorageKey("uploads/" + assetId + "/raw.mp4");
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+            doThrow(new RuntimeException("S3 unreachable")).when(storageService).deleteObject(anyString());
+
+            partnerVideoService.delete(ownerId, assetId);
+
+            verify(videoAssetRepository).delete(asset);
+        }
+
+        @Test @DisplayName("throws 404 when the video doesn't belong to the caller")
+        void throws404WhenNotOwner() {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = new VideoAsset();
+            asset.setId(assetId);
+            asset.setUploadedBy(UUID.randomUUID());
+            asset.setProcessingStatus(ProcessingStatus.READY);
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+
+            assertThatThrownBy(() -> partnerVideoService.delete(ownerId, assetId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+            verify(videoAssetRepository, never()).delete(any());
+        }
+
+        @Test @DisplayName("throws 404 when the video doesn't exist")
+        void throws404WhenMissing() {
+            UUID assetId = UUID.randomUUID();
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> partnerVideoService.delete(ownerId, assetId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
+
+        @Test @DisplayName("throws 400 when the video is still PENDING")
+        void throws400WhenPending() {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = new VideoAsset();
+            asset.setId(assetId);
+            asset.setUploadedBy(ownerId);
+            asset.setProcessingStatus(ProcessingStatus.PENDING);
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+
+            assertThatThrownBy(() -> partnerVideoService.delete(ownerId, assetId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400");
+            verify(videoAssetRepository, never()).delete(any());
+            verifyNoInteractions(storageService);
+        }
+
+        @Test @DisplayName("throws 400 when the video is still PROCESSING")
+        void throws400WhenProcessing() {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = new VideoAsset();
+            asset.setId(assetId);
+            asset.setUploadedBy(ownerId);
+            asset.setProcessingStatus(ProcessingStatus.PROCESSING);
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+
+            assertThatThrownBy(() -> partnerVideoService.delete(ownerId, assetId))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("400");
         }
