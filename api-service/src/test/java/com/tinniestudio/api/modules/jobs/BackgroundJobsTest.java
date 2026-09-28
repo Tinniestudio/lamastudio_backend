@@ -1,12 +1,16 @@
 package com.tinniestudio.api.modules.jobs;
 
 import com.tinniestudio.api.modules.auth.user.repository.UserSessionRepository;
+import com.tinniestudio.api.modules.billing.repository.PaymentRepository;
+import com.tinniestudio.api.modules.billing.service.SubscriptionService;
 import com.tinniestudio.api.modules.jobs.entity.JobExecutionLog;
 import com.tinniestudio.api.modules.notification.repository.NotificationRepository;
 import com.tinniestudio.api.modules.upload.repository.UploadSessionRepository;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
+import com.tinniestudio.api.shared.entity.DomainEnums.PaymentStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.ProcessingStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.UploadStatus;
+import com.tinniestudio.api.shared.entity.Payment;
 import com.tinniestudio.api.shared.entity.VideoAsset;
 import com.tinniestudio.api.shared.storage.StorageService;
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +38,8 @@ class BackgroundJobsTest {
     @Mock StorageService storageService;
     @Mock NotificationRepository notificationRepo;
     @Mock UserSessionRepository userSessionRepo;
+    @Mock PaymentRepository paymentRepository;
+    @Mock SubscriptionService subscriptionService;
     @Mock JobLogger jobLogger;
 
     @InjectMocks ExpiredUploadSessionCleanupJob expiredUploadJob;
@@ -41,6 +47,7 @@ class BackgroundJobsTest {
     @InjectMocks FailedVideoAssetCleanupJob failedVideoJob;
     @InjectMocks NotificationCleanupJob notificationCleanupJob;
     @InjectMocks ExpiredSessionCleanupJob expiredSessionJob;
+    @InjectMocks PendingPaymentExpiryJob pendingPaymentExpiryJob;
 
     private JobExecutionLog fakeLog(String name) {
         JobExecutionLog l = new JobExecutionLog();
@@ -229,5 +236,52 @@ class BackgroundJobsTest {
         expiredSessionJob.run();
 
         verify(jobLogger).failure(any(), eq("lock fail"));
+    }
+
+    // ─── PendingPaymentExpiryJob ──────────────────────────────────────────────
+
+    @Test
+    @DisplayName("pending payment expiry job fails each expired PENDING payment by its stored providerReference and logs the count")
+    void pendingPaymentExpiryJob_failsExpiredPaymentsAndLogs() {
+        Payment payment1 = new Payment();
+        payment1.setProviderReference("pi_expired_1");
+        Payment payment2 = new Payment();
+        payment2.setProviderReference("cs_expired_2");
+
+        when(jobLogger.start(any())).thenReturn(fakeLog("PendingPaymentExpiryJob"));
+        when(paymentRepository.findExpiredPending(eq(PaymentStatus.PENDING), any()))
+                .thenReturn(List.of(payment1, payment2));
+
+        pendingPaymentExpiryJob.run();
+
+        verify(subscriptionService).failPayment(eq("pi_expired_1"), eq("Checkout session expired (fallback sweep)"));
+        verify(subscriptionService).failPayment(eq("cs_expired_2"), eq("Checkout session expired (fallback sweep)"));
+        verify(jobLogger).success(any(), eq(2));
+    }
+
+    @Test
+    @DisplayName("pending payment expiry job is a no-op when nothing has expired — the normal case, since the webhook already handled it")
+    void pendingPaymentExpiryJob_nothingExpired_logsZero() {
+        when(jobLogger.start(any())).thenReturn(fakeLog("PendingPaymentExpiryJob"));
+        when(paymentRepository.findExpiredPending(eq(PaymentStatus.PENDING), any()))
+                .thenReturn(List.of());
+
+        pendingPaymentExpiryJob.run();
+
+        verifyNoInteractions(subscriptionService);
+        verify(jobLogger).success(any(), eq(0));
+    }
+
+    @Test
+    @DisplayName("pending payment expiry job records failure when repo throws")
+    void pendingPaymentExpiryJob_repoThrows_logsFailure() {
+        when(jobLogger.start(any())).thenReturn(fakeLog("PendingPaymentExpiryJob"));
+        when(paymentRepository.findExpiredPending(eq(PaymentStatus.PENDING), any()))
+                .thenThrow(new RuntimeException("DB error"));
+
+        pendingPaymentExpiryJob.run();
+
+        verify(jobLogger).failure(any(), eq("DB error"));
+        verify(jobLogger, never()).success(any(), anyInt());
     }
 }

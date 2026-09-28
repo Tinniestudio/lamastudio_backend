@@ -38,4 +38,8 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
     @Query("SELECT COUNT(p) FROM Payment p " +
            "WHERE p.createdAt >= :from AND p.createdAt < :to AND p.status = 'SUCCESSFUL'")
     long countSuccessfulBetween(@Param("from") Instant from, @Param("to") Instant to);
+
+    /** Fallback sweep target for PendingPaymentExpiryJob — anything the checkout.session.expired webhook missed. */
+    @Query("SELECT p FROM Payment p WHERE p.status = :status AND p.expiresAt IS NOT NULL AND p.expiresAt < :now")
+    List<Payment> findExpiredPending(@Param("status") PaymentStatus status, @Param("now") Instant now);
 }
