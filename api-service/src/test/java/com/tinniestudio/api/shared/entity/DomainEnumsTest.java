@@ -1,6 +1,7 @@
 package com.tinniestudio.api.shared.entity;
 
 import com.tinniestudio.api.shared.entity.DomainEnums.MainCategory;
+import com.tinniestudio.api.shared.entity.DomainEnums.ProcessingStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,18 @@ class DomainEnumsTest {
             assertThatThrownBy(() -> MainCategory.fromSlug("not-a-real-slug"))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("Unknown mainCategory");
+        }
+    }
+
+    @Nested
+    @DisplayName("ProcessingStatus")
+    class ProcessingStatusTests {
+
+        @Test
+        @DisplayName("has exactly 5 values including CANCELLED")
+        void hasExactlyFiveValuesIncludingCancelled() {
+            assertThat(ProcessingStatus.values()).hasSize(5);
+            assertThat(ProcessingStatus.valueOf("CANCELLED")).isEqualTo(ProcessingStatus.CANCELLED);
         }
     }
 }

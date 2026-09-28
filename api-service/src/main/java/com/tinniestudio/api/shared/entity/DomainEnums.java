@@ -104,7 +104,12 @@ public final class DomainEnums {
         PENDING,
         PROCESSING,
         READY,
-        FAILED
+        FAILED,
+        // Set synchronously by PartnerVideoService.cancel() the instant a partner cancels — not
+        // by media-worker, which only ever reads this value (see VideoProcessingService.isCancelled)
+        // to decide whether to stop before its next stage. Never reachable via
+        // VideoActivationService or any admin-moderation transition.
+        CANCELLED
     }
 
     public enum SubtitleFormat {
