@@ -181,4 +181,107 @@ class PartnerVideoServiceTest {
                 .hasMessageContaining("404");
         }
     }
+
+    @Nested @DisplayName("cancel()")
+    class CancelTests {
+
+        @Test @DisplayName("sets CANCELLED on a PENDING video owned by the caller")
+        void cancelsOwnedPendingAsset() {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = new VideoAsset();
+            asset.setId(assetId);
+            asset.setUploadedBy(ownerId);
+            asset.setProcessingStatus(ProcessingStatus.PENDING);
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+            when(videoAssetRepository.save(any(VideoAsset.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            partnerVideoService.cancel(ownerId, assetId);
+
+            assertThat(asset.getProcessingStatus()).isEqualTo(ProcessingStatus.CANCELLED);
+            verify(videoAssetRepository).save(asset);
+        }
+
+        @Test @DisplayName("sets CANCELLED on a PROCESSING video owned by the caller")
+        void cancelsOwnedProcessingAsset() {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = new VideoAsset();
+            asset.setId(assetId);
+            asset.setUploadedBy(ownerId);
+            asset.setProcessingStatus(ProcessingStatus.PROCESSING);
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+            when(videoAssetRepository.save(any(VideoAsset.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            partnerVideoService.cancel(ownerId, assetId);
+
+            assertThat(asset.getProcessingStatus()).isEqualTo(ProcessingStatus.CANCELLED);
+        }
+
+        @Test @DisplayName("throws 404 when the video doesn't belong to the caller")
+        void throws404WhenNotOwner() {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = new VideoAsset();
+            asset.setId(assetId);
+            asset.setUploadedBy(UUID.randomUUID());
+            asset.setProcessingStatus(ProcessingStatus.PENDING);
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+
+            assertThatThrownBy(() -> partnerVideoService.cancel(ownerId, assetId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+            verify(videoAssetRepository, never()).save(any());
+        }
+
+        @Test @DisplayName("throws 404 when the video doesn't exist")
+        void throws404WhenMissing() {
+            UUID assetId = UUID.randomUUID();
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> partnerVideoService.cancel(ownerId, assetId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+        }
+
+        @Test @DisplayName("throws 400 when the video is already READY")
+        void throws400WhenAlreadyReady() {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = new VideoAsset();
+            asset.setId(assetId);
+            asset.setUploadedBy(ownerId);
+            asset.setProcessingStatus(ProcessingStatus.READY);
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+
+            assertThatThrownBy(() -> partnerVideoService.cancel(ownerId, assetId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400");
+            verify(videoAssetRepository, never()).save(any());
+        }
+
+        @Test @DisplayName("throws 400 when the video is already FAILED")
+        void throws400WhenAlreadyFailed() {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = new VideoAsset();
+            asset.setId(assetId);
+            asset.setUploadedBy(ownerId);
+            asset.setProcessingStatus(ProcessingStatus.FAILED);
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+
+            assertThatThrownBy(() -> partnerVideoService.cancel(ownerId, assetId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400");
+        }
+
+        @Test @DisplayName("throws 400 when the video is already CANCELLED")
+        void throws400WhenAlreadyCancelled() {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = new VideoAsset();
+            asset.setId(assetId);
+            asset.setUploadedBy(ownerId);
+            asset.setProcessingStatus(ProcessingStatus.CANCELLED);
+            when(videoAssetRepository.findById(assetId)).thenReturn(Optional.of(asset));
+
+            assertThatThrownBy(() -> partnerVideoService.cancel(ownerId, assetId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400");
+        }
+    }
 }

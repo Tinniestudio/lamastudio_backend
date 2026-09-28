@@ -79,6 +79,29 @@ public class PartnerVideoService {
         videoActivationService.activateAndRetireSiblings(asset);
     }
 
+    /**
+     * Sets processingStatus=CANCELLED immediately, regardless of what stage media-worker is
+     * currently in — the worker discovers this asynchronously via its own best-effort
+     * stage-boundary checks (VideoProcessingService.isCancelled) and never overwrites this value
+     * once set. Only PENDING/PROCESSING assets can be cancelled; anything already terminal
+     * (READY/FAILED/CANCELLED) must go through delete() instead.
+     */
+    @Transactional
+    public void cancel(UUID userId, UUID videoAssetId) {
+        VideoAsset asset = videoAssetRepository.findById(videoAssetId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found: " + videoAssetId));
+        if (!userId.equals(asset.getUploadedBy())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found: " + videoAssetId);
+        }
+        if (asset.getProcessingStatus() != ProcessingStatus.PENDING
+                && asset.getProcessingStatus() != ProcessingStatus.PROCESSING) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Only a PENDING or PROCESSING video can be cancelled");
+        }
+        asset.setProcessingStatus(ProcessingStatus.CANCELLED);
+        videoAssetRepository.save(asset);
+    }
+
     private void assertOwnsContent(UUID userId, Content content) {
         if (!userId.equals(content.getCreatedBy())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + content.getId());

@@ -47,4 +47,14 @@ public class PartnerVideoController {
         partnerVideoService.activate(userId, id);
         return ResponseEntity.ok(Map.of("message", "Video activated"));
     }
+
+    @Operation(summary = "Cancel a PENDING or PROCESSING video; media-worker stops at its next stage boundary")
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<Object> cancel(
+            @AuthenticationPrincipal UserDetails principal,
+            @PathVariable UUID id) {
+        UUID userId = CurrentUser.id(principal);
+        partnerVideoService.cancel(userId, id);
+        return ResponseEntity.ok(Map.of("message", "Video cancelled"));
+    }
 }
