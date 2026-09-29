@@ -14,7 +14,7 @@
 - The resulting page, `[slug]/[episodeSlug]/page.tsx`, calls `getContentDetail(episodeSlug, ...)`, which hits `GET /contents/{slug}` — treating the episode id as if it were a **Content** slug. Episodes are not Content records; this lookup targets the wrong resource entirely.
 - Neither `Season` nor `Episode` has a `slug` field anywhere — not in the backend entities (`Season.java`/`Episode.java`), not in their response DTOs, not in the client-web types.
 - Both the content-level page (`ContentDetail`-consuming) and the "episode" page (`SeasonContentDetail`-consuming — names are swapped from what you'd expect) always initialize to `season[0]`/`episode[0]` regardless of the URL, so even a corrected URL wouldn't land on the right episode without further changes.
-- `ContentDetail.tsx` and `SeasonContentDetail.tsx` are near-duplicate files (same state shape, same season-picker/episode-list JSX) that have drifted apart cosmetically (hero background treatment, related-content section heading) with no actual episode-specific behavior in either.
+- `ContentDetail.tsx` and `SeasonContentDetail.tsx` are near-duplicate files (same state shape, same season-picker/episode-list JSX) that have drifted apart cosmetically (hero background treatment, related-content section heading) with no actual episode-specific behavior in either. **Correction during planning:** `ContentDetail.tsx` is not exclusive to the broken episode route — it's also the shared detail component for `/movies`, `/kids`, and `/lives` (non-episodic content types). Merging it with `SeasonContentDetail.tsx` would touch those three unrelated pages. §3 below fixes `SeasonContentDetail.tsx` in place instead and leaves `ContentDetail.tsx` untouched.
 
 **Investigated and confirmed during planning:** this codebase already has a proven slug-generation pattern for `Content.slug` — a Postgres trigger (`set_content_slug()`, `V18__add_contents.sql`) that calls a shared `slugify()` function (`V15__add_slugify_function.sql`) and resolves collisions with a `-2`, `-3`, ... suffix loop. `Season.title` is optional and often blank (`CreateSeasonRequest.title` has no `@NotBlank`) — only `seasonNumber` is guaranteed present and meaningful. `Episode.title` is required (`@Column(nullable = false)`), so it slugifies reliably like `Content.title` does.
 
@@ -46,9 +46,11 @@ If either resolution fails (unknown season or episode slug), the page calls `not
 
 The resolved season/episode become the *initial* active state passed into the shared detail component (see §3), rather than the current hardcoded `season[0]`/`episode[0]`. The content-level page (`/shows/[slug]`, no episode segment) is unaffected — it still defaults to season 1 / episode 1 when no episode is specified.
 
-### 3. Client-web: consolidate `ContentDetail`/`SeasonContentDetail`
+### 3. Client-web: fix `SeasonContentDetail.tsx` in place (`ContentDetail.tsx` untouched)
 
-Merge the two near-duplicate components into a single `ContentDetail.tsx` (dropping `SeasonContentDetail.tsx`), which takes:
+`SeasonContentDetail.tsx` is already the component used for both `/shows/[slug]` and `/sermons/[slug]` (the content-level pages) — it's the right component to extend, not `ContentDetail.tsx`, which serves the unrelated `/movies`, `/kids`, and `/lives` pages and should not be touched by this work.
+
+`SeasonContentDetail.tsx` gains two new props:
 - `basePath: string` — `/shows` or `/sermons`, reusing the value already passed as `returnTo` for the back button, now also driving forward navigation
 - `initialSeason?: Season`, `initialEpisode?: Episode` — from §2's resolution; omitted on the content-level page (defaults to `season[0]`/`episode[0]` as today)
 
@@ -56,22 +58,22 @@ The episode-click handler becomes:
 ```tsx
 router.push(`${basePath}/${data.slug}/${activeSeason.slug}/${ep.slug}`, { scroll: false });
 ```
-replacing the current `router.push('/shows/${data.slug}/${ep.id}')`, which both uses a real slug instead of a raw UUID and fixes the existing bug where sermon pages incorrectly navigate into `/shows/`.
+replacing the current hardcoded `router.push('/shows/${data.slug}/${ep.id}')`, which both uses a real slug instead of a raw UUID and fixes the existing bug where sermon pages incorrectly navigate into `/shows/`.
 
-Both `/shows/[slug]/page.tsx` and the new `/shows/[slug]/[seasonSlug]/[episodeSlug]/page.tsx` (and their `/sermons` mirrors) import the same component, differing only in whether they pass `initialSeason`/`initialEpisode`.
+The episode-specific route (`/shows/[slug]/[seasonSlug]/[episodeSlug]/page.tsx` and its `/sermons` mirror) switches from importing `ContentDetail` to importing `SeasonContentDetail`, passing the resolved `initialSeason`/`initialEpisode` and the correct `basePath`. `ContentDetail.tsx` and its three unrelated consumers (`/movies`, `/kids`, `/lives`) are not modified.
 
 ## Per-Repo Impact
 
 **`server`:**
-- Migration adding `slug` to `seasons` (computed, no trigger) with backfill.
-- Migration adding `slug` to `episodes` (trigger-generated, scoped to `season_id`, mirroring `set_content_slug()`) with backfill.
+- Migration adding `slug` to `seasons` — trigger-generated, no collision loop needed (uniqueness already guaranteed by the existing `(content_id, season_number)` constraint) — with backfill.
+- Migration adding `slug` to `episodes` (trigger-generated, scoped to `season_id`, mirroring `set_content_slug()`'s collision-loop) with backfill.
 - `SeasonResponse`/`EpisodeResponse` gain `slug`.
 
 **`tinniestudio-client-web`:**
 - `Season`/`Episode` types gain `slug: string`.
 - New route `[slug]/[seasonSlug]/[episodeSlug]/page.tsx` under both `/shows` and `/sermons`, replacing the current flat `[slug]/[episodeSlug]/page.tsx`.
 - `getContentDetail` call sites on the episode route fetch by content slug, then resolve season/episode by slug from the returned tree; `notFound()` on no match.
-- `ContentDetail.tsx` and `SeasonContentDetail.tsx` merge into one component taking `basePath`/`initialSeason`/`initialEpisode`.
+- `SeasonContentDetail.tsx` gains `basePath`/`initialSeason`/`initialEpisode` props; the episode route switches to importing it instead of `ContentDetail.tsx`. `ContentDetail.tsx` (and its `/movies`, `/kids`, `/lives` consumers) is untouched.
 
 ## Non-goals
 
