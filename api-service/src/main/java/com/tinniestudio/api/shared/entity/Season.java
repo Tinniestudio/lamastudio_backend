@@ -8,6 +8,8 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
 
 @Entity
 @Table(name = "seasons", uniqueConstraints = {
@@ -24,6 +26,15 @@ public class Season extends BaseEntity {
 
   @Column(nullable = false)
   private Integer seasonNumber;
+
+  /**
+   * Trigger-generated (V57, trg_season_slug) — always "season-{seasonNumber}". Never set from
+   * Java: insertable/updatable are false so Hibernate never writes it, and {@code @Generated}
+   * makes Hibernate re-select the trigger-computed value after insert/update.
+   */
+  @Generated(event = { EventType.INSERT, EventType.UPDATE })
+  @Column(nullable = false, insertable = false, updatable = false)
+  private String slug;
 
   private String title;
 
