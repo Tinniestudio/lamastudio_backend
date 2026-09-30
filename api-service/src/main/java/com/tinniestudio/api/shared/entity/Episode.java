@@ -8,6 +8,8 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
 
 @Entity
 @Table(name = "episodes", uniqueConstraints = {
@@ -24,6 +26,11 @@ public class Episode extends BaseEntity {
 
   @Column(nullable = false)
   private Integer episodeNumber;
+
+  /** Trigger-generated (V58, trg_episode_slug) — slugify(title), unique within the season. Never set from Java. */
+  @Generated(event = {EventType.INSERT, EventType.UPDATE})
+  @Column(nullable = false, insertable = false, updatable = false)
+  private String slug;
 
   @Column(nullable = false)
   private String title;

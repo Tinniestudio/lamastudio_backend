@@ -8,6 +8,7 @@ public record EpisodeResponse(
     UUID id,
     UUID seasonId,
     Integer episodeNumber,
+    String slug,
     String title,
     String description,
     LocalDate releaseDate,
@@ -16,7 +17,7 @@ public record EpisodeResponse(
 ) {
     public static EpisodeResponse from(Episode e) {
         return new EpisodeResponse(
-            e.getId(), e.getSeason().getId(), e.getEpisodeNumber(),
+            e.getId(), e.getSeason().getId(), e.getEpisodeNumber(), e.getSlug(),
             e.getTitle(), e.getDescription(), e.getReleaseDate(),
             e.getDurationSeconds(), e.getThumbnailUrl()
         );
