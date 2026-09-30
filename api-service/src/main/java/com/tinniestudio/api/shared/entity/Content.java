@@ -12,6 +12,8 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
 
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.MainCategory;
@@ -31,7 +33,13 @@ public class Content extends BaseEntity {
     @Column(nullable = false)
     private String title;
 
-    @Column(nullable = false, unique = true)
+    /**
+     * Trigger-generated (V18, trg_content_slug) — slugify(title), globally unique. Never set from
+     * Java: insertable/updatable are false so Hibernate never writes it, and {@code @Generated}
+     * makes Hibernate re-select the trigger-computed value after insert/update.
+     */
+    @Generated(event = { EventType.INSERT, EventType.UPDATE })
+    @Column(nullable = false, unique = true, insertable = false, updatable = false)
     private String slug;
 
     @Column(columnDefinition = "TEXT")
