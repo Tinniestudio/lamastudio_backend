@@ -237,10 +237,50 @@ class PlaybackServiceTest {
             Content content = new Content();
             content.setStatus(ContentStatus.PUBLISHED);
             when(contentRepo.findById(any())).thenReturn(Optional.of(content));
-            when(videoAssetRepo.findByContent_IdAndAssetTypeAndIsActiveTrue(any(), eq(VideoAssetType.TRAILER)))
+            when(videoAssetRepo.findByContent_IdAndSeasonIsNullAndEpisodeIsNullAndAssetTypeAndIsActiveTrue(
+                any(), eq(VideoAssetType.TRAILER)))
                 .thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.getTrailerManifest(UUID.randomUUID()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting("statusCode")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        void usesScopedQuery_notTheUnscopedOne() {
+            UUID contentId = UUID.randomUUID();
+            Content content = new Content();
+            content.setStatus(ContentStatus.PUBLISHED);
+
+            VideoAsset asset = new VideoAsset();
+            asset.setManifestUrl("processed/trailer/master.m3u8");
+            asset.setDurationSeconds(90);
+            asset.setSubtitles(List.of());
+
+            when(contentRepo.findById(contentId)).thenReturn(Optional.of(content));
+            when(videoAssetRepo.findByContent_IdAndSeasonIsNullAndEpisodeIsNullAndAssetTypeAndIsActiveTrue(
+                eq(contentId), eq(VideoAssetType.TRAILER)))
+                .thenReturn(Optional.of(asset));
+
+            PlaybackManifestResponse resp = service.getTrailerManifest(contentId);
+
+            assertThat(resp.getManifestUrl()).isEqualTo("http://cdn.test/processed/trailer/master.m3u8");
+            verify(videoAssetRepo, never()).findByContent_IdAndAssetTypeAndIsActiveTrue(any(), any());
+        }
+
+        @Test
+        void returns404_notThrows500_whenMultipleActiveTrailersExistAcrossLevels() {
+            UUID contentId = UUID.randomUUID();
+            Content content = new Content();
+            content.setStatus(ContentStatus.PUBLISHED);
+
+            when(contentRepo.findById(contentId)).thenReturn(Optional.of(content));
+            when(videoAssetRepo.findByContent_IdAndSeasonIsNullAndEpisodeIsNullAndAssetTypeAndIsActiveTrue(
+                eq(contentId), eq(VideoAssetType.TRAILER)))
+                .thenThrow(new org.springframework.dao.IncorrectResultSizeDataAccessException(1, 2));
+
+            assertThatThrownBy(() -> service.getTrailerManifest(contentId))
                 .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
                 .extracting("statusCode")
                 .isEqualTo(HttpStatus.NOT_FOUND);
@@ -258,7 +298,8 @@ class PlaybackServiceTest {
             asset.setSubtitles(List.of());
 
             when(contentRepo.findById(contentId)).thenReturn(Optional.of(content));
-            when(videoAssetRepo.findByContent_IdAndAssetTypeAndIsActiveTrue(eq(contentId), eq(VideoAssetType.TRAILER)))
+            when(videoAssetRepo.findByContent_IdAndSeasonIsNullAndEpisodeIsNullAndAssetTypeAndIsActiveTrue(
+                eq(contentId), eq(VideoAssetType.TRAILER)))
                 .thenReturn(Optional.of(asset));
 
             PlaybackManifestResponse resp = service.getTrailerManifest(contentId);

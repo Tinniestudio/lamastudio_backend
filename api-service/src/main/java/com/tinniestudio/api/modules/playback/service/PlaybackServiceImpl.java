@@ -123,9 +123,18 @@ public class PlaybackServiceImpl implements PlaybackService {
             .filter(c -> c.getStatus() == ContentStatus.PUBLISHED)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found: " + contentId));
 
-        VideoAsset asset = videoAssetRepo
-            .findByContent_IdAndAssetTypeAndIsActiveTrue(contentId, VideoAssetType.TRAILER)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No trailer available"));
+        VideoAsset asset;
+        try {
+            asset = videoAssetRepo
+                .findByContent_IdAndSeasonIsNullAndEpisodeIsNullAndAssetTypeAndIsActiveTrue(contentId, VideoAssetType.TRAILER)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No trailer available"));
+        } catch (org.springframework.dao.IncorrectResultSizeDataAccessException e) {
+            // Defense in depth: scoped queries should make this impossible, but if data drift
+            // ever produces more than one active row at a level, fail closed to the same
+            // "no trailer" 404 a viewer already expects, never a 500.
+            log.warn("Multiple active TRAILER assets found for content {} — treating as unavailable", contentId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No trailer available");
+        }
 
         return buildManifestResponse(asset, null);
     }
