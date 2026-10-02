@@ -31,6 +31,18 @@ public interface VideoAssetRepository extends JpaRepository<VideoAsset, UUID> {
 
     Optional<VideoAsset> findByEpisode_IdAndAssetTypeAndIsActiveTrue(UUID episodeId, VideoAssetType assetType);
 
+    /**
+     * Scoped to a TRUE content-level asset (season and episode both null) — content is
+     * denormalized onto every season/episode-linked asset too, so the unscoped
+     * findByContent_IdAndAssetTypeAndIsActiveTrue can match a season- or episode-level asset
+     * sharing the same content_id and throw IncorrectResultSizeDataAccessException when more
+     * than one is active. See VideoAssetRepositoryTrailerScopeTest.
+     */
+    Optional<VideoAsset> findByContent_IdAndSeasonIsNullAndEpisodeIsNullAndAssetTypeAndIsActiveTrue(
+            UUID contentId, VideoAssetType assetType);
+
+    Optional<VideoAsset> findBySeason_IdAndAssetTypeAndIsActiveTrue(UUID seasonId, VideoAssetType assetType);
+
     List<VideoAsset> findByContent_IdAndAssetTypeOrderByCreatedAtDesc(UUID contentId, VideoAssetType assetType);
 
     List<VideoAsset> findBySeason_IdAndAssetTypeOrderByCreatedAtDesc(UUID seasonId, VideoAssetType assetType);
