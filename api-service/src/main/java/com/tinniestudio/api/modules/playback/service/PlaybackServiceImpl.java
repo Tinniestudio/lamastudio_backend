@@ -40,6 +40,7 @@ public class PlaybackServiceImpl implements PlaybackService {
     private final VideoAssetRepository videoAssetRepo;
     private final WatchProgressRepository watchProgressRepo;
     private final EpisodeRepository episodeRepo;
+    private final com.tinniestudio.api.modules.season.repository.SeasonRepository seasonRepo;
     private final RabbitTemplate rabbitTemplate;
     private final AppProperties appProperties;
     private final WatchHistoryRepository watchHistoryRepo;
@@ -133,6 +134,30 @@ public class PlaybackServiceImpl implements PlaybackService {
             // ever produces more than one active row at a level, fail closed to the same
             // "no trailer" 404 a viewer already expects, never a 500.
             log.warn("Multiple active TRAILER assets found for content {} — treating as unavailable", contentId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No trailer available");
+        }
+
+        return buildManifestResponse(asset, null);
+    }
+
+    // -------------------------------------------------------------------------
+    // Season trailer manifest — deliberately public: no auth, no checkAccess() call.
+    // -------------------------------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public PlaybackManifestResponse getSeasonTrailerManifest(UUID seasonId) {
+        Season season = seasonRepo.findById(seasonId)
+            .filter(s -> s.getContent().getStatus() == ContentStatus.PUBLISHED)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Season not found: " + seasonId));
+
+        VideoAsset asset;
+        try {
+            asset = videoAssetRepo
+                .findBySeason_IdAndAssetTypeAndIsActiveTrue(seasonId, VideoAssetType.TRAILER)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No trailer available"));
+        } catch (org.springframework.dao.IncorrectResultSizeDataAccessException e) {
+            log.warn("Multiple active TRAILER assets found for season {} — treating as unavailable", seasonId);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No trailer available");
         }
 

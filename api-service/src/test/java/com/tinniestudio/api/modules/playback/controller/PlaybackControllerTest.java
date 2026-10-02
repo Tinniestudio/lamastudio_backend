@@ -112,6 +112,20 @@ class PlaybackControllerTest {
     }
 
     @Test
+    @DisplayName("GET /playback/manifest/season/{seasonId}/trailer returns 200 with no auth required")
+    void getSeasonTrailerManifest_returnsManifestWithoutAuth() throws Exception {
+        UUID seasonId = UUID.randomUUID();
+        PlaybackManifestResponse manifest = new PlaybackManifestResponse(
+            "http://cdn.test/season-trailer.m3u8", List.of(), null, 60);
+        when(playbackService.getSeasonTrailerManifest(any(UUID.class)))
+            .thenReturn(manifest);
+
+        mockMvc.perform(getWithContext("/playback/manifest/season/" + seasonId + "/trailer"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.manifestUrl").value("http://cdn.test/season-trailer.m3u8"));
+    }
+
+    @Test
     @DisplayName("POST /playback/progress returns 204 No Content")
     @WithMockUser(username = USER_ID, roles = "USER")
     void recordProgress_returns200() throws Exception {

@@ -46,6 +46,12 @@ public class PlaybackController {
         return ResponseEntity.ok(playbackService.getTrailerManifest(contentId));
     }
 
+    @Operation(summary = "Get HLS manifest for a season's trailer — public, no auth or subscription required")
+    @GetMapping("/manifest/season/{seasonId}/trailer")
+    public ResponseEntity<PlaybackManifestResponse> getSeasonTrailerManifest(@PathVariable UUID seasonId) {
+        return ResponseEntity.ok(playbackService.getSeasonTrailerManifest(seasonId));
+    }
+
     @Operation(summary = "Get HLS manifest for a specific episode")
     @GetMapping("/manifest/episode/{episodeId}")
     public ResponseEntity<PlaybackManifestResponse> getEpisodeManifest(

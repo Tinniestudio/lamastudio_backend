@@ -6,6 +6,7 @@ import com.tinniestudio.api.modules.episode.repository.EpisodeRepository;
 import com.tinniestudio.api.modules.library.repository.WatchHistoryRepository;
 import com.tinniestudio.api.modules.playback.dto.*;
 import com.tinniestudio.api.modules.playback.repository.WatchProgressRepository;
+import com.tinniestudio.api.modules.season.repository.SeasonRepository;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
 import com.tinniestudio.api.shared.config.AppProperties;
 import com.tinniestudio.api.shared.entity.*;
@@ -37,6 +38,7 @@ class PlaybackServiceTest {
     @Mock VideoAssetRepository videoAssetRepo;
     @Mock WatchProgressRepository watchProgressRepo;
     @Mock EpisodeRepository episodeRepo;
+    @Mock SeasonRepository seasonRepo;
     @Mock RabbitTemplate rabbitTemplate;
     @Mock WatchHistoryRepository watchHistoryRepo;
 
@@ -48,7 +50,7 @@ class PlaybackServiceTest {
         props.getCdn().setBaseUrl("http://cdn.test");
         service = new PlaybackServiceImpl(
             contentRepo, subscriptionRepo, videoAssetRepo,
-            watchProgressRepo, episodeRepo, rabbitTemplate, props, watchHistoryRepo
+            watchProgressRepo, episodeRepo, seasonRepo, rabbitTemplate, props, watchHistoryRepo
         );
     }
 
@@ -307,6 +309,73 @@ class PlaybackServiceTest {
             assertThat(resp.getManifestUrl()).isEqualTo("http://cdn.test/processed/trailer/master.m3u8");
             assertThat(resp.getResumeAt()).isNull();
             assertThat(resp.getDuration()).isEqualTo(90);
+        }
+    }
+
+    @Nested
+    class getSeasonTrailerManifest {
+
+        @Test
+        void throws404WhenSeasonNotFound() {
+            when(seasonRepo.findById(any())).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.getSeasonTrailerManifest(UUID.randomUUID()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting("statusCode")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        void throws404WhenParentContentNotPublished() {
+            Content content = new Content();
+            content.setStatus(ContentStatus.DRAFT);
+            Season season = new Season();
+            season.setContent(content);
+            when(seasonRepo.findById(any())).thenReturn(Optional.of(season));
+
+            assertThatThrownBy(() -> service.getSeasonTrailerManifest(UUID.randomUUID()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting("statusCode")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        void throws404WhenNoActiveSeasonTrailer() {
+            Content content = new Content();
+            content.setStatus(ContentStatus.PUBLISHED);
+            Season season = new Season();
+            season.setContent(content);
+            when(seasonRepo.findById(any())).thenReturn(Optional.of(season));
+            when(videoAssetRepo.findBySeason_IdAndAssetTypeAndIsActiveTrue(any(), eq(VideoAssetType.TRAILER)))
+                .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.getSeasonTrailerManifest(UUID.randomUUID()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting("statusCode")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        void returnsManifestWithNullResumeAt() {
+            UUID seasonId = UUID.randomUUID();
+            Content content = new Content();
+            content.setStatus(ContentStatus.PUBLISHED);
+            Season season = new Season();
+            season.setContent(content);
+
+            VideoAsset asset = new VideoAsset();
+            asset.setManifestUrl("processed/season-trailer/master.m3u8");
+            asset.setDurationSeconds(60);
+            asset.setSubtitles(List.of());
+
+            when(seasonRepo.findById(seasonId)).thenReturn(Optional.of(season));
+            when(videoAssetRepo.findBySeason_IdAndAssetTypeAndIsActiveTrue(eq(seasonId), eq(VideoAssetType.TRAILER)))
+                .thenReturn(Optional.of(asset));
+
+            PlaybackManifestResponse resp = service.getSeasonTrailerManifest(seasonId);
+
+            assertThat(resp.getManifestUrl()).isEqualTo("http://cdn.test/processed/season-trailer/master.m3u8");
+            assertThat(resp.getResumeAt()).isNull();
         }
     }
 
