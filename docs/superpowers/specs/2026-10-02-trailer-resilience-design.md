@@ -51,6 +51,7 @@ specific mapping for — it falls through to a generic 500.
 can never be mistaken for a content-level one:
 
 - Add to `VideoAssetRepository`:
+
   ```java
   Optional<VideoAsset> findByContent_IdAndSeasonIsNullAndEpisodeIsNullAndAssetTypeAndIsActiveTrue(
       UUID contentId, VideoAssetType assetType);
@@ -58,9 +59,11 @@ can never be mistaken for a content-level one:
   Optional<VideoAsset> findBySeason_IdAndAssetTypeAndIsActiveTrue(
       UUID seasonId, VideoAssetType assetType);
   ```
+
   (`findByEpisode_IdAndAssetTypeAndIsActiveTrue` already exists and is already
   correctly scoped — episode is always the most specific level, so no
   cross-level collision is possible there.)
+
 - `getTrailerManifest(contentId)` switches to the new
   `findByContent_IdAndSeasonIsNullAndEpisodeIsNullAndAssetTypeAndIsActiveTrue`.
 - No change to `VideoActivationService.activateAndRetireSiblings` — a content
@@ -117,7 +120,11 @@ function useTrailerManifest(ids: {
   episodeId?: string;
   seasonId?: string;
   contentId: string;
-}): { status: 'loading' | 'ready' | 'unavailable'; manifestUrl: string | null; asset: PlayerAsset | null }
+}): {
+  status: "loading" | "ready" | "unavailable";
+  manifestUrl: string | null;
+  asset: PlayerAsset | null;
+};
 ```
 
 **Resolution order:** try whichever ids are present, most specific first —
@@ -134,7 +141,7 @@ console/error-tracking path for debugging, never surfaced to the viewer.
 - `SeasonContentDetail.tsx`: currently calls `useHeroTrailer(data.id)`
   unconditionally (`src/components/content/SeasonContentDetail.tsx:76`) — this
   means today's "hero trailer" on an episode page is actually always the
-  *content*-level trailer, never the season's or episode's own. The component
+  _content_-level trailer, never the season's or episode's own. The component
   already tracks `activeSeason`/`activeEpisode` state
   (`SeasonContentDetail.tsx:62-67`) for season-picker/episode-picker UI, so the
   fix is to pass those same ids through:
@@ -151,7 +158,7 @@ console/error-tracking path for debugging, never surfaced to the viewer.
 
 `HLSPlayer` (`src/components/content/HLSPlayer.tsx`) requires a non-nullable
 `asset: PlayerAsset` prop (line 43) and bakes the trailer-mode action strip
-(My List button, Watch CTA, title, badges — lines 307-363) *inside* its own
+(My List button, Watch CTA, title, badges — lines 307-363) _inside_ its own
 render tree. Both `SeasonContentDetail.tsx` and `ContentDetail.tsx` only
 mount `<HLSPlayer>` at all when `heroAsset` is truthy (`SeasonContentDetail.tsx:105`);
 on loading or error/missing they render an unrelated placeholder `<div>`
@@ -210,10 +217,21 @@ a season itself has no "main video" concept, only episodes do:
 export function SeasonVideoCard({ season }: { season: SeasonResponse }) {
   return (
     <Card>
-      <CardHeader><CardTitle>Video</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle>Video</CardTitle>
+      </CardHeader>
       <CardContent>
-        <VideoUploadField uploadType="TRAILER" targetEntityType="SEASON" targetEntityId={season.id} label="Trailer" />
-        <VideoHistoryList targetEntityType="SEASON" targetEntityId={season.id} assetType="TRAILER" />
+        <VideoUploadField
+          uploadType="TRAILER"
+          targetEntityType="SEASON"
+          targetEntityId={season.id}
+          label="Trailer"
+        />
+        <VideoHistoryList
+          targetEntityType="SEASON"
+          targetEntityId={season.id}
+          assetType="TRAILER"
+        />
       </CardContent>
     </Card>
   );
@@ -227,32 +245,64 @@ upload API. Rendered in `SeasonDetailPageClient.tsx` right after `<SeasonForm>`
 on `season` being loaded (edit mode only, same as `ContentVideoCard`'s
 `isEdit && content` gate).
 
-### Re-enable `ContentVideoCard` for series
+### Re-enable `ContentVideoCard` for series — trailer-only
 
-`ContentForm.tsx:126` currently gates `ContentVideoCard` on `!isSeries`. Remove
-that gate so series also render it, giving series an "overall" trailer
-alongside per-season (`SeriesSeasonsCard`) and per-episode (`EpisodeVideoCard`)
-trailers:
+`ContentForm.tsx:126` currently gates `ContentVideoCard` on `!isSeries`. Series
+need an "overall" content-level trailer (alongside per-season
+`SeriesSeasonsCard` and per-episode `EpisodeVideoCard` trailers), but **not**
+a content-level main video — series are watched via episodes, so a "Main
+video" upload at the content level has no playback path that would ever serve
+it (`PlaybackController` has no "main video manifest for a series content id"
+caller). Rather than rendering the unused section, give `ContentVideoCard` a
+`trailerOnly` flag:
+
+```diff
+- export function ContentVideoCard({ content }: { content: PartnerContentResponse }) {
++ export function ContentVideoCard({ content, trailerOnly = false }: { content: PartnerContentResponse; trailerOnly?: boolean }) {
+    const [activeMainVideo, setActiveMainVideo] = useState<PartnerVideoAssetResponse | null>(null);
+
+    return (
+      <Card>
+        <CardHeader><CardTitle>Video</CardTitle></CardHeader>
+        <CardContent className="space-y-tls-lg">
++         {!trailerOnly && (
+            <div className="space-y-tls-xs">
+              <p className="mb-tls-xs text-sm font-medium text-tls-neutral">Main video</p>
+              <VideoUploadField uploadType="RAW_VIDEO" targetEntityType="CONTENT" targetEntityId={content.id} label="Main video" />
+              <VideoHistoryList targetEntityType="CONTENT" targetEntityId={content.id} assetType="MAIN_VIDEO" onActiveVideoChange={setActiveMainVideo} />
+            </div>
++         )}
+          <div className="space-y-tls-xs">
+            <p className="mb-tls-xs text-sm font-medium text-tls-neutral">Trailer</p>
+            <VideoUploadField uploadType="TRAILER" targetEntityType="CONTENT" targetEntityId={content.id} label="Trailer" />
+            <VideoHistoryList targetEntityType="CONTENT" targetEntityId={content.id} assetType="TRAILER" />
+          </div>
+-         <SubtitlesSection activeVideo={activeMainVideo} />
++         {!trailerOnly && <SubtitlesSection activeVideo={activeMainVideo} />}
+        </CardContent>
+      </Card>
+    );
+  }
+```
+
+(Subtitles are only meaningful against a main video asset, so they're gated
+alongside it.) `ContentForm.tsx` then renders it unconditionally, trailer-only
+for series:
 
 ```diff
 - {isEdit && content && !isSeries && <ContentVideoCard content={content} />}
-+ {isEdit && content && <ContentVideoCard content={content} />}
++ {isEdit && content && <ContentVideoCard content={content} trailerOnly={isSeries} />}
   {isEdit && content && isSeries && <SeriesSeasonsCard contentId={content.id} seasons={seasons ?? []} />}
 ```
 
-For series, `ContentVideoCard`'s "Main video" sub-section
-(`ContentVideoCard.tsx` — `uploadType="RAW_VIDEO" targetEntityType="CONTENT"`)
-is harmless but not meaningful (series are watched via episodes, not a
-content-level main video) — leave it rendered as-is rather than special-casing
-the card internally; it simply won't be used for series, matching how
-`PlaybackController` has no "main video manifest for a series content id"
-caller path either. Update the stale comment at `ContentVideoCard.tsx:11-14`
-(which explained the now-removed exclusion) to reflect that series get both
-an overall and per-season/episode trailer.
+Update the stale comment at `ContentVideoCard.tsx:11-14` (which explained the
+now-removed full exclusion for series) to describe the new `trailerOnly`
+behavior instead.
 
 ## 7. Testing & Verification
 
 **Backend:**
+
 - Unit test: the new scoped queries don't cross-match (a season-level active
   trailer isn't returned by the content-level query and vice versa) —
   regression test directly covering the 500.
@@ -264,6 +314,7 @@ an overall and per-season/episode trailer.
   content isn't `PUBLISHED`.
 
 **Client-web:**
+
 - `useTrailerManifest`: unit tests for fallback order (episode 404 → season
   200 returns season; all 404 → `unavailable`; a non-404 error is treated as
   a fallthrough, not surfaced).
@@ -276,6 +327,7 @@ an overall and per-season/episode trailer.
   trailer.
 
 **Partner-web:**
+
 - Manual check: upload a season trailer via `SeasonVideoCard`, confirm it's
   playable via the new season manifest endpoint; confirm `ContentVideoCard`
   now appears for series and its uploads route with
