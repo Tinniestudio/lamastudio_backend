@@ -380,6 +380,79 @@ class PlaybackServiceTest {
     }
 
     @Nested
+    class getEpisodeTrailerManifest {
+
+        @Test
+        void throws404WhenEpisodeNotFound() {
+            when(episodeRepo.findById(any())).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.getEpisodeTrailerManifest(UUID.randomUUID()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting("statusCode")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        void throws404WhenParentContentNotPublished() {
+            Content content = new Content();
+            content.setStatus(ContentStatus.DRAFT);
+            Season season = new Season();
+            season.setContent(content);
+            Episode episode = new Episode();
+            episode.setSeason(season);
+            when(episodeRepo.findById(any())).thenReturn(Optional.of(episode));
+
+            assertThatThrownBy(() -> service.getEpisodeTrailerManifest(UUID.randomUUID()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting("statusCode")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        void throws404WhenNoActiveEpisodeTrailer() {
+            Content content = new Content();
+            content.setStatus(ContentStatus.PUBLISHED);
+            Season season = new Season();
+            season.setContent(content);
+            Episode episode = new Episode();
+            episode.setSeason(season);
+            when(episodeRepo.findById(any())).thenReturn(Optional.of(episode));
+            when(videoAssetRepo.findByEpisode_IdAndAssetTypeAndIsActiveTrue(any(), eq(VideoAssetType.TRAILER)))
+                .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.getEpisodeTrailerManifest(UUID.randomUUID()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting("statusCode")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        void returnsManifestWithNullResumeAt() {
+            UUID episodeId = UUID.randomUUID();
+            Content content = new Content();
+            content.setStatus(ContentStatus.PUBLISHED);
+            Season season = new Season();
+            season.setContent(content);
+            Episode episode = new Episode();
+            episode.setSeason(season);
+
+            VideoAsset asset = new VideoAsset();
+            asset.setManifestUrl("processed/episode-trailer/master.m3u8");
+            asset.setDurationSeconds(45);
+            asset.setSubtitles(List.of());
+
+            when(episodeRepo.findById(episodeId)).thenReturn(Optional.of(episode));
+            when(videoAssetRepo.findByEpisode_IdAndAssetTypeAndIsActiveTrue(eq(episodeId), eq(VideoAssetType.TRAILER)))
+                .thenReturn(Optional.of(asset));
+
+            PlaybackManifestResponse resp = service.getEpisodeTrailerManifest(episodeId);
+
+            assertThat(resp.getManifestUrl()).isEqualTo("http://cdn.test/processed/episode-trailer/master.m3u8");
+            assertThat(resp.getResumeAt()).isNull();
+        }
+    }
+
+    @Nested
     class recordProgress {
 
         @Test

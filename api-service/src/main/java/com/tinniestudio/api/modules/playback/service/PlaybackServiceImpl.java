@@ -165,6 +165,30 @@ public class PlaybackServiceImpl implements PlaybackService {
     }
 
     // -------------------------------------------------------------------------
+    // Episode trailer manifest — deliberately public: no auth, no checkAccess() call.
+    // -------------------------------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public PlaybackManifestResponse getEpisodeTrailerManifest(UUID episodeId) {
+        Episode episode = episodeRepo.findById(episodeId)
+            .filter(e -> e.getSeason().getContent().getStatus() == ContentStatus.PUBLISHED)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Episode not found: " + episodeId));
+
+        VideoAsset asset;
+        try {
+            asset = videoAssetRepo
+                .findByEpisode_IdAndAssetTypeAndIsActiveTrue(episodeId, VideoAssetType.TRAILER)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No trailer available"));
+        } catch (org.springframework.dao.IncorrectResultSizeDataAccessException e) {
+            log.warn("Multiple active TRAILER assets found for episode {} — treating as unavailable", episodeId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No trailer available");
+        }
+
+        return buildManifestResponse(asset, null);
+    }
+
+    // -------------------------------------------------------------------------
     // Episode manifest
     // -------------------------------------------------------------------------
 

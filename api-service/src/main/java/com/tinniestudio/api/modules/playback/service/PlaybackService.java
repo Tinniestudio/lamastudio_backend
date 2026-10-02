@@ -10,6 +10,7 @@ public interface PlaybackService {
     PlaybackManifestResponse getEpisodeManifest(org.springframework.security.core.userdetails.UserDetails principal, UUID episodeId);
     PlaybackManifestResponse getTrailerManifest(UUID contentId);
     PlaybackManifestResponse getSeasonTrailerManifest(UUID seasonId);
+    PlaybackManifestResponse getEpisodeTrailerManifest(UUID episodeId);
     void recordProgress(UUID userId, ProgressRequest request);
     List<ContinueWatchingItem> getContinueWatching(UUID userId);
 }
