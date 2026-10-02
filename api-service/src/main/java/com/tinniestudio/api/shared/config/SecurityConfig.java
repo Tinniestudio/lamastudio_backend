@@ -191,6 +191,8 @@ public class SecurityConfig {
         // (access checks, main manifests, progress, continue-watching) still requires auth.
         "/playback/manifest/content/*/trailer",
         "/api/v1/playback/manifest/content/*/trailer",
+        "/playback/manifest/season/*/trailer",
+        "/api/v1/playback/manifest/season/*/trailer",
         "/webhooks/stripe",
         "/api/v1/webhooks/stripe",
         "/swagger-ui.html",
