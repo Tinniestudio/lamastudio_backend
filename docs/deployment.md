@@ -49,35 +49,17 @@ rather than glossed over.
 
 ---
 
-## 2. Host constraint: build the JAR locally, not in the deploy pipeline
+## 2. Image build: GitHub Actions, not the Dokploy host
 
-Both Dockerfiles say this explicitly, so it isn't missed:
+`api-service` and `worker` are both built from the single root `Dockerfile` (`docker build
+--target api-service` / `--target worker`), by each repo's `.github/workflows/docker-build.yml`
+on push to `main`. GitHub Actions has full internet access, so Gradle runs inside the image build
+there — this is no longer done on the Dokploy host, which still cannot reach GitHub/Gradle's
+mirrors.
 
-```dockerfile
-# Build JAR locally first: ./gradlew :api-service:bootJar -x test
-# GitHub is blocked on this host so Gradle cannot run inside Docker.
-```
-
-The Dokploy host cannot reach GitHub / most Gradle dependency mirrors. **Do not** try to build
-the JAR inside the Docker image on that host — it will fail resolving dependencies. Instead:
-
-```bash
-# From the repo root, on a machine with normal internet access:
-./gradlew :api-service:bootJar -x test
-./gradlew :media-worker:bootJar -x test
-```
-
-This produces:
-- `api-service/build/libs/tinniestudio-api-service-*.jar`
-- `media-worker/build/libs/tinniestudio-media-worker-*.jar`
-
-Both Dockerfiles just `COPY` the prebuilt jar in — the image build itself needs no network access
-beyond pulling `eclipse-temurin:21-jre-jammy` and (for media-worker) `mwader/static-ffmpeg` from
-Docker Hub, both of which work fine on the Dokploy host.
-
-**If a CI environment with full internet access becomes available**, the Dockerfiles can be
-switched back to a multi-stage build that runs Gradle inside the image — the comment in each
-Dockerfile flags this as the intended future state.
+Images are pushed to `ghcr.io/tinniestudio/lamastudio_backend-api-service` and
+`ghcr.io/tinniestudio/lamastudio_backend-worker`, tagged `:<git-sha>` and `:latest`. Dokploy pulls
+the finished image — it never builds from source.
 
 ---
 
@@ -85,17 +67,11 @@ Dockerfile flags this as the intended future state.
 
 For **each** of `api-service` and `media-worker`:
 
-1. Create a new Dokploy **Application** (Dockerfile-based, not docker-compose).
-2. Point it at this repo, with the Dockerfile path set to `api-service/Dockerfile` /
-   `media-worker/Dockerfile` respectively, and build context set to the repo root (both
-   Dockerfiles `COPY` from `api-service/build/libs/...` / `media-worker/build/libs/...`, which are
-   repo-root-relative paths).
-3. Since the JAR must be built locally first (§2), either:
-   - commit the built JAR to a release branch/tag Dokploy deploys from, or
-   - build locally and `docker build`/push the image yourself, pointing Dokploy at that image
-     instead of building from source.
-   (Pick whichever matches your actual release process — this repo doesn't currently script
-   either path; see [Known Gaps](#known-gaps--things-to-fix-before-or-during-first-real-deploy).)
+1. Create a new Dokploy **Application** (image-based, not Dockerfile/docker-compose-based).
+2. Point it at `ghcr.io/tinniestudio/lamastudio_backend-api-service:latest` /
+   `ghcr.io/tinniestudio/lamastudio_backend-worker:latest` respectively (or a specific `:<sha>` tag
+   to pin a release).
+3. Configure Dokploy's own GHCR registry credentials so it can pull these images — see §2.
 4. Set environment variables via Dokploy's per-application environment panel — see [§6](#6-environment-variables) for the full list. **Do not** commit real secrets to `.env.prod` in git (it's gitignored already — keep it that way, and treat it as a local scratch copy of what's in Dokploy, not a source of truth).
 5. api-service exposes port `8080` (app) and `8081` (actuator — see [§7](#7-observability-endpoints-health--metrics)); only `8080` needs a public route.
 6. media-worker exposes no HTTP port — it's a pure RabbitMQ consumer. Don't attach a Traefik route to it.
@@ -287,21 +263,22 @@ production:
 
 ---
 
-## 9. RabbitMQ — not yet a managed production service
+## 9. RabbitMQ
 
-`.env.prod` as it currently exists in this repo has **no `RABBITMQ_*` variables at all** — meaning
-either RabbitMQ hasn't been provisioned for production yet, or it's provisioned somewhere this
-file doesn't reflect. Either way, RabbitMQ is a hard dependency (Spring AMQP connects at startup;
-api-service and media-worker won't come up cleanly without it), so before deploying:
+RabbitMQ runs from `docker-compose.prod.yml` in this repo — a standalone production compose file
+(not the dev-oriented root `docker-compose.yml`), with a persistent volume and credentials from a
+local `.env` (`RABBITMQ_USER`, `RABBITMQ_PASSWORD` — never commit this file). Deploy it with:
 
-- Stand up a RabbitMQ instance reachable from both services (Dokploy doesn't have a built-in
-  RabbitMQ template as of this writing — use the `docker-compose.yml` service, or a standalone
-  Dokploy application from the `rabbitmq:3-management-alpine` image).
-- Set `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD` on **both**
-  api-service and media-worker.
-- No manual queue/exchange setup needed — `RabbitConfig` in both services declares the exchange
-  (`tinniestudio.direct`) and all queues (`media.video.process`, `media.video.retry`,
-  `media.video.failed`, `notifications.send`, `analytics.ingest`) as Spring beans on startup.
+```bash
+RABBITMQ_USER=... RABBITMQ_PASSWORD=... docker compose -f docker-compose.prod.yml up -d
+```
+
+Set `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD` on both the
+`api-service` and `worker` Dokploy applications, attached to the same network as this compose
+stack so they can resolve `rabbitmq` by hostname. No manual queue/exchange setup needed —
+`RabbitConfig` in both services declares the exchange (`tinniestudio.direct`) and all queues
+(`media.video.process`, `media.video.retry`, `media.video.failed`, `notifications.send`,
+`analytics.ingest`) as Spring beans on startup.
 
 ---
 
@@ -351,13 +328,7 @@ rotate/blank `ADMIN_BOOTSTRAP_TOKEN` after first use as defense-in-depth regardl
 
 Found while writing this guide — flagging rather than silently working around:
 
-1. **`.env.prod` in this repo is missing variables the current codebase requires**: no
-   `RABBITMQ_*`, no `STORAGE_*`, no `JWT_ADMIN_*`, no `ADMIN_BOOTSTRAP_TOKEN`. If that file (or
-   whatever Dokploy currently has configured) is genuinely what's live, the app is running an
-   older version of its own config — RabbitMQ-dependent features and anything admin-JWT-related
-   would be broken, and storage now fails to start at all rather than silently no-op-ing (this
-   guide's §6.1 change). Reconcile against `.env.example` before deploying.
-2. **No separate Spring `prod` profile exists anymore.** There was an `application.prod.yml`, but
+1. **No separate Spring `prod` profile exists anymore.** There was an `application.prod.yml`, but
    Spring Boot's actual profile-file convention is `application-prod.yml` (dash, not dot) — this
    file was never loaded by Spring Boot regardless of any `SPRING_PROFILES_ACTIVE` setting, and
    nothing in this repo ever set that variable either. It's been removed rather than fixed-in-place:
@@ -369,12 +340,9 @@ Found while writing this guide — flagging rather than silently working around:
    the single `application.yml` now. If you want prod-only Java-level differences (e.g. a lower
    log level) in the future, use `application-prod.yml` (correct naming) and explicitly set
    `SPRING_PROFILES_ACTIVE=prod` in Dokploy — neither exists today.
-3. **`STORAGE_PATH_STYLE_ACCESS` needs to be verified against your actual S3 provider before first
+2. **`STORAGE_PATH_STYLE_ACCESS` needs to be verified against your actual S3 provider before first
    traffic** — defaults to `true` (MinIO-safe), likely needs to be `false` for real AWS S3. Test
    an actual upload → complete → playback round-trip against production storage before calling
    the migration done.
-4. **No documented CI/CD pipeline** for the "build locally, deploy the JAR" workflow (§2) — this
-   guide describes the manual steps; if deploys become frequent, scripting this (or getting CI
-   runners with GitHub access) is worth prioritizing.
-5. **`STRIPE_ROLE_KEY`** appears in `.env.prod` but isn't referenced anywhere in the current
+3. **`STRIPE_ROLE_KEY`** appears in `.env.prod` but isn't referenced anywhere in the current
    codebase — likely vestigial, safe to drop unless something outside this repo depends on it.
