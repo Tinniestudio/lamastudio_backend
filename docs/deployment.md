@@ -43,9 +43,9 @@ rather than glossed over.
 
 - **api-service** — the REST API. Talks to Postgres, Redis, RabbitMQ (publish-only for most flows), and S3 (presigned URLs).
 - **media-worker** — consumes `media.video.process` from RabbitMQ, transcodes with ffmpeg, uploads HLS output to S3, publishes `notifications.send` / `analytics.ingest`.
-- Both are separate Dokploy **applications**, each built from its own `Dockerfile`, each pulling env vars from Dokploy's per-app environment panel.
+- Both are separate Dokploy **applications**, each deployed from its own GHCR image, each pulling env vars from Dokploy's per-app environment panel.
 - Postgres and Redis run as Dokploy-managed **database** services, not from this repo's `docker-compose.yml`.
-- RabbitMQ, Prometheus, and Grafana currently only exist in this repo's `docker-compose.yml` — see [§8](#8-observability-prometheus--grafana).
+- Prometheus and Grafana currently only exist in this repo's `docker-compose.yml` — see [§8](#8-observability-prometheus--grafana). RabbitMQ runs from its own `docker-compose.prod.yml` — see [§9](#9-rabbitmq).
 
 ---
 
@@ -148,7 +148,7 @@ production (no fallback default, or a dev-only default that must be overridden).
 |---|---|
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Dokploy-managed Postgres |
 | `REDIS_URL` | Dokploy-managed Redis, full `redis://[:password@]host:port` form |
-| `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD` | See §9 — **not currently a Dokploy-managed service**, needs its own deploy |
+| `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD` | Deployed separately via `docker-compose.prod.yml` — see §9. |
 | `APP_BASE_URL`, `FRONTEND_URL` | Real prod domains — required with no fallback in prod-facing CORS/cookie config |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | User-token signing keys, base64, ≥32 bytes |
 | `JWT_ADMIN_ACCESS_SECRET`, `JWT_ADMIN_REFRESH_SECRET` | **Separate** admin-token signing keys — must differ from the user ones |
@@ -256,10 +256,11 @@ production:
    `/actuator/prometheus` over the network.
 3. `GRAFANA_PASSWORD` is required or the Grafana container refuses to start
    (`GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set}`).
-4. If you deploy RabbitMQ this way too (see §9), note `redis` and `rabbitmq` in this
-   compose file are the ones api-service/media-worker would need to point at — rewrite the
-   `host.docker.internal` references and container-name-based service discovery for however
-   Dokploy's networking actually resolves cross-application hostnames in your setup.
+4. `redis` in this compose file is the one api-service would need to point at if Redis is
+   ever deployed this way instead of as a Dokploy-managed service — rewrite the
+   `host.docker.internal` reference and container-name-based service discovery for however
+   Dokploy's networking actually resolves cross-application hostnames in your setup. RabbitMQ
+   is a separate concern — see §9.
 
 ---
 
@@ -279,6 +280,8 @@ stack so they can resolve `rabbitmq` by hostname. No manual queue/exchange setup
 `RabbitConfig` in both services declares the exchange (`tinniestudio.direct`) and all queues
 (`media.video.process`, `media.video.retry`, `media.video.failed`, `notifications.send`,
 `analytics.ingest`) as Spring beans on startup.
+
+This repo's docker-compose.yml/docker-compose.prod.yml both use a plain bridge network, which is fine for `docker compose up` on a single host — but this doc's deployment model elsewhere (§4) is Docker Swarm. If api-service/worker run as separate Dokploy Swarm services, they likely can't join a plain bridge network created by a standalone `docker compose` project; the bridge network may need to be made external/attachable, or RabbitMQ deployed as its own Dokploy application instead. Verify this against your actual Dokploy networking setup before relying on hostname-based `rabbitmq` resolution in production.
 
 ---
 
