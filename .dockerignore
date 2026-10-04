@@ -1,0 +1,10 @@
+.git
+.gradle
+build
+*/build
+*/bin
+docker-compose*.yml
+docs
+*.md
+target
+node_modules
