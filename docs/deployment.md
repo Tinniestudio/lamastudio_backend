@@ -303,8 +303,9 @@ rotate/blank `ADMIN_BOOTSTRAP_TOKEN` after first use as defense-in-depth regardl
 **First deploy:**
 1. Provision Postgres, Redis, RabbitMQ (§9), S3 bucket + IAM credentials (§6.1).
 2. Set all required env vars on both Dokploy applications (§6).
-3. `./gradlew :api-service:bootJar -x test && ./gradlew :media-worker:bootJar -x test` locally.
-4. Build/push or let Dokploy build both Dockerfiles (§2–3).
+3. Push to `main` (or trigger `workflow_dispatch`) in the server repo so GitHub Actions builds
+   and pushes both images to GHCR (§2).
+4. Point each Dokploy application at its GHCR image (§3).
 5. Deploy api-service first (it owns the Flyway migrations); confirm `GET /actuator/health` is
    green before deploying media-worker (which assumes an already-migrated schema).
 6. Attach Traefik routing to api-service only (§4).
@@ -314,7 +315,7 @@ rotate/blank `ADMIN_BOOTSTRAP_TOKEN` after first use as defense-in-depth regardl
 **Every subsequent deploy:**
 1. Back up the database if this deploy includes a new Flyway migration (§5) — migrations are
    forward-only.
-2. Build both JARs locally (§2).
+2. Push to `main` so CI builds and pushes new images (§2).
 3. Deploy api-service; watch `/actuator/health` and logs for Flyway migration success before
    moving on.
 4. Deploy media-worker.
