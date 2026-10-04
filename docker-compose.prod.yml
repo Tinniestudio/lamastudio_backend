@@ -1,0 +1,27 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: tinniestudio-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?RABBITMQ_USER must be set}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set}
+    ports:
+      - "5672:5672"
+      - "127.0.0.1:15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - tinniestudio-prod
+
+networks:
+  tinniestudio-prod:
+    driver: bridge
+
+volumes:
+  rabbitmq_data:
