@@ -28,6 +28,7 @@ ALTER TABLE watch_progress ADD COLUMN IF NOT EXISTS device_type VARCHAR(50);
 ALTER TABLE watch_progress ADD COLUMN IF NOT EXISTS last_watched_at TIMESTAMPTZ;
 ALTER TABLE watch_progress ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE watch_progress ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE watch_progress ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_watch_progress_user_content      ON watch_progress(user_id, content_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_watch_progress_user_ep    ON watch_progress(user_id, episode_id)  WHERE episode_id IS NOT NULL;

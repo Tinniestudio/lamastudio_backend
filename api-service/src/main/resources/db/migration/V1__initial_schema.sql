@@ -59,6 +59,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token_expiry TIMESTAMP
 ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE users ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 -- ── User Roles (join table) ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS user_roles (

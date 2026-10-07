@@ -29,6 +29,7 @@ ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS revoked BOOLEAN NOT NULL DEFA
 ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
 ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS revoked_by_admin_id UUID REFERENCES admins(id);
 ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE user_sessions ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_active  ON user_sessions(user_id) WHERE revoked = FALSE;

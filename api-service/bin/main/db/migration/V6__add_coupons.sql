@@ -29,6 +29,7 @@ ALTER TABLE coupons ADD COLUMN IF NOT EXISTS valid_until TIMESTAMPTZ;
 ALTER TABLE coupons ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE coupons ADD COLUMN IF NOT EXISTS created_by_admin_id UUID REFERENCES admins(id);
 ALTER TABLE coupons ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE coupons ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE TABLE IF NOT EXISTS coupon_redemptions (
     id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -45,6 +46,7 @@ ALTER TABLE coupon_redemptions ADD COLUMN IF NOT EXISTS coupon_id UUID NOT NULL 
 ALTER TABLE coupon_redemptions ADD COLUMN IF NOT EXISTS user_id UUID NOT NULL REFERENCES users(id);
 ALTER TABLE coupon_redemptions ADD COLUMN IF NOT EXISTS subscription_id UUID NOT NULL REFERENCES user_subscriptions(id);
 ALTER TABLE coupon_redemptions ADD COLUMN IF NOT EXISTS redeemed_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE coupon_redemptions ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_coupons_code      ON coupons(LOWER(code));
 CREATE INDEX IF NOT EXISTS idx_coupons_active    ON coupons(is_active) WHERE is_active = TRUE;

@@ -27,6 +27,7 @@ ALTER TABLE processing_jobs ADD COLUMN IF NOT EXISTS error_message TEXT;
 ALTER TABLE processing_jobs ADD COLUMN IF NOT EXISTS attempt INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE processing_jobs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE processing_jobs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE processing_jobs ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE UNIQUE INDEX IF NOT EXISTS uidx_processing_jobs_job_id ON processing_jobs(job_id);
 CREATE INDEX IF NOT EXISTS idx_processing_jobs_video_asset_id ON processing_jobs(video_asset_id);

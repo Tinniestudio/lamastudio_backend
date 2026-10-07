@@ -30,6 +30,7 @@ ALTER TABLE admins ADD COLUMN IF NOT EXISTS password_reset_token_invalidated BOO
 ALTER TABLE admins ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE admins ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE admins ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE admins ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 -- ── Admin Roles (element collection) ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS admin_roles (
@@ -66,6 +67,7 @@ ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT N
 ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS revoked BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
 ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE admin_sessions ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 -- ── Indexes ───────────────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_admins_email         ON admins(email);

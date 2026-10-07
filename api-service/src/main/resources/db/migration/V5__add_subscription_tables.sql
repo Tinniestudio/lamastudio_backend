@@ -31,6 +31,7 @@ ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS content_limit INT;
 ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE subscription_plans ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 -- Guard: if the table pre-existed (Hibernate-created), ensure all columns we need are present.
 ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS content_limit INT;
@@ -64,6 +65,7 @@ ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS auto_renew BOOLEAN NOT N
 ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS content_watches_used INT NOT NULL DEFAULT 0;
 ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE user_subscriptions ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 -- Guard: ensure content_watches_used exists on pre-existing user_subscriptions tables.
 ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS content_watches_used INT NOT NULL DEFAULT 0;

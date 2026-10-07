@@ -22,5 +22,6 @@ ALTER TABLE partner_profiles ADD COLUMN IF NOT EXISTS revenue_share_percentage N
 ALTER TABLE partner_profiles ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE partner_profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE partner_profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE partner_profiles ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_partner_profiles_user ON partner_profiles(user_id);

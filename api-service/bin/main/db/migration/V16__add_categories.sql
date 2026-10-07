@@ -21,6 +21,12 @@ ALTER TABLE categories ADD COLUMN IF NOT EXISTS is_active     BOOLEAN     NOT NU
 ALTER TABLE categories ADD COLUMN IF NOT EXISTS created_at    TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE categories ADD COLUMN IF NOT EXISTS updated_at    TIMESTAMPTZ NOT NULL DEFAULT now();
 
+-- Production's pre-existing categories table had `id` as PRIMARY KEY but without
+-- the gen_random_uuid() default attached — any INSERT that omits `id` (like the
+-- V23 seed) then violates the NOT NULL constraint. Force the default regardless
+-- of whether it was already set correctly or missing entirely.
+ALTER TABLE categories ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
 CREATE INDEX IF NOT EXISTS idx_categories_is_active   ON categories(is_active);
 CREATE INDEX IF NOT EXISTS idx_categories_order       ON categories(display_order);
 

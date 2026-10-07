@@ -18,5 +18,6 @@ ALTER TABLE homepage_sections ADD COLUMN IF NOT EXISTS display_order INTEGER NOT
 ALTER TABLE homepage_sections ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE homepage_sections ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE homepage_sections ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE homepage_sections ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_homepage_sections_order ON homepage_sections(display_order);

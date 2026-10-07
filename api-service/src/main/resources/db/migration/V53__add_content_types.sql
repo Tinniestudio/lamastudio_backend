@@ -20,6 +20,7 @@ ALTER TABLE content_types ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NUL
 ALTER TABLE content_types ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE content_types ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE content_types ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE content_types ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_content_types_is_active ON content_types(is_active);
 CREATE INDEX IF NOT EXISTS idx_content_types_order     ON content_types(display_order);
