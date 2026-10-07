@@ -18,6 +18,20 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
     updated_at    TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 
+-- Guard: backfill any column this no-op CREATE TABLE left missing if the table
+-- already pre-existed (see V16/V18 production drift fix for why).
+ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS name VARCHAR(100) NOT NULL;
+ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS price DECIMAL(10,2) NOT NULL;
+ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS currency VARCHAR(3);
+ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS billing_cycle VARCHAR(20);
+ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS max_devices INT;
+ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS video_quality VARCHAR(20);
+ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS content_limit INT;
+ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
 -- Guard: if the table pre-existed (Hibernate-created), ensure all columns we need are present.
 ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS content_limit INT;
 ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS max_devices   INT;
@@ -38,6 +52,18 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Guard: backfill any column this no-op CREATE TABLE left missing if the table
+-- already pre-existed (see V16/V18 production drift fix for why).
+ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES subscription_plans(id);
+ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE';
+ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;
+ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS end_date TIMESTAMPTZ;
+ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS auto_renew BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS content_watches_used INT NOT NULL DEFAULT 0;
+ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 -- Guard: ensure content_watches_used exists on pre-existing user_subscriptions tables.
 ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS content_watches_used INT NOT NULL DEFAULT 0;
@@ -63,11 +89,11 @@ WHERE NOT EXISTS (SELECT 1 FROM subscription_plans WHERE name = 'GOLD');
 
 -- Triggers (guarded with DROP IF EXISTS to handle pre-existing triggers from Hibernate sessions).
 DROP TRIGGER IF EXISTS trg_subscription_plans_updated_at ON subscription_plans;
-CREATE TRIGGER trg_subscription_plans_updated_at
+CREATE OR REPLACE TRIGGER trg_subscription_plans_updated_at
     BEFORE UPDATE ON subscription_plans
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 DROP TRIGGER IF EXISTS trg_user_subscriptions_updated_at ON user_subscriptions;
-CREATE TRIGGER trg_user_subscriptions_updated_at
+CREATE OR REPLACE TRIGGER trg_user_subscriptions_updated_at
     BEFORE UPDATE ON user_subscriptions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

@@ -1,7 +1,7 @@
 -- Slugified from title (required, unlike Season.title), scoped to season_id — two episodes named
 -- "Pilot" in different seasons/shows can both slug to "pilot" without collision, since the full
 -- URL always carries content+season context alongside the episode slug.
-ALTER TABLE episodes ADD COLUMN slug VARCHAR(280);
+ALTER TABLE episodes ADD COLUMN IF NOT EXISTS slug VARCHAR(280);
 
 CREATE OR REPLACE FUNCTION set_episode_slug() RETURNS TRIGGER AS $$
 DECLARE
@@ -25,7 +25,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_episode_slug
+CREATE OR REPLACE TRIGGER trg_episode_slug
     BEFORE INSERT OR UPDATE OF title ON episodes
     FOR EACH ROW EXECUTE FUNCTION set_episode_slug();
 
@@ -52,4 +52,5 @@ BEGIN
 END $$;
 
 ALTER TABLE episodes ALTER COLUMN slug SET NOT NULL;
+ALTER TABLE episodes DROP CONSTRAINT IF EXISTS uq_episodes_season_slug;
 ALTER TABLE episodes ADD CONSTRAINT uq_episodes_season_slug UNIQUE (season_id, slug);

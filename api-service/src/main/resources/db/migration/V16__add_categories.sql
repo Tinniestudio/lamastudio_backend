@@ -45,6 +45,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_category_slug
+CREATE OR REPLACE TRIGGER trg_category_slug
     BEFORE INSERT OR UPDATE OF name ON categories
     FOR EACH ROW EXECUTE FUNCTION set_category_slug();

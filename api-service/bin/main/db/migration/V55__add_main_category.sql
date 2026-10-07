@@ -1,6 +1,6 @@
 -- Add nullable first, same reasoning as V53's content_type_id: a NOT NULL column can't be added
 -- to a populated table without a default, and the correct value varies per row.
-ALTER TABLE contents ADD COLUMN main_category VARCHAR(20);
+ALTER TABLE contents ADD COLUMN IF NOT EXISTS main_category VARCHAR(20);
 
 -- Priority 1: explicitly tagged "Sermons" (the about-to-be-retired genre category below).
 UPDATE contents c
@@ -36,7 +36,7 @@ WHERE main_category IS NULL;
 
 ALTER TABLE contents ALTER COLUMN main_category SET NOT NULL;
 
-CREATE INDEX idx_content_main_category ON contents(main_category);
+CREATE INDEX IF NOT EXISTS idx_content_main_category ON contents(main_category);
 
 -- Retire the now-redundant genre rows — mainCategory alone expresses "Kids"/"Sermons" going
 -- forward; keeping both would let a title be simultaneously mainCategory=KIDS and

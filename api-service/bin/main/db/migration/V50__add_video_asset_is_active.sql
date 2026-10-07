@@ -1,4 +1,4 @@
-ALTER TABLE video_assets ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE video_assets ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT false;
 
 -- Backfill: for each MOST-SPECIFIC target (episode if set, else season, else content) and
 -- asset_type, mark the most-recently-created READY row active. Partitioning by

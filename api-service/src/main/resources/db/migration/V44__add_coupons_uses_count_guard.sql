@@ -9,5 +9,8 @@
 -- write outright instead of silently over-redeeming the coupon.
 
 ALTER TABLE coupons
+    DROP CONSTRAINT IF EXISTS chk_coupons_uses_count_within_max_uses;
+
+ALTER TABLE coupons
     ADD CONSTRAINT chk_coupons_uses_count_within_max_uses
     CHECK (max_uses IS NULL OR uses_count <= max_uses);

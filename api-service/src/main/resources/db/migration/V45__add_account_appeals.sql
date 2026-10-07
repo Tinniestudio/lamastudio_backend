@@ -13,10 +13,20 @@ CREATE TABLE IF NOT EXISTS account_appeals (
     updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
+-- Guard: backfill any column this no-op CREATE TABLE left missing if the table
+-- already pre-existed (see V16/V18 production drift fix for why).
+ALTER TABLE account_appeals ADD COLUMN IF NOT EXISTS user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE account_appeals ADD COLUMN IF NOT EXISTS reason TEXT NOT NULL;
+ALTER TABLE account_appeals ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'PENDING';
+ALTER TABLE account_appeals ADD COLUMN IF NOT EXISTS reviewed_by UUID REFERENCES admins(id);
+ALTER TABLE account_appeals ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+ALTER TABLE account_appeals ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE account_appeals ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 -- Only one PENDING appeal per user at a time
-CREATE UNIQUE INDEX uq_account_appeal_user_pending
+CREATE UNIQUE INDEX IF NOT EXISTS uq_account_appeal_user_pending
     ON account_appeals(user_id)
     WHERE status = 'PENDING';
 
-CREATE INDEX idx_account_appeals_status ON account_appeals(status);
-CREATE INDEX idx_account_appeals_user   ON account_appeals(user_id);
+CREATE INDEX IF NOT EXISTS idx_account_appeals_status ON account_appeals(status);
+CREATE INDEX IF NOT EXISTS idx_account_appeals_user   ON account_appeals(user_id);
