@@ -10,8 +10,19 @@ CREATE TABLE IF NOT EXISTS categories (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_categories_is_active   ON categories(is_active);
-CREATE INDEX idx_categories_order       ON categories(display_order);
+-- CREATE TABLE IF NOT EXISTS above is a no-op against a pre-existing categories
+-- table (seen in production, whose table predates this column set) — these
+-- ADD COLUMN IF NOT EXISTS calls backfill anything that no-op left missing,
+-- so the migration converges on the same schema regardless of starting state.
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS description   TEXT;
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS poster_url    TEXT;
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS display_order INTEGER     NOT NULL DEFAULT 0;
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS is_active     BOOLEAN     NOT NULL DEFAULT true;
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS created_at    TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS updated_at    TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_categories_is_active   ON categories(is_active);
+CREATE INDEX IF NOT EXISTS idx_categories_order       ON categories(display_order);
 
 CREATE OR REPLACE FUNCTION set_category_slug() RETURNS TRIGGER AS $$
 DECLARE
