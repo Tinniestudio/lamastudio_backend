@@ -227,16 +227,21 @@ class SubscriptionServiceTest {
             when(paymentRepository.findTopByUserIdAndStatusOrderByCreatedAtDesc(userId, PaymentStatus.PENDING))
                 .thenReturn(Optional.of(payment));
 
-            SubscriptionStatusResponse result = service.cancelPayment(userId);
+            service.cancelPayment(userId);
 
-            assertThat(result.getStatus()).isEqualTo(PaymentStatus.CANCELLED.name());
+            // cancelPayment() returns getSubscriptionStatus(userId) — a response about the
+            // user's overall subscription/plan, not the payment itself (its .status field is
+            // "ACTIVE"/"FREE"/"EXPIRED" subscription state, unrelated to PaymentStatus). What
+            // this test actually verifies is the mutation on the payment entity passed through
+            // the mocked repository.
+            assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELLED);
             assertThat(payment.getCancelledAt()).isNotNull();
         }
 
         @Test
         @DisplayName("no pending payment throws ResourceNotFoundException")
         void noPendingPayment_throws() {
-            when(paymentRepository.findByProviderReferenceAndUserId("pi_mine", userId))
+            when(paymentRepository.findTopByUserIdAndStatusOrderByCreatedAtDesc(userId, PaymentStatus.PENDING))
                 .thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.cancelPayment(userId))

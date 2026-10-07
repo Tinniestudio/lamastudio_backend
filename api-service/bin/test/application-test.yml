@@ -42,6 +42,14 @@ app:
   cookie:
     secure: false
     same-site: Lax
+  storage:
+    provider: MINIO
+    bucket: tinniestudio-test
+    region: us-east-1
+    endpoint: http://localhost:9000
+    public-endpoint: http://localhost:9000
+    access-key: test-access-key
+    secret-key: test-secret-key
 
 server:
   servlet:
