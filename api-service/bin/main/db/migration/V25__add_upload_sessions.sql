@@ -32,6 +32,7 @@ ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT 
 ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
 ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE upload_sessions ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_user_id ON upload_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_status  ON upload_sessions(upload_status);

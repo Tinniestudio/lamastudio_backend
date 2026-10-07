@@ -20,6 +20,7 @@ ALTER TABLE job_execution_log ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NU
 ALTER TABLE job_execution_log ADD COLUMN IF NOT EXISTS items_processed INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE job_execution_log ADD COLUMN IF NOT EXISTS error_message TEXT;
 ALTER TABLE job_execution_log ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE job_execution_log ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_job_log_name    ON job_execution_log(job_name);
 CREATE INDEX IF NOT EXISTS idx_job_log_started ON job_execution_log(started_at DESC);

@@ -33,5 +33,6 @@ ALTER TABLE content_cast ADD COLUMN IF NOT EXISTS profile_image_url TEXT;
 ALTER TABLE content_cast ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE content_cast ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE content_cast ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE content_cast ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_content_cast_content ON content_cast(content_id);

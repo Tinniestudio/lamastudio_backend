@@ -24,6 +24,7 @@ ALTER TABLE partner_applications ADD COLUMN IF NOT EXISTS reviewed_by UUID REFER
 ALTER TABLE partner_applications ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
 ALTER TABLE partner_applications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE partner_applications ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE partner_applications ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 -- Only one PENDING application per user; rejected users may re-apply
 CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_app_user_pending

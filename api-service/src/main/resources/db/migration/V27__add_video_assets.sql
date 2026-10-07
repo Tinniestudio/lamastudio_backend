@@ -44,6 +44,7 @@ ALTER TABLE video_assets ADD COLUMN IF NOT EXISTS processing_error TEXT;
 ALTER TABLE video_assets ADD COLUMN IF NOT EXISTS uploaded_by UUID NOT NULL REFERENCES users(id);
 ALTER TABLE video_assets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE video_assets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE video_assets ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE TABLE IF NOT EXISTS video_variants (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -69,6 +70,7 @@ ALTER TABLE video_variants ADD COLUMN IF NOT EXISTS manifest_key VARCHAR(500);
 ALTER TABLE video_variants ADD COLUMN IF NOT EXISTS segment_count INTEGER;
 ALTER TABLE video_variants ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE video_variants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE video_variants ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_video_assets_content_id  ON video_assets(content_id);
 CREATE INDEX IF NOT EXISTS idx_video_assets_episode_id  ON video_assets(episode_id);

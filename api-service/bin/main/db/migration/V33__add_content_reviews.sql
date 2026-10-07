@@ -19,6 +19,7 @@ ALTER TABLE content_reviews ADD COLUMN IF NOT EXISTS body TEXT;
 ALTER TABLE content_reviews ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'APPROVED';
 ALTER TABLE content_reviews ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE content_reviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE content_reviews ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_reviews_content_id ON content_reviews(content_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_user_id    ON content_reviews(user_id);

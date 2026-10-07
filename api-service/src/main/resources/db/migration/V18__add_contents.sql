@@ -44,6 +44,7 @@ ALTER TABLE contents ADD COLUMN IF NOT EXISTS created_by UUID NOT NULL;
 ALTER TABLE contents ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
 ALTER TABLE contents ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE contents ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE contents ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_content_type        ON contents(type);
 CREATE INDEX IF NOT EXISTS idx_content_status      ON contents(status);

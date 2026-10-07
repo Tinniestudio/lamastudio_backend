@@ -20,5 +20,6 @@ ALTER TABLE subtitles ADD COLUMN IF NOT EXISTS format VARCHAR(50);
 ALTER TABLE subtitles ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE subtitles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE subtitles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE subtitles ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_subtitles_video_asset_id ON subtitles(video_asset_id);

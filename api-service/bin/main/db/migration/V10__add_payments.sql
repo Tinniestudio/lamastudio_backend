@@ -35,6 +35,7 @@ ALTER TABLE payments ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10,2);
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS failure_reason TEXT;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE payments ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_payments_user_id         ON payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_payments_subscription_id ON payments(subscription_id);

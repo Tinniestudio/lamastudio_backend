@@ -20,6 +20,7 @@ ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS target_id UUID;
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS reason TEXT;
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS metadata TEXT;
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE audit_logs ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor   ON audit_logs(actor_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_target  ON audit_logs(target_type, target_id);

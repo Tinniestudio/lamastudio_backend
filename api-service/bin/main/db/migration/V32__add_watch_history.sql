@@ -20,6 +20,7 @@ ALTER TABLE watch_history ADD COLUMN IF NOT EXISTS progress_seconds INTEGER;
 ALTER TABLE watch_history ADD COLUMN IF NOT EXISTS duration_seconds INTEGER;
 ALTER TABLE watch_history ADD COLUMN IF NOT EXISTS device_type VARCHAR(50);
 ALTER TABLE watch_history ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE watch_history ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_watch_history_user_id ON watch_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_watch_history_user_watched ON watch_history(user_id, watched_at DESC);

@@ -22,6 +22,7 @@ ALTER TABLE media_files ADD COLUMN IF NOT EXISTS mime_type VARCHAR(100);
 ALTER TABLE media_files ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT;
 ALTER TABLE media_files ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE media_files ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE media_files ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_media_files_upload_session_id ON media_files(upload_session_id);
 CREATE INDEX IF NOT EXISTS idx_media_files_user_id            ON media_files(user_id);

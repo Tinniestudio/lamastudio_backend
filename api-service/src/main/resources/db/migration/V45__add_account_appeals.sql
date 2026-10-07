@@ -22,6 +22,7 @@ ALTER TABLE account_appeals ADD COLUMN IF NOT EXISTS reviewed_by UUID REFERENCES
 ALTER TABLE account_appeals ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
 ALTER TABLE account_appeals ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE account_appeals ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE account_appeals ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 -- Only one PENDING appeal per user at a time
 CREATE UNIQUE INDEX IF NOT EXISTS uq_account_appeal_user_pending
