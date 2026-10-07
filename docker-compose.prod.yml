@@ -17,11 +17,11 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
-      - tinniestudio-prod
+      - dokploy-network
 
 networks:
-  tinniestudio-prod:
-    driver: bridge
+  dokploy-network:
+    external: true
 
 volumes:
   rabbitmq_data:
