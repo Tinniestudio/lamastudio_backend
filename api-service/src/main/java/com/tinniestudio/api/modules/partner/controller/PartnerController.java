@@ -36,7 +36,7 @@ public class PartnerController {
     private final PartnerApplicationService applicationService;
 
     @Operation(summary = "Apply to become a partner")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("permitAll()")
     @RateLimit(maxRequests = 3, windowMinutes = 60, keyStrategy = "USER_OR_IP",
                errorMessage = "Too many applications. Please try again later.")
     @PostMapping("/applications")
