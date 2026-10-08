@@ -23,6 +23,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * requirement and still 401 in the real app if SecurityConfig.PUBLIC_ENDPOINTS doesn't list it
  * (the filter chain's trailing .anyRequest().authenticated() catches it first). WebMvcTest-based
  * controller tests use addFilters=false and can't catch this — only a real filter chain can.
+ *
+ * This test exercises the FULL anonymous-apply flow end to end, so it depends on BOTH the
+ * auth-gate change (this task) AND the service-layer change that lets apply() actually handle
+ * a null principal by creating an account (the next task in this plan) — it is expected to
+ * still fail with 401 (not the 500 this whole feature guards against, but also not yet the
+ * 201 it ultimately proves) until that second change lands. Don't expect this test to go green
+ * from this commit's changes alone.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
