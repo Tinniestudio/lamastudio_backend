@@ -8,6 +8,7 @@ import com.tinniestudio.api.modules.partner.service.PartnerPromotionService;
 import com.tinniestudio.api.shared.entity.*;
 import com.tinniestudio.api.shared.entity.DomainEnums.PartnerApplicationStatus;
 import com.tinniestudio.api.shared.exception.BadRequestException;
+import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -300,5 +301,40 @@ class PartnerApplicationServiceTest {
             eq("PARTNER_APPLICATION"), eq(appId),
             eq("Incomplete submission"), isNull()
         );
+    }
+
+    @Test
+    void getByUserId_returnsApplication_whenOneExists() {
+        UUID userId = UUID.randomUUID();
+        PartnerApplication app = makePendingApp(UUID.randomUUID(), userId);
+        when(applicationRepo.findByUserId(userId)).thenReturn(java.util.Optional.of(app));
+
+        PartnerApplicationResponse result = applicationService.getByUserId(userId);
+
+        assertThat(result.status()).isEqualTo("PENDING");
+        assertThat(result.userId()).isEqualTo(userId);
+    }
+
+    @Test
+    void getByUserId_throwsResourceNotFound_whenNoneExists() {
+        UUID userId = UUID.randomUUID();
+        when(applicationRepo.findByUserId(userId)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> applicationService.getByUserId(userId))
+            .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getByUserId_includesRejectionReason_whenRejected() {
+        UUID userId = UUID.randomUUID();
+        PartnerApplication app = makePendingApp(UUID.randomUUID(), userId);
+        app.setStatus(PartnerApplicationStatus.REJECTED);
+        app.setRejectionReason("Insufficient detail");
+        when(applicationRepo.findByUserId(userId)).thenReturn(java.util.Optional.of(app));
+
+        PartnerApplicationResponse result = applicationService.getByUserId(userId);
+
+        assertThat(result.status()).isEqualTo("REJECTED");
+        assertThat(result.rejectionReason()).isEqualTo("Insufficient detail");
     }
 }

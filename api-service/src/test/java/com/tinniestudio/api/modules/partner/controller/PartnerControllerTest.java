@@ -110,6 +110,27 @@ class PartnerControllerTest {
     }
 
     @Test
+    @WithMockUser(username = PARTNER_ID, roles = "USER")
+    void getMyApplication_returns200() throws Exception {
+        when(applicationService.getByUserId(any())).thenReturn(sampleApplication());
+
+        mockMvc.perform(get("/partners/applications/me"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.status").value("PENDING"));
+    }
+
+    @Test
+    void getMyApplication_requiresAuth_returns401WithoutPrincipal() throws Exception {
+        // No @WithMockUser — confirms this endpoint, unlike /applications itself, still
+        // requires a real session (an anonymous visitor has no application to check).
+        // This is a WebMvcTest with addFilters=false, so it only proves the controller's
+        // own @PreAuthorize("isAuthenticated()") rejects a null-principal invocation —
+        // not a substitute for a real-filter-chain test.
+        mockMvc.perform(get("/partners/applications/me"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @WithMockUser(username = PARTNER_ID, roles = "PARTNER")
     void getProfile_returns200() throws Exception {
         when(partnerService.getProfile(any())).thenReturn(sampleProfile());

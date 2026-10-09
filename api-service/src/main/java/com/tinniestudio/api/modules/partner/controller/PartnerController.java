@@ -48,6 +48,15 @@ public class PartnerController {
         return ResponseEntity.status(HttpStatus.CREATED).body(applicationService.apply(principal, req, response));
     }
 
+    @Operation(summary = "Get the authenticated user's own partner application, if any")
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/applications/me")
+    public ResponseEntity<PartnerApplicationResponse> getMyApplication(
+            @AuthenticationPrincipal UserDetails principal) {
+        UUID userId = CurrentUser.id(principal);
+        return ResponseEntity.ok(applicationService.getByUserId(userId));
+    }
+
     @Operation(summary = "Get own partner profile")
     @GetMapping("/profile")
     public ResponseEntity<PartnerProfileResponse> getProfile(
