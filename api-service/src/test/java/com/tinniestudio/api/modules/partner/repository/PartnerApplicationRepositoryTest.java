@@ -1,9 +1,7 @@
 package com.tinniestudio.api.modules.partner.repository;
 
-import com.tinniestudio.api.modules.role.repository.RoleRepository;
 import com.tinniestudio.api.shared.entity.DomainEnums.PartnerApplicationStatus;
 import com.tinniestudio.api.shared.entity.PartnerApplication;
-import com.tinniestudio.api.shared.entity.RoleName;
 import com.tinniestudio.api.shared.entity.User;
 import com.tinniestudio.api.modules.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -54,13 +52,11 @@ class PartnerApplicationRepositoryTest {
 
     @Autowired private PartnerApplicationRepository applicationRepo;
     @Autowired private UserRepository userRepo;
-    @Autowired private RoleRepository roleRepo;
 
     private UUID newUser() {
         User user = new User();
         user.setEmail("repo-test-" + System.nanoTime() + "@example.com");
         user.setPasswordHash("irrelevant");
-        roleRepo.findByName(RoleName.ROLE_USER).ifPresent(user::addRole);
         return userRepo.saveAndFlush(user).getId();
     }
 
