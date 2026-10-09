@@ -10,6 +10,7 @@ import com.tinniestudio.api.modules.user.service.UserDetailsServiceImpl;
 import com.tinniestudio.api.shared.security.jwt.JwtAuthenticationFilter;
 import com.tinniestudio.api.shared.security.jwt.JwtTokenProvider;
 import com.tinniestudio.api.modules.partner.service.PartnerService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -128,6 +129,22 @@ class PartnerControllerTest {
         // not a substitute for a real-filter-chain test.
         mockMvc.perform(get("/partners/applications/me"))
             .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("getMyApplication is annotated isAuthenticated() — not the class-level " +
+            "hasRole('PARTNER') default, which would lock out the very applicants this endpoint " +
+            "exists for. This is a structural check on the security annotation itself: @WebMvcTest " +
+            "doesn't load SecurityConfig's @EnableMethodSecurity, so @PreAuthorize isn't actually " +
+            "evaluated in this slice — an end-to-end 401/403 assertion here would silently pass " +
+            "regardless of the annotation's value.")
+    void getMyApplication_isAnnotatedIsAuthenticated() throws Exception {
+        var method = PartnerController.class.getMethod(
+                "getMyApplication", org.springframework.security.core.userdetails.UserDetails.class);
+        var preAuthorize = method.getAnnotation(org.springframework.security.access.prepost.PreAuthorize.class);
+
+        org.assertj.core.api.Assertions.assertThat(preAuthorize).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(preAuthorize.value()).isEqualTo("isAuthenticated()");
     }
 
     @Test
