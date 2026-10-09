@@ -13,6 +13,5 @@ import java.util.UUID;
 public interface PartnerApplicationRepository extends JpaRepository<PartnerApplication, UUID> {
     Page<PartnerApplication> findByStatusOrderByCreatedAtDesc(PartnerApplicationStatus status, Pageable pageable);
     Page<PartnerApplication> findAllByOrderByCreatedAtDesc(Pageable pageable);
-    boolean existsByUserIdAndStatus(UUID userId, PartnerApplicationStatus status);
     Optional<PartnerApplication> findByUserId(UUID userId);
 }

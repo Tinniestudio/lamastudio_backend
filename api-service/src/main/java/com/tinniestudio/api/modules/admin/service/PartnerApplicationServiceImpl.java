@@ -86,8 +86,15 @@ public class PartnerApplicationServiceImpl implements PartnerApplicationService 
     @Override
     @Transactional(readOnly = true)
     public PartnerApplicationResponse getByUserId(UUID userId) {
+        // Self-service: this DTO is otherwise only ever returned to admins (list/approve/
+        // reject), so reviewedBy (an admin's raw UUID) is nulled out here before handing it
+        // back to the applicant themselves — reviewedAt stays, since "when" is fine to show,
+        // "which admin" isn't.
         return applicationRepo.findByUserId(userId)
             .map(PartnerApplicationResponse::from)
+            .map(r -> new PartnerApplicationResponse(
+                r.id(), r.userId(), r.companyName(), r.description(), r.websiteUrl(),
+                r.status(), r.rejectionReason(), null, r.reviewedAt(), r.createdAt()))
             .orElseThrow(() -> new ResourceNotFoundException("No application found"));
     }
 
