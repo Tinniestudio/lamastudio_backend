@@ -15,6 +15,7 @@ import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
 import com.tinniestudio.api.shared.security.CurrentUser;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.util.StringUtils;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -42,7 +43,7 @@ public class PartnerApplicationServiceImpl implements PartnerApplicationService 
     @Transactional
     public PartnerApplicationResponse apply(UserDetails principal, PartnerApplicationRequest req, HttpServletResponse response) {
         UUID userId;
-        if (principal != null && req.getEmail().isEmpty() ) {
+        if (principal != null && !StringUtils.hasText(req.getEmail())) {
             userId = CurrentUser.id(principal);
         } else {
             RegisterRequest registerReq = new RegisterRequest();

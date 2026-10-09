@@ -13,6 +13,9 @@
         </root>
         <logger name="org.springframework.security" level="INFO"/>
         <logger name="org.hibernate.SQL" level="DEBUG"/>
+        <!-- Bound SQL parameter values — local only. This prints the literal values sent to
+             the DB (password hashes, emails, tokens, reset codes...). Never enable in prod. -->
+        <logger name="org.hibernate.orm.jdbc.bind" level="TRACE"/>
         <logger name="com.tinniestudio" level="DEBUG"/>
     </springProfile>
 
@@ -29,6 +32,10 @@
         </root>
         <logger name="com.tinniestudio" level="INFO"/>
         <logger name="org.springframework.security" level="WARN"/>
+        <!-- Explicitly OFF, not just "not set to TRACE" — these must never emit in prod
+             regardless of what root/application.yml level is active. -->
+        <logger name="org.hibernate.SQL" level="OFF"/>
+        <logger name="org.hibernate.orm.jdbc.bind" level="OFF"/>
     </springProfile>
 
 </configuration>

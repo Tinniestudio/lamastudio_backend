@@ -183,14 +183,11 @@ server:
     include-message: never
     include-binding-errors: never
 
-logging:
-  level:
-    com.tinniestudio: DEBUG
-    org.springframework.security: INFO
-    # SQL + bound-parameter logging — the single most useful thing missing from DEBUG-on-our-own-
-    # package-only: without it, tracking down a query bug means adding temporary log statements.
-    org.hibernate.SQL: DEBUG
-    org.hibernate.orm.jdbc.bind: TRACE
+# Per-environment logger levels live entirely in logback-spring.xml's <springProfile> blocks,
+# not here. logging.level.* properties are applied by Spring Boot *after* logback-spring.xml
+# loads, so any logger named in this file would silently override — not merge with — whatever
+# level the active profile set, defeating the dev/prod split (this previously forced TRACE-level
+# SQL bind-parameter logging, which prints raw passwords/tokens, to stay active in prod).
 
 springdoc:
   api-docs:

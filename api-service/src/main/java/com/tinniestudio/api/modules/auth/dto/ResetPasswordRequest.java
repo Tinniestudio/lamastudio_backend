@@ -4,9 +4,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
+// @Getter/@Setter only — not @Data: @Data's generated toString() would print the raw
+// token/password if this object is ever logged (e.g. TRACE-level MVC argument-resolution logging).
+@Getter
+@Setter
 @Schema(name = "ResetPasswordRequest", description = "Token from reset email plus the desired new password")
 public class ResetPasswordRequest {
 
