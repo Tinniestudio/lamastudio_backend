@@ -122,11 +122,12 @@ class PartnerControllerTest {
 
     @Test
     void getMyApplication_requiresAuth_returns401WithoutPrincipal() throws Exception {
-        // No @WithMockUser — confirms this endpoint, unlike /applications itself, still
-        // requires a real session (an anonymous visitor has no application to check).
-        // This is a WebMvcTest with addFilters=false, so it only proves the controller's
-        // own @PreAuthorize("isAuthenticated()") rejects a null-principal invocation —
-        // not a substitute for a real-filter-chain test.
+        // No @WithMockUser. This is a WebMvcTest with addFilters=false, so @PreAuthorize is
+        // never evaluated here (see getMyApplication_isAnnotatedIsAuthenticated for that
+        // coverage) — the 401 below comes from CurrentUser.id(principal) throwing
+        // AuthenticationCredentialsNotFoundException on a null principal, caught by
+        // GlobalExceptionHandler. Real regression guard on that null-handling, just not on
+        // the annotation.
         mockMvc.perform(get("/partners/applications/me"))
             .andExpect(status().isUnauthorized());
     }
