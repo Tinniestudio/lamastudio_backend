@@ -25,6 +25,7 @@ buildNumber.properties
 .gradle/
 build/
 out/
+bin/
 
 # =========================
 # 🚫 Logs
