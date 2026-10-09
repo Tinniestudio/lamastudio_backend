@@ -28,6 +28,7 @@ class PartnerApplicationServiceTest {
     @Mock PartnerApplicationRepository applicationRepo;
     @Mock PartnerPromotionService partnerPromotionService;
     @Mock AuditLogService auditLogService;
+    @Mock com.tinniestudio.api.modules.auth.service.AuthService authService;
     @InjectMocks PartnerApplicationServiceImpl applicationService;
 
     private PartnerApplication makePendingApp(UUID appId, UUID userId) {
@@ -39,10 +40,18 @@ class PartnerApplicationServiceTest {
         return app;
     }
 
+    private org.springframework.security.core.userdetails.UserDetails principalFor(UUID userId) {
+        org.springframework.security.core.userdetails.UserDetails principal =
+            mock(org.springframework.security.core.userdetails.UserDetails.class);
+        lenient().when(principal.getUsername()).thenReturn(userId.toString());
+        return principal;
+    }
+
     @Test
-    void apply_createsPendingApplication() {
+    void apply_authenticated_createsPendingApplication() {
         UUID userId = UUID.randomUUID();
-        when(applicationRepo.existsByUserIdAndStatus(userId, PartnerApplicationStatus.PENDING)).thenReturn(false);
+        org.springframework.security.core.userdetails.UserDetails principal = principalFor(userId);
+        when(applicationRepo.findByUserId(userId)).thenReturn(java.util.Optional.empty());
         when(applicationRepo.save(any())).thenAnswer(i -> {
             PartnerApplication saved = i.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
@@ -53,22 +62,116 @@ class PartnerApplicationServiceTest {
         req.setCompanyName("Acme Corp");
         req.setDescription("We make great content");
 
-        PartnerApplicationResponse result = applicationService.apply(userId, req);
+        PartnerApplicationResponse result = applicationService.apply(principal, req, mock(jakarta.servlet.http.HttpServletResponse.class));
 
         assertThat(result.status()).isEqualTo("PENDING");
         assertThat(result.companyName()).isEqualTo("Acme Corp");
+        verify(authService, never()).register(any(), any());
     }
 
     @Test
-    void apply_alreadyPending_throwsBadRequest() {
+    void apply_authenticated_alreadyPending_throwsBadRequest() {
         UUID userId = UUID.randomUUID();
-        when(applicationRepo.existsByUserIdAndStatus(userId, PartnerApplicationStatus.PENDING)).thenReturn(true);
+        org.springframework.security.core.userdetails.UserDetails principal = principalFor(userId);
+        PartnerApplication existing = makePendingApp(UUID.randomUUID(), userId);
+        when(applicationRepo.findByUserId(userId)).thenReturn(java.util.Optional.of(existing));
 
         PartnerApplicationRequest req = new PartnerApplicationRequest();
         req.setCompanyName("Acme");
 
-        assertThatThrownBy(() -> applicationService.apply(userId, req))
+        assertThatThrownBy(() -> applicationService.apply(principal, req, mock(jakarta.servlet.http.HttpServletResponse.class)))
             .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void apply_authenticated_alreadyApproved_throwsBadRequest() {
+        UUID userId = UUID.randomUUID();
+        org.springframework.security.core.userdetails.UserDetails principal = principalFor(userId);
+        PartnerApplication existing = makePendingApp(UUID.randomUUID(), userId);
+        existing.setStatus(PartnerApplicationStatus.APPROVED);
+        when(applicationRepo.findByUserId(userId)).thenReturn(java.util.Optional.of(existing));
+
+        PartnerApplicationRequest req = new PartnerApplicationRequest();
+        req.setCompanyName("Acme");
+
+        assertThatThrownBy(() -> applicationService.apply(principal, req, mock(jakarta.servlet.http.HttpServletResponse.class)))
+            .isInstanceOf(BadRequestException.class)
+            .hasMessageContaining("already a partner");
+    }
+
+    @Test
+    void apply_authenticated_previouslyRejected_resetsAndReusesTheSameRow() {
+        UUID userId = UUID.randomUUID();
+        org.springframework.security.core.userdetails.UserDetails principal = principalFor(userId);
+        UUID appId = UUID.randomUUID();
+        PartnerApplication existing = makePendingApp(appId, userId);
+        existing.setStatus(PartnerApplicationStatus.REJECTED);
+        existing.setRejectionReason("Not enough detail");
+        existing.setReviewedBy(UUID.randomUUID());
+        existing.setReviewedAt(java.time.Instant.now());
+        when(applicationRepo.findByUserId(userId)).thenReturn(java.util.Optional.of(existing));
+        when(applicationRepo.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        PartnerApplicationRequest req = new PartnerApplicationRequest();
+        req.setCompanyName("Acme Corp Reapplied");
+
+        PartnerApplicationResponse result = applicationService.apply(principal, req, mock(jakarta.servlet.http.HttpServletResponse.class));
+
+        assertThat(result.id()).isEqualTo(appId);
+        assertThat(result.status()).isEqualTo("PENDING");
+        assertThat(result.companyName()).isEqualTo("Acme Corp Reapplied");
+        assertThat(result.rejectionReason()).isNull();
+        assertThat(existing.getReviewedBy()).isNull();
+        assertThat(existing.getReviewedAt()).isNull();
+        verify(applicationRepo, times(1)).save(any());
+    }
+
+    @Test
+    void apply_anonymous_createsAccountViaAuthServiceThenApplication() {
+        UUID newUserId = UUID.randomUUID();
+        var authResponse = com.tinniestudio.api.modules.auth.user.dto.AuthProfileResponse.builder()
+            .userId(newUserId).email("new-partner@example.com").build();
+        when(authService.register(any(), any())).thenReturn(authResponse);
+        when(applicationRepo.findByUserId(newUserId)).thenReturn(java.util.Optional.empty());
+        when(applicationRepo.save(any())).thenAnswer(i -> {
+            PartnerApplication saved = i.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            return saved;
+        });
+
+        PartnerApplicationRequest req = new PartnerApplicationRequest();
+        req.setCompanyName("New Co");
+        req.setEmail("new-partner@example.com");
+        req.setPassword("Str0ng!Pass");
+        req.setFirstName("New");
+        req.setLastName("Partner");
+
+        PartnerApplicationResponse result = applicationService.apply(null, req, mock(jakarta.servlet.http.HttpServletResponse.class));
+
+        assertThat(result.companyName()).isEqualTo("New Co");
+        assertThat(result.userId()).isEqualTo(newUserId);
+        verify(authService).register(argThat(r ->
+            r.getEmail().equals("new-partner@example.com") && r.getPassword().equals("Str0ng!Pass")
+        ), any());
+    }
+
+    @Test
+    void apply_anonymous_duplicateEmail_bubblesUpEmailAlreadyExistsException() {
+        when(authService.register(any(), any()))
+            .thenThrow(new com.tinniestudio.api.modules.auth.exception.EmailAlreadyExistsException(
+                "Email address is already registered"));
+
+        PartnerApplicationRequest req = new PartnerApplicationRequest();
+        req.setCompanyName("New Co");
+        req.setEmail("existing@example.com");
+        req.setPassword("Str0ng!Pass");
+        req.setFirstName("New");
+        req.setLastName("Partner");
+
+        assertThatThrownBy(() -> applicationService.apply(null, req, mock(jakarta.servlet.http.HttpServletResponse.class)))
+            .isInstanceOf(com.tinniestudio.api.modules.auth.exception.EmailAlreadyExistsException.class);
+
+        verify(applicationRepo, never()).save(any());
     }
 
     @Test

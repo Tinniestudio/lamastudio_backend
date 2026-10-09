@@ -11,6 +11,7 @@ import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import com.tinniestudio.api.shared.ratelimit.RateLimit;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -42,9 +43,9 @@ public class PartnerController {
     @PostMapping("/applications")
     public ResponseEntity<PartnerApplicationResponse> apply(
             @AuthenticationPrincipal UserDetails principal,
-            @Valid @RequestBody PartnerApplicationRequest req) {
-        UUID userId = CurrentUser.id(principal);
-        return ResponseEntity.status(HttpStatus.CREATED).body(applicationService.apply(userId, req));
+            @Valid @RequestBody PartnerApplicationRequest req,
+            HttpServletResponse response) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(applicationService.apply(principal, req, response));
     }
 
     @Operation(summary = "Get own partner profile")

@@ -80,8 +80,28 @@ class PartnerControllerTest {
         req.setDescription("We make great content");
         req.setWebsiteUrl("https://acme.com");
 
-        when(applicationService.apply(any(), any())).thenReturn(sampleApplication());
+        when(applicationService.apply(any(), any(), any())).thenReturn(sampleApplication());
 
+        mockMvc.perform(post("/partners/applications")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.data.companyName").value("Acme Corp"));
+    }
+
+    @Test
+    void apply_anonymous_returns201() throws Exception {
+        PartnerApplicationRequest req = new PartnerApplicationRequest();
+        req.setCompanyName("Acme Corp");
+        req.setEmail("anon@example.com");
+        req.setPassword("Str0ng!Pass");
+        req.setFirstName("Anon");
+        req.setLastName("Applicant");
+
+        when(applicationService.apply(any(), any(), any())).thenReturn(sampleApplication());
+
+        // Deliberately no @WithMockUser — proves this endpoint's controller layer doesn't
+        // require a populated principal to execute.
         mockMvc.perform(post("/partners/applications")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
