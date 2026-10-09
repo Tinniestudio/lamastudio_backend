@@ -42,7 +42,7 @@ public class PartnerApplicationServiceImpl implements PartnerApplicationService 
     @Transactional
     public PartnerApplicationResponse apply(UserDetails principal, PartnerApplicationRequest req, HttpServletResponse response) {
         UUID userId;
-        if (principal != null) {
+        if (principal != null && req.getEmail().isEmpty() ) {
             userId = CurrentUser.id(principal);
         } else {
             RegisterRequest registerReq = new RegisterRequest();
