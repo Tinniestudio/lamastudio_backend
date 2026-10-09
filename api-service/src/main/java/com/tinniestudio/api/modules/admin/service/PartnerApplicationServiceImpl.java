@@ -12,6 +12,7 @@ import com.tinniestudio.api.shared.entity.*;
 import com.tinniestudio.api.shared.entity.DomainEnums.PartnerApplicationStatus;
 import com.tinniestudio.api.shared.exception.BadRequestException;
 import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
+import com.tinniestudio.api.shared.security.CurrentUser;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -32,12 +33,17 @@ public class PartnerApplicationServiceImpl implements PartnerApplicationService 
     private final AuditLogService auditLogService;
     private final AuthService authService;
 
+    // NOTE: authService.register() (anonymous branch below) sends a verification email and
+    // writes auth cookies onto `response` — neither is transactional, so if anything after it
+    // in this same @Transactional method were to throw, the User/application rows would roll
+    // back but the email/cookies would already be out. Keep whatever runs after register()
+    // minimal (today: a repo lookup + single save) so that window stays negligible.
     @Override
     @Transactional
     public PartnerApplicationResponse apply(UserDetails principal, PartnerApplicationRequest req, HttpServletResponse response) {
         UUID userId;
         if (principal != null) {
-            userId = com.tinniestudio.api.shared.security.CurrentUser.id(principal);
+            userId = CurrentUser.id(principal);
         } else {
             RegisterRequest registerReq = new RegisterRequest();
             registerReq.setEmail(req.getEmail());
