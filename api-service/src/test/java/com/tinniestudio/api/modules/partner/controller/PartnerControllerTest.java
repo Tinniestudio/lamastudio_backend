@@ -10,6 +10,7 @@ import com.tinniestudio.api.modules.user.service.UserDetailsServiceImpl;
 import com.tinniestudio.api.shared.security.jwt.JwtAuthenticationFilter;
 import com.tinniestudio.api.shared.security.jwt.JwtTokenProvider;
 import com.tinniestudio.api.modules.partner.service.PartnerService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -80,13 +81,71 @@ class PartnerControllerTest {
         req.setDescription("We make great content");
         req.setWebsiteUrl("https://acme.com");
 
-        when(applicationService.apply(any(), any())).thenReturn(sampleApplication());
+        when(applicationService.apply(any(), any(), any())).thenReturn(sampleApplication());
 
         mockMvc.perform(post("/partners/applications")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.data.companyName").value("Acme Corp"));
+    }
+
+    @Test
+    void apply_anonymous_returns201() throws Exception {
+        PartnerApplicationRequest req = new PartnerApplicationRequest();
+        req.setCompanyName("Acme Corp");
+        req.setEmail("anon@example.com");
+        req.setPassword("Str0ng!Pass");
+        req.setFirstName("Anon");
+        req.setLastName("Applicant");
+
+        when(applicationService.apply(any(), any(), any())).thenReturn(sampleApplication());
+
+        // Deliberately no @WithMockUser — proves this endpoint's controller layer doesn't
+        // require a populated principal to execute.
+        mockMvc.perform(post("/partners/applications")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.data.companyName").value("Acme Corp"));
+    }
+
+    @Test
+    @WithMockUser(username = PARTNER_ID, roles = "USER")
+    void getMyApplication_returns200() throws Exception {
+        when(applicationService.getByUserId(any())).thenReturn(sampleApplication());
+
+        mockMvc.perform(get("/partners/applications/me"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.status").value("PENDING"));
+    }
+
+    @Test
+    void getMyApplication_requiresAuth_returns401WithoutPrincipal() throws Exception {
+        // No @WithMockUser. This is a WebMvcTest with addFilters=false, so @PreAuthorize is
+        // never evaluated here (see getMyApplication_isAnnotatedIsAuthenticated for that
+        // coverage) — the 401 below comes from CurrentUser.id(principal) throwing
+        // AuthenticationCredentialsNotFoundException on a null principal, caught by
+        // GlobalExceptionHandler. Real regression guard on that null-handling, just not on
+        // the annotation.
+        mockMvc.perform(get("/partners/applications/me"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("getMyApplication is annotated isAuthenticated() — not the class-level " +
+            "hasRole('PARTNER') default, which would lock out the very applicants this endpoint " +
+            "exists for. This is a structural check on the security annotation itself: @WebMvcTest " +
+            "doesn't load SecurityConfig's @EnableMethodSecurity, so @PreAuthorize isn't actually " +
+            "evaluated in this slice — an end-to-end 401/403 assertion here would silently pass " +
+            "regardless of the annotation's value.")
+    void getMyApplication_isAnnotatedIsAuthenticated() throws Exception {
+        var method = PartnerController.class.getMethod(
+                "getMyApplication", org.springframework.security.core.userdetails.UserDetails.class);
+        var preAuthorize = method.getAnnotation(org.springframework.security.access.prepost.PreAuthorize.class);
+
+        org.assertj.core.api.Assertions.assertThat(preAuthorize).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(preAuthorize.value()).isEqualTo("isAuthenticated()");
     }
 
     @Test

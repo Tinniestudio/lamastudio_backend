@@ -5,16 +5,23 @@ import com.tinniestudio.api.modules.admin.dto.RejectApplicationRequest;
 import com.tinniestudio.api.modules.partner.dto.PartnerApplicationRequest;
 import com.tinniestudio.api.modules.partner.repository.PartnerApplicationRepository;
 import com.tinniestudio.api.modules.partner.service.PartnerPromotionService;
+import com.tinniestudio.api.modules.auth.dto.RegisterRequest;
+import com.tinniestudio.api.modules.auth.service.AuthService;
+import com.tinniestudio.api.modules.auth.user.dto.AuthProfileResponse;
 import com.tinniestudio.api.shared.entity.*;
 import com.tinniestudio.api.shared.entity.DomainEnums.PartnerApplicationStatus;
 import com.tinniestudio.api.shared.exception.BadRequestException;
 import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
+import com.tinniestudio.api.shared.security.CurrentUser;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -24,19 +31,71 @@ public class PartnerApplicationServiceImpl implements PartnerApplicationService 
     private final PartnerApplicationRepository applicationRepo;
     private final PartnerPromotionService partnerPromotionService;
     private final AuditLogService auditLogService;
+    private final AuthService authService;
 
+    // NOTE: authService.register() (anonymous branch below) sends a verification email and
+    // writes auth cookies onto `response` — neither is transactional, so if anything after it
+    // in this same @Transactional method were to throw, the User/application rows would roll
+    // back but the email/cookies would already be out. Keep whatever runs after register()
+    // minimal (today: a repo lookup + single save) so that window stays negligible.
     @Override
     @Transactional
-    public PartnerApplicationResponse apply(UUID userId, PartnerApplicationRequest req) {
-        if (applicationRepo.existsByUserIdAndStatus(userId, PartnerApplicationStatus.PENDING)) {
-            throw new BadRequestException("A pending partner application already exists");
+    public PartnerApplicationResponse apply(UserDetails principal, PartnerApplicationRequest req, HttpServletResponse response) {
+        UUID userId;
+        if (principal != null) {
+            userId = CurrentUser.id(principal);
+        } else {
+            RegisterRequest registerReq = new RegisterRequest();
+            registerReq.setEmail(req.getEmail());
+            registerReq.setPassword(req.getPassword());
+            registerReq.setFirstName(req.getFirstName());
+            registerReq.setLastName(req.getLastName());
+            AuthProfileResponse newAccount = authService.register(registerReq, response);
+            userId = newAccount.getUserId();
         }
+
+        Optional<PartnerApplication> existing = applicationRepo.findByUserId(userId);
+        if (existing.isPresent()) {
+            PartnerApplicationStatus status = existing.get().getStatus();
+            if (status == PartnerApplicationStatus.PENDING) {
+                throw new BadRequestException("A pending partner application already exists");
+            }
+            if (status == PartnerApplicationStatus.APPROVED) {
+                throw new BadRequestException("You are already a partner");
+            }
+            // REJECTED: reset and reuse the same row
+            PartnerApplication app = existing.get();
+            app.setCompanyName(req.getCompanyName());
+            app.setDescription(req.getDescription());
+            app.setWebsiteUrl(req.getWebsiteUrl());
+            app.setStatus(PartnerApplicationStatus.PENDING);
+            app.setRejectionReason(null);
+            app.setReviewedBy(null);
+            app.setReviewedAt(null);
+            return PartnerApplicationResponse.from(applicationRepo.save(app));
+        }
+
         PartnerApplication app = new PartnerApplication();
         app.setUserId(userId);
         app.setCompanyName(req.getCompanyName());
         app.setDescription(req.getDescription());
         app.setWebsiteUrl(req.getWebsiteUrl());
         return PartnerApplicationResponse.from(applicationRepo.save(app));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PartnerApplicationResponse getByUserId(UUID userId) {
+        // Self-service: this DTO is otherwise only ever returned to admins (list/approve/
+        // reject), so reviewedBy (an admin's raw UUID) is nulled out here before handing it
+        // back to the applicant themselves — reviewedAt stays, since "when" is fine to show,
+        // "which admin" isn't.
+        return applicationRepo.findByUserId(userId)
+            .map(PartnerApplicationResponse::from)
+            .map(r -> new PartnerApplicationResponse(
+                r.id(), r.userId(), r.companyName(), r.description(), r.websiteUrl(),
+                r.status(), r.rejectionReason(), null, r.reviewedAt(), r.createdAt()))
+            .orElseThrow(() -> new ResourceNotFoundException("No application found"));
     }
 
     @Override

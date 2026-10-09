@@ -195,6 +195,8 @@ public class SecurityConfig {
         "/api/v1/playback/manifest/season/*/trailer",
         "/playback/manifest/episode/*/trailer",
         "/api/v1/playback/manifest/episode/*/trailer",
+        "/partners/applications",
+        "/api/v1/partners/applications",
         "/webhooks/stripe",
         "/api/v1/webhooks/stripe",
         "/swagger-ui.html",

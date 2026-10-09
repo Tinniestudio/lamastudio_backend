@@ -11,6 +11,7 @@ import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import com.tinniestudio.api.shared.ratelimit.RateLimit;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -36,15 +37,24 @@ public class PartnerController {
     private final PartnerApplicationService applicationService;
 
     @Operation(summary = "Apply to become a partner")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("permitAll()")
     @RateLimit(maxRequests = 3, windowMinutes = 60, keyStrategy = "USER_OR_IP",
                errorMessage = "Too many applications. Please try again later.")
     @PostMapping("/applications")
     public ResponseEntity<PartnerApplicationResponse> apply(
             @AuthenticationPrincipal UserDetails principal,
-            @Valid @RequestBody PartnerApplicationRequest req) {
+            @Valid @RequestBody PartnerApplicationRequest req,
+            HttpServletResponse response) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(applicationService.apply(principal, req, response));
+    }
+
+    @Operation(summary = "Get the authenticated user's own partner application, if any")
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/applications/me")
+    public ResponseEntity<PartnerApplicationResponse> getMyApplication(
+            @AuthenticationPrincipal UserDetails principal) {
         UUID userId = CurrentUser.id(principal);
-        return ResponseEntity.status(HttpStatus.CREATED).body(applicationService.apply(userId, req));
+        return ResponseEntity.ok(applicationService.getByUserId(userId));
     }
 
     @Operation(summary = "Get own partner profile")
