@@ -259,7 +259,7 @@ git commit -m "feat(upload): return cdnUrl in CompleteUploadResponse for every u
 - Modify: `api-service/src/main/resources/application.yml:175`
 - Test: `api-service/src/test/java/com/tinniestudio/api/user/service/UserProfileServiceTest.java`
 
-- [ ] **Step 1: Swap the test fixture's mock — `confirmAvatarUpload()` has no existing test to update**
+- [x] **Step 1: Swap the test fixture's mock — `confirmAvatarUpload()` has no existing test to update**
 
 Checked: there is no `confirmAvatarUpload` test anywhere in `UserProfileServiceTest.java` today — `stripeProperties` (line 47) is declared only so `@InjectMocks` can construct the service, never actually stubbed or verified. Swap the field for an `AppProperties` mock:
 
@@ -273,7 +273,7 @@ Checked: there is no `confirmAvatarUpload` test anywhere in `UserProfileServiceT
 +    @Mock private AppProperties appProperties;
 ```
 
-- [ ] **Step 2: Write the new failing test for `confirmAvatarUpload()`**
+- [x] **Step 2: Write the new failing test for `confirmAvatarUpload()`**
 
 Add this new nested class after `AvatarUrl` (after line 211, before the next `@Nested` block):
 
@@ -316,7 +316,7 @@ Add this new nested class after `AvatarUrl` (after line 211, before the next `@N
 
 Add the `AvatarConfirmRequest` import if not already covered — line 7's `import com.tinniestudio.api.modules.user.dto.*;` wildcard already covers it.
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 ```bash
 ./gradlew :api-service:test --tests "com.tinniestudio.api.user.service.UserProfileServiceTest"
@@ -324,7 +324,7 @@ Add the `AvatarConfirmRequest` import if not already covered — line 7's `impor
 
 Expected: compile error — `UserProfileServiceImpl` still depends on `StripeProperties`, not `AppProperties`, so `@InjectMocks` can't fully satisfy the constructor with only the new mock in place (confirms red before implementing).
 
-- [ ] **Step 4: Swap `StripeProperties` for `AppProperties` in `UserProfileServiceImpl`**
+- [x] **Step 4: Swap `StripeProperties` for `AppProperties` in `UserProfileServiceImpl`**
 
 `api-service/src/main/java/com/tinniestudio/api/modules/user/service/UserProfileServiceImpl.java`:
 
@@ -349,7 +349,7 @@ Update `confirmAvatarUpload` (line 144):
 
 (`@RequiredArgsConstructor` regenerates the constructor automatically — no manual constructor edit needed.)
 
-- [ ] **Step 5: Remove the now-unused `cdnBaseUrl` field from `StripeProperties`**
+- [x] **Step 5: Remove the now-unused `cdnBaseUrl` field from `StripeProperties`**
 
 `api-service/src/main/java/com/tinniestudio/api/shared/config/StripeProperties.java`:
 
@@ -359,7 +359,7 @@ Update `confirmAvatarUpload` (line 144):
 -    private String cdnBaseUrl;
 ```
 
-- [ ] **Step 6: Remove the duplicate config line**
+- [x] **Step 6: Remove the duplicate config line**
 
 `api-service/src/main/resources/application.yml` (line 175):
 
@@ -370,7 +370,7 @@ Update `confirmAvatarUpload` (line 144):
 -  cdn-base-url: ${CDN_BASE_URL:http://localhost:9000}
 ```
 
-- [ ] **Step 7: Run the full test class to verify it passes**
+- [x] **Step 7: Run the full test class to verify it passes**
 
 ```bash
 ./gradlew :api-service:test --tests "com.tinniestudio.api.user.service.UserProfileServiceTest"
@@ -378,7 +378,7 @@ Update `confirmAvatarUpload` (line 144):
 
 Expected: `BUILD SUCCESSFUL`, including the two new `confirmAvatarUpload()` tests.
 
-- [ ] **Step 8: Run the full api-service test suite to catch any other `StripeProperties.cdnBaseUrl`/`stripeProperties` reference**
+- [x] **Step 8: Run the full api-service test suite to catch any other `StripeProperties.cdnBaseUrl`/`stripeProperties` reference**
 
 ```bash
 ./gradlew :api-service:test
@@ -386,7 +386,7 @@ Expected: `BUILD SUCCESSFUL`, including the two new `confirmAvatarUpload()` test
 
 Expected: `BUILD SUCCESSFUL`. If anything else referenced `StripeProperties.getCdnBaseUrl()`, this fails loudly with a compile error naming the file — fix it the same way (swap to `appProperties.getCdn().getBaseUrl()`) before proceeding.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add api-service/src/main/java/com/tinniestudio/api/shared/config/StripeProperties.java \
