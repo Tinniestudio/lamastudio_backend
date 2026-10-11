@@ -117,6 +117,54 @@ class VideoProcessingServiceTest {
         }
 
         @Test
+        void writesMainVideoOutputUnderProcessedMainPrefix() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            asset.setAssetType("MAIN_VIDEO");
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "DONE"))
+                .thenReturn(false);
+            when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            stubDownloadCreatesFile(12_345L);
+            when(ffprobeRunner.probe(anyString())).thenReturn(
+                new FFprobeRunner.VideoMetadata(120, 1920, 1080, "h264", 5_000_000L, true));
+
+            service.process(payload);
+
+            ArgumentCaptor<VideoAsset> captor = ArgumentCaptor.forClass(VideoAsset.class);
+            verify(videoAssetRepo, atLeastOnce()).save(captor.capture());
+            VideoAsset last = captor.getAllValues().get(captor.getAllValues().size() - 1);
+            assertThat(last.getManifestUrl()).isEqualTo("processed/main/" + assetId + "/master.m3u8");
+        }
+
+        @Test
+        void writesTrailerOutputUnderProcessedTrailersPrefix_soCloudFrontCanLeaveItPublic() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            asset.setAssetType("TRAILER");
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "DONE"))
+                .thenReturn(false);
+            when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            stubDownloadCreatesFile(12_345L);
+            when(ffprobeRunner.probe(anyString())).thenReturn(
+                new FFprobeRunner.VideoMetadata(30, 1920, 1080, "h264", 5_000_000L, true));
+
+            service.process(payload);
+
+            ArgumentCaptor<VideoAsset> captor = ArgumentCaptor.forClass(VideoAsset.class);
+            verify(videoAssetRepo, atLeastOnce()).save(captor.capture());
+            VideoAsset last = captor.getAllValues().get(captor.getAllValues().size() - 1);
+            assertThat(last.getManifestUrl()).isEqualTo("processed/trailers/" + assetId + "/master.m3u8");
+        }
+
+        @Test
         void setsFileSizeBytesFromDownloadedFileOnSuccess() throws Exception {
             UUID assetId = UUID.randomUUID();
             VideoAsset asset = buildAsset(assetId);

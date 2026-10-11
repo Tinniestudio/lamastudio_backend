@@ -15,7 +15,6 @@ public class StripeProperties {
 
     private String secretKey;
     private String webhookSecret;
-    private String cdnBaseUrl;
 
     @PostConstruct
     public void init() {

@@ -190,6 +190,8 @@ public class UploadService {
         mediaFile.setMimeType(session.getMimeType());
         MediaFile savedFile = mediaFileRepository.save(mediaFile);
 
+        String cdnUrl = appProperties.getCdn().getBaseUrl() + "/" + session.getStorageKey();
+
         session.setUploadStatus(UploadStatus.COMPLETED);
         session.setFileSizeBytes(actualSizeBytes);
         session.setCompletedAt(Instant.now());
@@ -225,10 +227,10 @@ public class UploadService {
                 queuePublisher.publish(UploadConfig.VIDEO_PROCESS_QUEUE, "VIDEO_PROCESSING_JOB", payload);
             }
         } else if (type == UploadType.SUBTITLE) {
-            subtitleId = attachSubtitle(userId, session, body);
+            subtitleId = attachSubtitle(userId, session, body, cdnUrl);
         }
 
-        return new CompleteUploadResponse(savedFile.getId(), videoAssetId, subtitleId);
+        return new CompleteUploadResponse(savedFile.getId(), videoAssetId, subtitleId, cdnUrl);
     }
 
     /**
@@ -237,7 +239,7 @@ public class UploadService {
      * the file doesn't exist in storage yet, and language/label aren't known until the client
      * supplies them here.
      */
-    private UUID attachSubtitle(UUID userId, UploadSession session, CompleteUploadRequest body) {
+    private UUID attachSubtitle(UUID userId, UploadSession session, CompleteUploadRequest body, String cdnUrl) {
         if (session.getTargetEntityId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "targetEntityId (the VideoAsset to attach this subtitle to) is required for SUBTITLE uploads");
@@ -263,7 +265,7 @@ public class UploadService {
         subtitle.setVideoAsset(asset);
         subtitle.setLanguageCode(body.languageCode());
         subtitle.setLabel(body.label());
-        subtitle.setFileUrl(appProperties.getCdn().getBaseUrl() + "/" + session.getStorageKey());
+        subtitle.setFileUrl(cdnUrl);
         subtitle.setFormat("text/vtt".equals(session.getMimeType()) ? SubtitleFormat.VTT : SubtitleFormat.SRT);
         subtitle.setIsDefault(Boolean.TRUE.equals(body.isDefault()));
         return subtitleRepository.save(subtitle).getId();

@@ -62,6 +62,13 @@ class UploadServiceTest {
     private final UUID userId = UUID.randomUUID();
     private final UUID targetId = UUID.randomUUID();
 
+    @BeforeEach
+    void setUp() {
+        AppProperties.Cdn cdn = new AppProperties.Cdn();
+        cdn.setBaseUrl("https://cdn.test");
+        lenient().when(appProperties.getCdn()).thenReturn(cdn);
+    }
+
     // ── helper ──────────────────────────────────────────────────────────────
 
     private UploadSession pendingSession(UploadType type, String key) {
@@ -252,6 +259,23 @@ class UploadServiceTest {
             assertThat(result.mediaFileId()).isNotNull();
             assertThat(result.videoAssetId()).isNull();
             verify(queuePublisher, never()).publish(any(), any(), any());
+        }
+
+        @Test @DisplayName("returns a non-null cdnUrl for THUMBNAIL completion")
+        void completesThumbnailSession_returnsCdnUrl() {
+            UploadSession session = pendingSession(UploadType.THUMBNAIL, "thumbnails/uuid/thumb.jpg");
+            when(uploadSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+            when(storageService.objectExists("thumbnails/uuid/thumb.jpg")).thenReturn(true);
+            when(mediaFileRepository.save(any())).thenAnswer(inv -> {
+                MediaFile f = inv.getArgument(0);
+                f.setId(UUID.randomUUID());
+                return f;
+            });
+            when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            var result = uploadService.completeSession(userId, session.getId(), null);
+
+            assertThat(result.cdnUrl()).isEqualTo("https://cdn.test/thumbnails/uuid/thumb.jpg");
         }
 
         @Test @DisplayName("persists the storage-measured size, not the client-declared expectedMaxSizeBytes")
@@ -469,9 +493,6 @@ class UploadServiceTest {
                 return f;
             });
             when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-            AppProperties.Cdn cdn = new AppProperties.Cdn();
-            cdn.setBaseUrl("https://cdn.test");
-            when(appProperties.getCdn()).thenReturn(cdn);
             ArgumentCaptor<Subtitle> captor = ArgumentCaptor.forClass(Subtitle.class);
             when(subtitleRepository.save(captor.capture())).thenAnswer(inv -> {
                 Subtitle s = inv.getArgument(0);
