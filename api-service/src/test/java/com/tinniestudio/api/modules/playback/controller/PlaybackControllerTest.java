@@ -40,6 +40,7 @@ class PlaybackControllerTest {
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtAuthenticationFilter jwtAuthenticationFilter;
     @MockBean private UserDetailsServiceImpl userDetailsService;
+    @MockBean private com.tinniestudio.api.shared.storage.CloudFrontSigningService cloudFrontSigningService;
 
     private static final String CONTEXT_PATH = "/api/v1";
     private static final String USER_ID = "550e8400-e29b-41d4-a716-446655440000";
@@ -78,6 +79,63 @@ class PlaybackControllerTest {
         mockMvc.perform(getWithContext("/playback/manifest/content/" + contentId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.manifestUrl").value("http://cdn.test/manifest.m3u8"));
+    }
+
+    @Test
+    @DisplayName("GET /playback/manifest/content/{contentId} sets no CloudFront cookies when signing is disabled (dev default)")
+    @WithMockUser(username = USER_ID, roles = "USER")
+    void getContentManifest_noCookies_whenSigningDisabled() throws Exception {
+        UUID contentId = UUID.randomUUID();
+        PlaybackManifestResponse manifest = new PlaybackManifestResponse(
+            "http://cdn.test/manifest.m3u8", List.of(), 120, 3600);
+        when(playbackService.getContentManifest(any(org.springframework.security.core.userdetails.UserDetails.class), any(UUID.class)))
+            .thenReturn(manifest);
+        // cloudFrontSigningService.signVideoAccess() is left unstubbed — Mockito's default
+        // answer for an Optional-returning method is Optional.empty(), matching real
+        // app.cdn.signing-enabled=false behavior.
+
+        mockMvc.perform(getWithContext("/playback/manifest/content/" + contentId))
+            .andExpect(status().isOk())
+            .andExpect(header().doesNotExist("Set-Cookie"));
+    }
+
+    @Test
+    @DisplayName("GET /playback/manifest/content/{contentId} sets 3 CloudFront signed cookies when signing is enabled")
+    @WithMockUser(username = USER_ID, roles = "USER")
+    void getContentManifest_setsCloudFrontCookies_whenSigningEnabled() throws Exception {
+        UUID contentId = UUID.randomUUID();
+        PlaybackManifestResponse manifest = new PlaybackManifestResponse(
+            "http://cdn.test/manifest.m3u8", List.of(), 120, 3600);
+        when(playbackService.getContentManifest(any(org.springframework.security.core.userdetails.UserDetails.class), any(UUID.class)))
+            .thenReturn(manifest);
+
+        com.tinniestudio.api.shared.config.AppProperties realProps = new com.tinniestudio.api.shared.config.AppProperties();
+        realProps.getCdn().setSigningEnabled(true);
+        realProps.getCdn().setBaseUrl("https://cdn.tinniestudio.com");
+        realProps.getCdn().setCloudfrontKeyPairId("APKATEST123");
+        realProps.getCdn().setCloudfrontPrivateKey(generateTestPrivateKeyPem());
+        com.tinniestudio.api.shared.storage.CloudFrontSigningService realSigningService =
+            new com.tinniestudio.api.shared.storage.CloudFrontSigningService(realProps);
+        when(cloudFrontSigningService.signVideoAccess()).thenReturn(realSigningService.signVideoAccess());
+        when(cloudFrontSigningService.cookieDomain()).thenReturn("");
+        when(cloudFrontSigningService.cookieMaxAgeSeconds()).thenReturn(21_600L);
+
+        mockMvc.perform(getWithContext("/playback/manifest/content/" + contentId))
+            .andExpect(status().isOk())
+            .andExpect(header().stringValues("Set-Cookie",
+                org.hamcrest.Matchers.hasItem(org.hamcrest.Matchers.startsWith("CloudFront-Policy="))))
+            .andExpect(header().stringValues("Set-Cookie",
+                org.hamcrest.Matchers.hasItem(org.hamcrest.Matchers.startsWith("CloudFront-Signature="))))
+            .andExpect(header().stringValues("Set-Cookie",
+                org.hamcrest.Matchers.hasItem(org.hamcrest.Matchers.startsWith("CloudFront-Key-Pair-Id="))));
+    }
+
+    private String generateTestPrivateKeyPem() throws Exception {
+        java.security.KeyPairGenerator generator = java.security.KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        java.security.KeyPair keyPair = generator.generateKeyPair();
+        String base64 = java.util.Base64.getEncoder().encodeToString(keyPair.getPrivate().getEncoded());
+        return "-----BEGIN PRIVATE KEY-----\n" + base64 + "\n-----END PRIVATE KEY-----";
     }
 
     @Test
