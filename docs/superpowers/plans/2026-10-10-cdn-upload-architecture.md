@@ -77,7 +77,7 @@ Create `bucket-policy.json`, substituting your account id and the distribution i
       "Action": "s3:GetObject",
       "Resource": "arn:aws:s3:::tls-prd-bucket/*",
       "Condition": {
-        "StringEquals": { "AWS:SourceArn": "arn:aws:cloudfront::<ACCOUNT_ID>:distribution/<DISTRIBUTION_ID>" }
+        "StringEquals": { "AWS:SourceArn": "arn:aws:cloudfront::305241528840:distribution/EV7N7BTVIH6WF" }
       }
     }
   ]
@@ -1277,6 +1277,7 @@ cookies).
 - [x] **Step 7: Commit**
 
 ```bash
+cd media-worker-and-api-service-changes  # actually two separate repos, both under server/
 git add media-worker/src/main/java/com/tinniestudio/worker/entity/VideoAsset.java \
         media-worker/src/main/java/com/tinniestudio/worker/processor/VideoProcessingService.java \
         media-worker/src/test/java/com/tinniestudio/worker/processor/VideoProcessingServiceTest.java \
