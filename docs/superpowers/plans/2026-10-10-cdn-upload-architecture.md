@@ -115,7 +115,7 @@ No commit for this task — it's pure AWS/MinIO-side config, not a code change.
 - Modify: `api-service/src/main/java/com/tinniestudio/api/modules/upload/service/UploadService.java:120-232,240-270`
 - Test: `api-service/src/test/java/com/tinniestudio/api/modules/upload/service/UploadServiceTest.java`
 
-- [ ] **Step 1: Fix the test fixture so a universal `appProperties.getCdn()` stub doesn't break existing tests**
+- [x] **Step 1: Fix the test fixture so a universal `appProperties.getCdn()` stub doesn't break existing tests**
 
 Every `completeSession()` test except the SUBTITLE one currently never stubs `appProperties.getCdn()`. Once `completeSession()` computes a CDN URL unconditionally (Step 3), those tests would NPE on `null.getBaseUrl()`. Add a shared, lenient stub and remove the now-redundant local one.
 
@@ -143,7 +143,7 @@ Then remove the now-duplicate local stub inside `completesSubtitleSession_create
              ArgumentCaptor<Subtitle> captor = ArgumentCaptor.forClass(Subtitle.class);
 ```
 
-- [ ] **Step 2: Run the full test class to confirm it's still green before changing any production code**
+- [x] **Step 2: Run the full test class to confirm it's still green before changing any production code**
 
 ```bash
 ./gradlew :api-service:test --tests "com.tinniestudio.api.modules.upload.service.UploadServiceTest"
@@ -151,7 +151,7 @@ Then remove the now-duplicate local stub inside `completesSubtitleSession_create
 
 Expected: `BUILD SUCCESSFUL`, all existing tests pass (this step is pure fixture cleanup, no behavior change yet).
 
-- [ ] **Step 3: Write the failing test for the new `cdnUrl` field**
+- [x] **Step 3: Write the failing test for the new `cdnUrl` field**
 
 Add to the `CompleteSessionTests` nested class (near `completesThumbnailSession`):
 
@@ -174,7 +174,7 @@ Add to the `CompleteSessionTests` nested class (near `completesThumbnailSession`
         }
 ```
 
-- [ ] **Step 4: Run it to verify it fails**
+- [x] **Step 4: Run it to verify it fails**
 
 ```bash
 ./gradlew :api-service:test --tests "com.tinniestudio.api.modules.upload.service.UploadServiceTest" 2>&1 | grep -A5 "completesThumbnailSession_returnsCdnUrl"
@@ -182,7 +182,7 @@ Add to the `CompleteSessionTests` nested class (near `completesThumbnailSession`
 
 Expected: compile error (`cdnUrl()` doesn't exist on `CompleteUploadResponse` yet) or, once it compiles against the 3-arg record, a test failure — either way, confirm it's red before implementing.
 
-- [ ] **Step 5: Add `cdnUrl` to the DTO**
+- [x] **Step 5: Add `cdnUrl` to the DTO**
 
 `api-service/src/main/java/com/tinniestudio/api/modules/upload/dto/CompleteUploadResponse.java`:
 
@@ -195,7 +195,7 @@ Expected: compile error (`cdnUrl()` doesn't exist on `CompleteUploadResponse` ye
 +public record CompleteUploadResponse(UUID mediaFileId, UUID videoAssetId, UUID subtitleId, String cdnUrl) {}
 ```
 
-- [ ] **Step 6: Compute `cdnUrl` once in `completeSession` and thread it through**
+- [x] **Step 6: Compute `cdnUrl` once in `completeSession` and thread it through**
 
 `api-service/src/main/java/com/tinniestudio/api/modules/upload/service/UploadService.java`, inside `completeSession` (around line 184, right after `MediaFile savedFile = mediaFileRepository.save(mediaFile);`):
 
@@ -232,7 +232,7 @@ Update `attachSubtitle`'s signature and body (lines 240, 266) to take the alread
 +        subtitle.setFileUrl(cdnUrl);
 ```
 
-- [ ] **Step 7: Run the test class again to verify everything passes**
+- [x] **Step 7: Run the test class again to verify everything passes**
 
 ```bash
 ./gradlew :api-service:test --tests "com.tinniestudio.api.modules.upload.service.UploadServiceTest"
@@ -240,7 +240,7 @@ Update `attachSubtitle`'s signature and body (lines 240, 266) to take the alread
 
 Expected: `BUILD SUCCESSFUL` — the new test passes, and all 20+ pre-existing tests in this class (RAW_VIDEO, TRAILER, multipart, SUBTITLE, error paths) still pass unchanged thanks to Step 1's fixture fix.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add api-service/src/main/java/com/tinniestudio/api/modules/upload/dto/CompleteUploadResponse.java \
