@@ -15,10 +15,13 @@ import java.util.Base64;
 import java.util.Optional;
 
 /**
- * Issues CloudFront signed cookies gating access to {@code processed/*} (all HLS manifests and
- * segments, across every video) to viewers who've just passed the existing subscription check —
- * see PlaybackController. Pure local RSA signing, no network call, same reasoning as
- * StorageServiceConfig's S3Presigner: the private key material never leaves this process.
+ * Issues CloudFront signed cookies gating access to {@code processed/main/*} (every main-video
+ * HLS manifest/segment, across all videos) to viewers who've just passed the existing
+ * subscription check — see PlaybackController. Deliberately excludes {@code processed/trailers/*}
+ * (VideoProcessingService segregates trailer output there specifically so it stays reachable
+ * with no cookie at all — see that class's assetPrefix comment). Pure local RSA signing, no
+ * network call, same reasoning as StorageServiceConfig's S3Presigner: the private key material
+ * never leaves this process.
  */
 @Service
 @RequiredArgsConstructor
@@ -33,7 +36,7 @@ public class CloudFrontSigningService {
             return Optional.empty();
         }
         CustomSignerRequest request = CustomSignerRequest.builder()
-            .resourceUrl(cdn.getBaseUrl() + "/processed/*")
+            .resourceUrl(cdn.getBaseUrl() + "/processed/main/*")
             .privateKey(loadPrivateKey(cdn.getCloudfrontPrivateKey()))
             .keyPairId(cdn.getCloudfrontKeyPairId())
             .expirationDate(Instant.now().plusSeconds(cdn.getSignedCookieTtlSeconds()))

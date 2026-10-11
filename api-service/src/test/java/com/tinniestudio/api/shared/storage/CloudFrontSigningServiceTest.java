@@ -56,6 +56,34 @@ class CloudFrontSigningServiceTest {
     }
 
     @Test
+    @DisplayName("scopes the signed policy to processed/main/* only, never the whole processed/* prefix")
+    void scopesPolicyToProcessedMainOnly_notWholeProcessedPrefix() throws Exception {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getCdn().setBaseUrl("https://cdn.tinniestudio.com");
+        appProperties.getCdn().setSigningEnabled(true);
+        appProperties.getCdn().setCloudfrontKeyPairId("APKATEST123");
+        appProperties.getCdn().setCloudfrontPrivateKey(generateTestPrivateKeyPem());
+        appProperties.getCdn().setSignedCookieTtlSeconds(21_600L);
+        CloudFrontSigningService service = new CloudFrontSigningService(appProperties);
+
+        String policyCookie = service.signVideoAccess().orElseThrow().policyHeaderValue();
+        String decodedPolicy = decodeCloudFrontBase64(policyCookie.substring("CloudFront-Policy=".length()));
+
+        // Trailers live under processed/trailers/* (VideoProcessingService) and must stay
+        // reachable with no cookie at all — the signed policy must never cover that path, or
+        // CloudFront's viewer restriction would also lock out anonymous trailer playback.
+        assertThat(decodedPolicy).contains("https://cdn.tinniestudio.com/processed/main/*");
+        assertThat(decodedPolicy).doesNotContain("processed/trailers");
+    }
+
+    // CloudFront's custom-policy cookie uses a URL-safe Base64 variant (+/= swapped for -/_/~)
+    // rather than standard Base64 — this mirrors how a browser/CDN would decode it.
+    private String decodeCloudFrontBase64(String value) {
+        String standardBase64 = value.replace('-', '+').replace('_', '=').replace('~', '/');
+        return new String(Base64.getDecoder().decode(standardBase64));
+    }
+
+    @Test
     @DisplayName("exposes configured cookie domain and TTL for the caller to apply as cookie attributes")
     void exposesCookieDomainAndMaxAge() {
         AppProperties appProperties = new AppProperties();

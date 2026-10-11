@@ -201,14 +201,52 @@ derived.
 
 ### 3.1 Scope
 
-Processed video output lives entirely under one prefix —
-`media-worker/src/main/java/com/tinniestudio/worker/processor/VideoProcessingService.java:121`
-(`"processed/" + videoAssetId`) covers the master manifest, any sub-playlists, and every segment.
-The signed-cookie policy is scoped to that single prefix (`https://cdn.tinniestudio.com/processed/*`)
-rather than per-video — access control already happens at manifest-request time via the existing
-subscription check (`PlaybackServiceImpl` lines 61-74 and friends); the cookie is session-wide
-proof "this viewer passed that check within the last few hours," not a per-title grant. Narrower
-per-video scoping would need re-signing on every episode switch for no real security benefit here.
+**Revised after a final cross-repo code review caught a bug in the original version of this
+section** (which scoped the cookie to the single flat `processed/*` prefix with no distinction
+between main videos and trailers — see "Correction" below).
+
+Processed video output is segregated by asset type —
+`media-worker/src/main/java/com/tinniestudio/worker/processor/VideoProcessingService.java`'s
+`assetPrefix` is `"processed/main/" + videoAssetId` for `MAIN_VIDEO` assets and
+`"processed/trailers/" + videoAssetId` for `TRAILER` assets (branching on the asset's
+`assetType`, now mapped onto media-worker's own `VideoAsset` entity alongside the existing
+`processingStatus` string field). Each prefix covers that asset's master manifest, any
+sub-playlists, and every segment.
+
+The signed-cookie policy is scoped to `https://cdn.tinniestudio.com/processed/main/*` —
+covering every main video, but deliberately excluding `processed/trailers/*` entirely — rather
+than per-video. Access control for main videos already happens at manifest-request time via the
+existing subscription check (`PlaybackServiceImpl` lines 61-74 and friends); the cookie is
+session-wide proof "this viewer passed that check within the last few hours," not a per-title
+grant. Narrower per-video scoping would need re-signing on every episode switch for no real
+security benefit here, since there is no per-title entitlement anywhere in this codebase to scope
+down to in the first place (verified: `app.free-tier-content-limit` is configured but never
+referenced in any access-check code path) — subscription access is platform-wide by design, so a
+platform-wide (for main videos) cookie doesn't exceed the real authorization boundary.
+
+**Correction — why trailers need their own prefix:** trailers are deliberately public
+(`PlaybackController`'s `getTrailerManifest`/`getSeasonTrailerManifest`/`getEpisodeTrailerManifest`
+never call `signVideoAccess()`, by design — anonymous visitors must be able to watch them). The
+original version of this spec scoped the signed policy to the single flat `processed/*` prefix,
+which `VideoProcessingService` used for both main videos AND trailers alike. Had Phase 3.4's
+CloudFront "Restrict Viewer Access: Yes" setting been applied to that undifferentiated prefix in
+production, it would have blocked anonymous trailer playback entirely — there is no safe way to
+retroactively exempt trailers from a cookie requirement without also handing out a platform-wide
+access cookie to anonymous visitors (which would let anyone bypass the subscription paywall just by
+requesting a trailer first). Segregating the prefix by asset type is the only sound fix; it was
+applied before Phase 3.4 was ever executed against real CloudFront infrastructure, so no
+production trailer breakage ever actually occurred.
+
+**Migration note for whoever runs Phase 3.4 in production:** the prefix segregation only applies
+to videos processed *after* this fix — any `VideoAsset` already successfully processed before
+this change still has its `manifestUrl` pointing at the old flat `processed/{id}/master.m3u8`
+shape (neither `main/` nor `trailers/`). Before restricting CloudFront's `processed/main/*`
+behavior, check whether any such pre-existing rows exist
+(`SELECT id, asset_type, manifest_url FROM video_assets WHERE processing_status = 'READY' AND
+manifest_url NOT LIKE 'processed/main/%' AND manifest_url NOT LIKE 'processed/trailers/%'`) — if
+any do, either reprocess them or accept they'll remain on an unrestricted path until reprocessed
+(main videos in that state would be served without a cookie requirement until then; trailers in
+that state are unaffected either way, since they're meant to be public).
 
 ### 3.2 Dependency
 
@@ -254,8 +292,10 @@ signing entirely in local dev, since there's no local CloudFront to validate aga
 1. Generate an RSA key pair (CloudFront requires 2048-bit RSA): `openssl genrsa -out cf-private-key.pem 2048` then `openssl rsa -pubout -in cf-private-key.pem -out cf-public-key.pem`.
 2. In CloudFront: create a **public key** resource from `cf-public-key.pem`, then a **key group**
    containing it.
-3. On the distribution's cache behavior covering `/processed/*`: set **"Restrict Viewer
-   Access" → Yes**, and select that key group as a trusted key group.
+3. On the distribution's cache behavior covering **`/processed/main/*` specifically — not
+   `/processed/*`** (see §3.1's correction: `/processed/trailers/*` must stay on a separate,
+   unrestricted behavior, or fall through to the distribution's default behavior): set
+   **"Restrict Viewer Access" → Yes**, and select that key group as a trusted key group.
 4. Store `cf-private-key.pem`'s contents as `CLOUDFRONT_PRIVATE_KEY` (the deployment secret store —
    same place `JWT_ACCESS_SECRET` etc. already live) and the key's ID (shown in the CloudFront
    console next to the public key) as `CLOUDFRONT_KEY_PAIR_ID`.
@@ -281,7 +321,7 @@ public class CloudFrontSigningService {
         }
         Instant expiry = Instant.now().plusSeconds(cdn.getSignedCookieTtlSeconds());
         CloudFrontCookiesForCustomPolicyRequest request = CloudFrontCookiesForCustomPolicyRequest.builder()
-            .resourceUrl(cdn.getBaseUrl() + "/processed/*")
+            .resourceUrl(cdn.getBaseUrl() + "/processed/main/*")
             .privateKey(loadPrivateKey(cdn.getCloudfrontPrivateKey()))
             .keyPairId(cdn.getCloudfrontKeyPairId())
             .expirationDate(expiry)
@@ -362,7 +402,7 @@ subscription-gated main-content/episode playback path needs credentialed request
 
 **Phase 3:**
 - Unit test: `CloudFrontSigningService.signVideoAccess()` returns `Optional.empty()` when `signing-enabled=false` (dev default); returns a populated policy when enabled, with the correct resource prefix and expiry ~= now + TTL.
-- Manual, prod only (no local CloudFront to test against): log in as a subscriber, request a content manifest, confirm three `Set-Cookie` headers appear with the right `Domain`/`Secure`/`HttpOnly` attributes; confirm the HLS player can then fetch `processed/*` segments; confirm a request to the same URL **without** those cookies (e.g. `curl`) gets CloudFront's 403.
+- Manual, prod only (no local CloudFront to test against): log in as a subscriber, request a content manifest, confirm three `Set-Cookie` headers appear with the right `Domain`/`Secure`/`HttpOnly` attributes; confirm the HLS player can then fetch `processed/main/*` segments; confirm a request to the same URL **without** those cookies (e.g. `curl`) gets CloudFront's 403; separately confirm a `processed/trailers/*` segment is reachable via plain `curl` with **no** cookies at all.
 - Manual: confirm trailer playback (no login, no cookies) still works unaffected.
 
 ## Non-goals
@@ -370,5 +410,5 @@ subscription-gated main-content/episode playback path needs credentialed request
 - No change to the upload architecture itself (presigned PUT direct to S3 stays) — only the bucket CORS policy changes.
 - No signing for images (thumbnails/avatars/logos) — these stay plain public CDN URLs through CloudFront+OAC, per the explicit decision that paywall protection only matters for video.
 - No CloudFront signing emulation in local dev — `signing-enabled=false` is the permanent dev default, not a stopgap.
-- No per-video/per-title cookie scoping — the single `processed/*` prefix is a deliberate simplification; access control is enforced once, at manifest-request time, by the existing subscription check.
+- No per-video/per-title cookie scoping — the single `processed/main/*` prefix (covering every main video, but not trailers) is a deliberate simplification; access control is enforced once, at manifest-request time, by the existing subscription check.
 - No IaC (Terraform/CDK) added for the bucket CORS/policy or CloudFront distribution — delivered as AWS CLI commands/JSON per the explicit decision to keep this manual for now.

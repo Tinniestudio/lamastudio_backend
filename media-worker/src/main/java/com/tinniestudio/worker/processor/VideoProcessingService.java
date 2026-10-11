@@ -118,7 +118,11 @@ public class VideoProcessingService {
                 return;
             }
             updateJobStatus(job, "UPLOADING_OUTPUT");
-            String assetPrefix = "processed/" + videoAssetId;
+            // Trailers must stay reachable by anonymous visitors (PlaybackController never issues
+            // a signed CloudFront cookie for them), while main-video output is subscription-gated
+            // behind one. Segregating the prefix lets CloudFront restrict viewer access to
+            // processed/main/* only — see CloudFrontSigningService.
+            String assetPrefix = "processed/" + ("TRAILER".equals(asset.getAssetType()) ? "trailers/" : "main/") + videoAssetId;
             for (ResolutionLadder.Tier tier : tiers) {
                 storageService.uploadDirectory(
                     assetPrefix + "/" + tier.label(),

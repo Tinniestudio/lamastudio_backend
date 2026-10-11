@@ -1031,7 +1031,9 @@ git commit -m "feat(playback): set CloudFront signed cookies on subscription-gat
 
 ## Task 8: [Ops] One-time CloudFront key pair + key group setup
 
-Depends on Task 1 (CloudFront already reading from the bucket) being verified first, since this reuses the same distribution. Do this before flipping `CDN_SIGNING_ENABLED=true` in production.
+Depends on Task 1 (CloudFront already reading from the bucket) being verified first, since this reuses the same distribution. **Also now depends on Task 11** (storage-key segregation), which a final code review caught as a prerequisite — see Task 11 before doing anything below. Do this before flipping `CDN_SIGNING_ENABLED=true` in production.
+
+**Revised:** Steps 4, 5, and 7 below originally said `/processed/*`. Corrected to `/processed/main/*` — restricting the flat, undifferentiated `/processed/*` path would also block anonymous trailer playback (trailers live at `/processed/trailers/*` after Task 11, specifically so they can stay outside this restriction).
 
 **Files:** none.
 
@@ -1062,11 +1064,11 @@ In the CloudFront console: **Public keys** → create one from `cf-public-key.pe
 
 - [ ] **Step 4: Restrict viewer access on the video cache behavior**
 
-In the distribution's behaviors, find (or create) the one matching `/processed/*`. Set **Restrict viewer access** to **Yes**, and select the key group from Step 3 as a trusted key group.
+In the distribution's behaviors, find (or create) the one matching `/processed/main/*`. Set **Restrict viewer access** to **Yes**, and select the key group from Step 3 as a trusted key group.
 
 - [ ] **Step 5: Add a credentialed-CORS response headers policy to that same behavior**
 
-Create (or reuse) a response headers policy with CORS enabled: `Access-Control-Allow-Credentials: true`, `Access-Control-Allow-Origin: https://tinniestudio.com` (the exact origin — credentialed CORS forbids `*`), `Access-Control-Allow-Methods: GET, HEAD, OPTIONS`. Attach it to the `/processed/*` behavior.
+Create (or reuse) a response headers policy with CORS enabled: `Access-Control-Allow-Credentials: true`, `Access-Control-Allow-Origin: https://tinniestudio.com` (the exact origin — credentialed CORS forbids `*`), `Access-Control-Allow-Methods: GET, HEAD, OPTIONS`. Attach it to the `/processed/main/*` behavior.
 
 - [ ] **Step 6: Store the secrets and flip the flag**
 
@@ -1075,11 +1077,13 @@ Put `cf-private-key.pem`'s contents into `CLOUDFRONT_PRIVATE_KEY` and the Key ID
 - [ ] **Step 7: Verify end-to-end**
 
 ```bash
-# Without cookies — should be denied now that viewer access is restricted:
-curl -i https://cdn.tinniestudio.com/processed/<a-known-video-asset-id>/master.m3u8
+# Without cookies — should be denied now that viewer access is restricted (a MAIN_VIDEO asset):
+curl -i https://cdn.tinniestudio.com/processed/main/<a-known-video-asset-id>/master.m3u8
+# A trailer should stay reachable with no cookies at all:
+curl -i https://cdn.tinniestudio.com/processed/trailers/<a-known-trailer-asset-id>/master.m3u8
 ```
 
-Expected: `HTTP/1.1 403 Forbidden`. Then, as a real logged-in subscriber in a browser, load a content detail page and confirm the video plays (this also requires Task 9).
+Expected: the first returns `HTTP/1.1 403 Forbidden`; the second returns `HTTP/1.1 200 OK`. Then, as a real logged-in subscriber in a browser, load a content detail page and confirm the video plays (this also requires Task 9).
 
 No commit — AWS console + secret-store config only.
 
@@ -1145,9 +1149,140 @@ As in Task 9 Step 3 — full logged-in playback check with cookie inspection.
 
 As a logged-out visitor, load a content/season/episode page and confirm its trailer still plays with no `Set-Cookie`/`Cookie` involvement at all.
 
-- [ ] **Step 5: Direct CDN access without cookies is denied for video, allowed for images**
+- [ ] **Step 5: Direct CDN access without cookies is denied for main video, allowed for trailers and images**
 
 ```bash
-curl -o /dev/null -s -w "%{http_code}\n" https://cdn.tinniestudio.com/processed/<known-video-asset-id>/master.m3u8   # expect 403
-curl -o /dev/null -s -w "%{http_code}\n" https://cdn.tinniestudio.com/thumbnails/<known-key>.jpg                      # expect 200
+curl -o /dev/null -s -w "%{http_code}\n" https://cdn.tinniestudio.com/processed/main/<known-video-asset-id>/master.m3u8       # expect 403
+curl -o /dev/null -s -w "%{http_code}\n" https://cdn.tinniestudio.com/processed/trailers/<known-trailer-asset-id>/master.m3u8 # expect 200
+curl -o /dev/null -s -w "%{http_code}\n" https://cdn.tinniestudio.com/thumbnails/<known-key>.jpg                               # expect 200
+```
+
+---
+
+## Task 11: [Backend + media-worker] Segregate processed video storage keys by asset type
+
+Added after Tasks 1-7/9 were implemented and independently verified, when a final cross-repo code
+review caught a design gap in Task 6/7's original work: `CloudFrontSigningService` scoped the
+signed cookie to the flat `processed/*` prefix, but `media-worker` wrote both MAIN_VIDEO and
+TRAILER output under that exact same prefix with no distinction — Task 8 (not yet executed) would
+have blocked anonymous trailer playback the moment it restricted CloudFront viewer access on that
+path. See the spec's §3.1 "Correction" for the full writeup. No production exposure occurred,
+since Task 8 hadn't been run yet when this was caught.
+
+**Files:**
+- Modify: `media-worker/src/main/java/com/tinniestudio/worker/entity/VideoAsset.java`
+- Modify: `media-worker/src/main/java/com/tinniestudio/worker/processor/VideoProcessingService.java:121`
+- Test: `media-worker/src/test/java/com/tinniestudio/worker/processor/VideoProcessingServiceTest.java`
+- Modify: `api-service/src/main/java/com/tinniestudio/api/shared/storage/CloudFrontSigningService.java`
+- Test: `api-service/src/test/java/com/tinniestudio/api/shared/storage/CloudFrontSigningServiceTest.java`
+
+- [x] **Step 1: Add `assetType` to media-worker's `VideoAsset` entity**
+
+media-worker has its own, separate JPA mapping of the `video_assets` table (it doesn't share
+api-service's entity classes) and had never mapped the `asset_type` column at all. Added as a
+plain `String` field (`"MAIN_VIDEO"` or `"TRAILER"`), consistent with how `processingStatus` is
+already a raw string in this same entity, not an enum:
+
+```diff
+     private Integer durationSeconds;
+     private Integer width;
+     private Integer height;
+     private Long bitrate;
+     private String codec;
+     private Long fileSizeBytes;
++
++    // "MAIN_VIDEO" or "TRAILER" (api-service's VideoAssetType, stored as a plain string here
++    // like processingStatus below) — read by VideoProcessingService to segregate processed
++    // output under processed/main/ vs processed/trailers/, so CloudFront can restrict viewer
++    // access to main-video output only while trailers stay publicly reachable.
++    private String assetType;
+```
+
+No `@Column` annotation needed — Hibernate's default naming strategy already maps `assetType` →
+`asset_type`, matching every other unannotated field in this entity.
+
+- [x] **Step 2: Write failing tests for the prefix branch**
+
+Added two tests to `VideoProcessingServiceTest.java`'s `process` nested class (alongside the
+existing `updatesVideoAssetToReadyOnSuccess`), asserting the exact `manifestUrl` produced for each
+asset type via the existing `ArgumentCaptor<VideoAsset>`/`videoAssetRepo.save()` pattern already
+used in that file — `writesMainVideoOutputUnderProcessedMainPrefix()` (asserts
+`"processed/main/" + assetId + "/master.m3u8"`) and
+`writesTrailerOutputUnderProcessedTrailersPrefix_soCloudFrontCanLeaveItPublic()` (asserts
+`"processed/trailers/" + assetId + "/master.m3u8"`), each setting `asset.setAssetType(...)` on the
+existing `buildAsset()` fixture before calling `service.process(payload)`. Confirmed red: both
+failed against the old flat-prefix code (`BUILD FAILED`, `2 tests completed, 2 failed`), while all
+8 pre-existing tests in the class stayed green (none of them hardcode the prefix string — they use
+`anyString()` matchers for storage calls, so they're unaffected by this change either way).
+
+- [x] **Step 3: Branch the prefix on asset type**
+
+`media-worker/src/main/java/com/tinniestudio/worker/processor/VideoProcessingService.java:121`:
+
+```diff
+             updateJobStatus(job, "UPLOADING_OUTPUT");
+-            String assetPrefix = "processed/" + videoAssetId;
++            // Trailers must stay reachable by anonymous visitors (PlaybackController never issues
++            // a signed CloudFront cookie for them), while main-video output is subscription-gated
++            // behind one. Segregating the prefix lets CloudFront restrict viewer access to
++            // processed/main/* only — see CloudFrontSigningService.
++            String assetPrefix = "processed/" + ("TRAILER".equals(asset.getAssetType()) ? "trailers/" : "main/") + videoAssetId;
+```
+
+Defaults anything that isn't exactly `"TRAILER"` (including `null`, though the DB column is
+`NOT NULL` so this never actually happens for a real row) to `main/` — a safe default that also
+means every pre-existing test using `buildAsset()` without setting `assetType` keeps passing
+unchanged.
+
+- [x] **Step 4: Run tests to verify green**
+
+```bash
+./gradlew :media-worker:test --tests "com.tinniestudio.worker.processor.VideoProcessingServiceTest"
+./gradlew :media-worker:test --rerun-tasks
+```
+
+Both: `BUILD SUCCESSFUL`. Full module suite confirmed no other regressions.
+
+- [x] **Step 5: Add a failing test for the CloudFront resource scope, then fix it**
+
+Added `scopesPolicyToProcessedMainOnly_notWholeProcessedPrefix()` to
+`CloudFrontSigningServiceTest.java` — decodes the actual signed policy (CloudFront's cookie uses a
+URL-safe Base64 variant, `+`/`=`/`/` swapped for `-`/`_`/`~`) and asserts it contains
+`https://cdn.tinniestudio.com/processed/main/*` and does **not** contain `processed/trailers`.
+Confirmed red first (`AssertionError`, the old code still signed the flat `processed/*` prefix).
+
+Fix, `api-service/src/main/java/com/tinniestudio/api/shared/storage/CloudFrontSigningService.java`:
+
+```diff
+-            .resourceUrl(cdn.getBaseUrl() + "/processed/*")
++            .resourceUrl(cdn.getBaseUrl() + "/processed/main/*")
+```
+
+Plus updated the class Javadoc to explain the trailers exclusion. Re-ran
+`CloudFrontSigningServiceTest` → `BUILD SUCCESSFUL`, all 5 tests passing (3 original + the new
+scope test + the pre-existing domain/TTL test). Re-ran the full `api-service` suite afterward to
+confirm no other regressions (flushing accumulated local-Redis rate-limit keys first — see Task
+7's notes on why that matters when re-running the full suite repeatedly in one session).
+
+- [x] **Step 6: Update the spec and this plan's Task 8 instructions**
+
+`docs/superpowers/specs/2026-10-10-cdn-upload-architecture-design.md` §3.1 rewritten with a
+"Correction" explaining the bug and the fix, plus a migration note for whoever runs Task 8 in
+production (pre-existing processed videos, if any exist, still have the old undifferentiated key
+shape and won't be covered by the new `processed/main/*`-scoped restriction until reprocessed).
+This plan's Task 8 Steps 4/5/7 and Task 10 Step 5 corrected from `/processed/*` to
+`/processed/main/*` (main video) + a new `/processed/trailers/*` check (must stay open, no
+cookies).
+
+- [x] **Step 7: Commit**
+
+```bash
+git add media-worker/src/main/java/com/tinniestudio/worker/entity/VideoAsset.java \
+        media-worker/src/main/java/com/tinniestudio/worker/processor/VideoProcessingService.java \
+        media-worker/src/test/java/com/tinniestudio/worker/processor/VideoProcessingServiceTest.java \
+        api-service/src/main/java/com/tinniestudio/api/shared/storage/CloudFrontSigningService.java \
+        api-service/src/test/java/com/tinniestudio/api/shared/storage/CloudFrontSigningServiceTest.java \
+        docs/superpowers/specs/2026-10-10-cdn-upload-architecture-design.md \
+        docs/superpowers/plans/2026-10-10-cdn-upload-architecture.md
+git commit -m "fix(cdn): segregate processed video storage keys by asset type (main vs trailer)"
 ```

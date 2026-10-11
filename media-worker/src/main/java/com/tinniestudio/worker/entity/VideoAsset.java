@@ -35,6 +35,12 @@ public class VideoAsset {
     private String codec;
     private Long fileSizeBytes;
 
+    // "MAIN_VIDEO" or "TRAILER" (api-service's VideoAssetType, stored as a plain string here
+    // like processingStatus below) — read by VideoProcessingService to segregate processed
+    // output under processed/main/ vs processed/trailers/, so CloudFront can restrict viewer
+    // access to main-video output only while trailers stay publicly reachable.
+    private String assetType;
+
     private String processingStatus;
     private String processingError;
     private int processingAttempts;
