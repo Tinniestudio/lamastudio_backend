@@ -407,7 +407,7 @@ git commit -m "refactor(user): use app.cdn.base-url for avatar URLs, drop duplic
 - Modify: `tinniestudio-partner-web/src/config/env.config.ts`
 - Modify: `tinniestudio-partner-web/.env.example`
 
-- [ ] **Step 1: Add `cdnUrl` to the backend-response type**
+- [x] **Step 1: Add `cdnUrl` to the backend-response type**
 
 `tinniestudio-partner-web/src/types/upload.type.ts`:
 
@@ -429,7 +429,7 @@ git commit -m "refactor(user): use app.cdn.base-url for avatar URLs, drop duplic
  export type CompleteUploadResult = CompleteUploadResponse & { url: string };
 ```
 
-- [ ] **Step 2: Use the backend's `cdnUrl` in the BFF route instead of reconstructing it**
+- [x] **Step 2: Use the backend's `cdnUrl` in the BFF route instead of reconstructing it**
 
 `tinniestudio-partner-web/src/app/api/uploads/[sessionId]/complete/route.ts`:
 
@@ -473,7 +473,7 @@ Note: `storageKey` destructured from `parsed.data` above is now unused in this f
 
 Check the `completeSchema` Zod object a few lines above — if `storageKey` is only used for this destructure (confirm via `grep -n storageKey` in this file after the edit) and the backend doesn't need it in `backendPayload` either, leave the schema field as-is (it's still required input validation — the backend's `complete` endpoint doesn't take a `storageKey` body field at all, it reads it from the session; this field exists purely so the BFF could derive a URL, which Step 2 just removed the need for). This is a candidate for removing `storageKey` from `completeSchema`/`BffCompleteUploadRequest` entirely, but that touches the client-side caller contract too — leave it in scope for this task only if `npm run type-check` (Step 4) doesn't surface it as dead; otherwise leave the field in place rather than widening this task.
 
-- [ ] **Step 3: Remove the now-unused `CDN_BASE_URL` env var**
+- [x] **Step 3: Remove the now-unused `CDN_BASE_URL` env var**
 
 `tinniestudio-partner-web/src/schema/env.schema.ts`:
 
@@ -519,7 +519,7 @@ Check the `completeSchema` Zod object a few lines above — if `storageKey` is o
 -CDN_BASE_URL=http://localhost:9000/tinniestudio
 ```
 
-- [ ] **Step 4: Type-check and lint**
+- [x] **Step 4: Type-check and lint**
 
 ```bash
 cd tinniestudio-partner-web
@@ -529,11 +529,11 @@ npm run lint
 
 Expected: both pass with no errors. `type-check` specifically confirms nothing else in the codebase still imports `getCdnBaseUrl` or references `Env["CDN_BASE_URL"]`.
 
-- [ ] **Step 5: Manual verification**
+- [x] **Step 5: Manual verification**
 
 Start the dev server (`npm run dev`), log in as a partner, upload a content thumbnail or partner logo through the existing UI, and confirm the image renders immediately after upload (same as before — the visible behavior doesn't change, only where the URL came from).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd tinniestudio-partner-web
