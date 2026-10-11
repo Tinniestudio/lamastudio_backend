@@ -141,6 +141,11 @@ app:
 
   cdn:
     base-url: ${CDN_BASE_URL:http://localhost:3000}
+    signing-enabled: ${CDN_SIGNING_ENABLED:false}
+    cloudfront-key-pair-id: ${CLOUDFRONT_KEY_PAIR_ID:}
+    cloudfront-private-key: ${CLOUDFRONT_PRIVATE_KEY:}
+    signed-cookie-ttl-seconds: ${CDN_SIGNED_COOKIE_TTL_SECONDS:21600}
+    cookie-domain: ${CDN_COOKIE_DOMAIN:}
 
   storage:
     # No fallback default: MINIO (local dev / any S3-compatible endpoint) or S3 (production) are

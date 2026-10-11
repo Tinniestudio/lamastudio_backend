@@ -122,5 +122,18 @@ public class AppProperties {
     @Setter
     public static class Cdn {
         private String baseUrl = "http://localhost:3000";
+        // When false (the default — correct for local/dev, which has no real CloudFront to
+        // validate a signed cookie against), video manifest/segment URLs are plain CDN links,
+        // identical to images. Only ever true in production.
+        private boolean signingEnabled = false;
+        private String cloudfrontKeyPairId;
+        // PEM-encoded PKCS#8 private key, injected via secret/env — never committed. See
+        // CloudFrontSigningService for the PEM parsing and the one-time AWS setup this depends on.
+        private String cloudfrontPrivateKey;
+        private long signedCookieTtlSeconds = 21_600L; // 6h
+        // Empty means a host-only cookie (fine for same-host local testing). Production sets this
+        // to ".tinniestudio.com" so the cookie set by the API's own domain is also sent on requests
+        // to cdn.tinniestudio.com.
+        private String cookieDomain = "";
     }
 }
