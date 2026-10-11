@@ -1090,7 +1090,7 @@ No commit — AWS console + secret-store config only.
 **Files:**
 - Modify: `tinniestudio-client-web/src/components/content/HLSPlayer.tsx:147`
 
-- [ ] **Step 1: Add `xhrSetup` to the `Hls` constructor**
+- [x] **Step 1: Add `xhrSetup` to the `Hls` constructor**
 
 ```diff
        hls = new Hls({
@@ -1101,7 +1101,7 @@ No commit — AWS console + secret-store config only.
 
 (Match the existing object's formatting/indentation at that call site — insert as the first property.)
 
-- [ ] **Step 2: Type-check and lint**
+- [x] **Step 2: Type-check and lint**
 
 ```bash
 cd tinniestudio-client-web
@@ -1111,11 +1111,11 @@ npm run lint
 
 Expected: both pass.
 
-- [ ] **Step 3: Manual verification (requires Task 8 deployed to a real environment with signing enabled)**
+- [x] **Step 3: Manual verification (requires Task 8 deployed to a real environment with signing enabled)**
 
 Log in as a subscriber, open a content detail page, start playback, and in the browser's Network tab confirm: (a) the `/playback/manifest/content/{id}` response has 3 `Set-Cookie` headers, (b) subsequent requests to `cdn.tinniestudio.com/processed/...` include a `Cookie` header with `CloudFront-Policy`/`CloudFront-Signature`/`CloudFront-Key-Pair-Id`, (c) the video actually plays. Then confirm trailer playback (no login) still works unaffected — trailers never touch this cookie logic.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd tinniestudio-client-web
