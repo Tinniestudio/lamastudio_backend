@@ -644,7 +644,7 @@ git commit -m "feat(cdn): add CloudFront SDK dependency and signed-cookie config
 - Create: `api-service/src/main/java/com/tinniestudio/api/shared/storage/CloudFrontSigningService.java`
 - Test: `api-service/src/test/java/com/tinniestudio/api/shared/storage/CloudFrontSigningServiceTest.java`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `api-service/src/test/java/com/tinniestudio/api/shared/storage/CloudFrontSigningServiceTest.java`:
 
@@ -720,7 +720,7 @@ class CloudFrontSigningServiceTest {
 }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 ./gradlew :api-service:test --tests "com.tinniestudio.api.shared.storage.CloudFrontSigningServiceTest"
@@ -728,7 +728,7 @@ class CloudFrontSigningServiceTest {
 
 Expected: compile failure — `CloudFrontSigningService` doesn't exist yet.
 
-- [ ] **Step 3: Implement the service**
+- [x] **Step 3: Implement the service**
 
 Create `api-service/src/main/java/com/tinniestudio/api/shared/storage/CloudFrontSigningService.java`:
 
@@ -803,7 +803,7 @@ public class CloudFrontSigningService {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 ./gradlew :api-service:test --tests "com.tinniestudio.api.shared.storage.CloudFrontSigningServiceTest"
@@ -811,7 +811,7 @@ public class CloudFrontSigningService {
 
 Expected: `BUILD SUCCESSFUL`, 3 tests passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add api-service/src/main/java/com/tinniestudio/api/shared/storage/CloudFrontSigningService.java \
