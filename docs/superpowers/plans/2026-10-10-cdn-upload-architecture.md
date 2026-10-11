@@ -552,7 +552,7 @@ git commit -m "refactor(uploads): consume backend cdnUrl instead of reconstructi
 - Modify: `api-service/src/main/resources/application.yml:142-143`
 - Modify: `.env` / `.env.prod` (not committed — see Step 4)
 
-- [ ] **Step 1: Add the dependency**
+- [x] **Step 1: Add the dependency**
 
 `api-service/build.gradle`:
 
@@ -563,7 +563,7 @@ git commit -m "refactor(uploads): consume backend cdnUrl instead of reconstructi
 +    implementation 'software.amazon.awssdk:cloudfront'
 ```
 
-- [ ] **Step 2: Verify it resolves**
+- [x] **Step 2: Verify it resolves**
 
 ```bash
 ./gradlew :api-service:dependencies --configuration compileClasspath | grep cloudfront
@@ -571,7 +571,7 @@ git commit -m "refactor(uploads): consume backend cdnUrl instead of reconstructi
 
 Expected: a line showing `software.amazon.awssdk:cloudfront:2.25.0` (version pinned by the existing BOM).
 
-- [ ] **Step 3: Extend `AppProperties.Cdn` with signing config**
+- [x] **Step 3: Extend `AppProperties.Cdn` with signing config**
 
 `api-service/src/main/java/com/tinniestudio/api/shared/config/AppProperties.java`:
 
@@ -596,7 +596,7 @@ Expected: a line showing `software.amazon.awssdk:cloudfront:2.25.0` (version pin
      }
 ```
 
-- [ ] **Step 4: Wire the new config into `application.yml`**
+- [x] **Step 4: Wire the new config into `application.yml`**
 
 `api-service/src/main/resources/application.yml`:
 
@@ -620,7 +620,7 @@ CDN_SIGNED_COOKIE_TTL_SECONDS=21600
 CDN_COOKIE_DOMAIN=.tinniestudio.com
 ```
 
-- [ ] **Step 5: Confirm the app still boots with the new, all-defaulted config**
+- [x] **Step 5: Confirm the app still boots with the new, all-defaulted config**
 
 ```bash
 ./gradlew :api-service:test --tests "*ApplicationContext*"
@@ -628,7 +628,7 @@ CDN_COOKIE_DOMAIN=.tinniestudio.com
 
 (Or any existing Spring context smoke test — the goal is confirming `application.yml`'s new keys don't break property binding. If no such test exists, run `./gradlew :api-service:bootRun` locally for a few seconds and confirm no startup exception, then stop it.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add api-service/build.gradle api-service/src/main/java/com/tinniestudio/api/shared/config/AppProperties.java \
