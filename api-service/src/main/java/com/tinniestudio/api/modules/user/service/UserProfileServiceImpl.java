@@ -13,7 +13,7 @@ import com.tinniestudio.api.modules.user.dto.UpdatePasswordRequest;
 import com.tinniestudio.api.modules.user.dto.UpdateProfileRequest;
 import com.tinniestudio.api.modules.user.dto.UserProfileResponse;
 import com.tinniestudio.api.modules.user.repository.UserProfileRepository;
-import com.tinniestudio.api.shared.config.StripeProperties;
+import com.tinniestudio.api.shared.config.AppProperties;
 import com.tinniestudio.api.shared.entity.DomainEnums.AuthProvider;
 import com.tinniestudio.api.shared.entity.DomainEnums.SubscriptionStatus;
 import com.tinniestudio.api.shared.entity.User;
@@ -52,7 +52,7 @@ public class UserProfileServiceImpl implements UserProfileService {
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final StorageService storageService;
-    private final StripeProperties stripeProperties;
+    private final AppProperties appProperties;
     private final UserSubscriptionRepository userSubscriptionRepository;
     private final CapabilityService capabilityService;
 
@@ -141,7 +141,7 @@ public class UserProfileServiceImpl implements UserProfileService {
         if (!storageService.objectExists(request.getStorageKey())) {
             throw new BadRequestException("Upload not found in storage. Please upload the file before confirming.");
         }
-        String cdnUrl = stripeProperties.getCdnBaseUrl() + "/" + request.getStorageKey();
+        String cdnUrl = appProperties.getCdn().getBaseUrl() + "/" + request.getStorageKey();
         User user = loadUser(userId);
         user.setAvatarUrl(cdnUrl);
         userRepository.save(user);

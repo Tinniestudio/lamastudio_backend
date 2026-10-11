@@ -172,7 +172,6 @@ app:
 stripe:
   secret-key: ${STRIPE_SECRET_KEY:}
   webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
-  cdn-base-url: ${CDN_BASE_URL:http://localhost:9000}
 
 server:
   forward-headers-strategy: framework

@@ -7,7 +7,7 @@ import com.tinniestudio.api.modules.billing.service.CapabilityService;
 import com.tinniestudio.api.modules.user.dto.*;
 import com.tinniestudio.api.modules.user.repository.UserProfileRepository;
 import com.tinniestudio.api.modules.user.service.UserProfileServiceImpl;
-import com.tinniestudio.api.shared.config.StripeProperties;
+import com.tinniestudio.api.shared.config.AppProperties;
 import com.tinniestudio.api.shared.entity.DomainEnums.AuthProvider;
 import com.tinniestudio.api.shared.entity.DomainEnums.SubscriptionStatus;
 import com.tinniestudio.api.shared.entity.User;
@@ -44,7 +44,7 @@ class UserProfileServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private EmailService emailService;
     @Mock private StorageService storageService;
-    @Mock private StripeProperties stripeProperties;
+    @Mock private AppProperties appProperties;
     @Mock private UserSubscriptionRepository userSubscriptionRepository;
     @Mock private CapabilityService capabilityService;
 
@@ -207,6 +207,41 @@ class UserProfileServiceTest {
             assertThatThrownBy(() -> service.setAvatarByUrl(userId, "http://example.com/photo.jpg"))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("HTTPS");
+        }
+    }
+
+    @Nested
+    @DisplayName("confirmAvatarUpload()")
+    class ConfirmAvatarUpload {
+
+        @Test
+        @DisplayName("builds the avatar URL from app.cdn.base-url and persists it")
+        void buildsUrlFromAppCdnBaseUrl_andPersists() {
+            AvatarConfirmRequest request = new AvatarConfirmRequest();
+            request.setStorageKey("avatars/" + userId + "/photo.jpg");
+            when(storageService.objectExists(request.getStorageKey())).thenReturn(true);
+            AppProperties.Cdn cdn = new AppProperties.Cdn();
+            cdn.setBaseUrl("https://cdn.test");
+            when(appProperties.getCdn()).thenReturn(cdn);
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            String result = service.confirmAvatarUpload(userId, request);
+
+            assertThat(result).isEqualTo("https://cdn.test/avatars/" + userId + "/photo.jpg");
+            assertThat(user.getAvatarUrl()).isEqualTo(result);
+        }
+
+        @Test
+        @DisplayName("throws BadRequestException when the object isn't in storage yet")
+        void objectMissing_throws() {
+            AvatarConfirmRequest request = new AvatarConfirmRequest();
+            request.setStorageKey("avatars/" + userId + "/photo.jpg");
+            when(storageService.objectExists(request.getStorageKey())).thenReturn(false);
+
+            assertThatThrownBy(() -> service.confirmAvatarUpload(userId, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Please upload the file before confirming");
         }
     }
 
