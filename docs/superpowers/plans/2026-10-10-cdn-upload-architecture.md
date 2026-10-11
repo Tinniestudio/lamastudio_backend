@@ -827,7 +827,7 @@ git commit -m "feat(cdn): add CloudFrontSigningService for signed video-access c
 - Modify: `api-service/src/main/java/com/tinniestudio/api/modules/playback/controller/PlaybackController.java`
 - Test: `api-service/src/test/java/com/tinniestudio/api/modules/playback/controller/PlaybackControllerTest.java`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `PlaybackControllerTest.java`:
 
@@ -900,7 +900,7 @@ Add two new test methods (near `getContentManifest_returnsManifest`):
     }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 ./gradlew :api-service:test --tests "com.tinniestudio.api.modules.playback.controller.PlaybackControllerTest"
@@ -908,7 +908,7 @@ Add two new test methods (near `getContentManifest_returnsManifest`):
 
 Expected: the "disabled" test passes already (no code change needed for that case), but the "enabled" test fails — no cookies are set yet since the controller doesn't call `cloudFrontSigningService` at all.
 
-- [ ] **Step 3: Wire the signing service into the controller**
+- [x] **Step 3: Wire the signing service into the controller**
 
 `api-service/src/main/java/com/tinniestudio/api/modules/playback/controller/PlaybackController.java`:
 
@@ -1003,7 +1003,7 @@ Add the two private helpers at the bottom of the class, right before the final c
 
 No change to `getTrailerManifest`/`getSeasonTrailerManifest`/`getEpisodeTrailerManifest`/`checkAccess`/`recordProgress`/`getContinueWatching` — these stay exactly as they are.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 ./gradlew :api-service:test --tests "com.tinniestudio.api.modules.playback.controller.PlaybackControllerTest"
@@ -1011,7 +1011,7 @@ No change to `getTrailerManifest`/`getSeasonTrailerManifest`/`getEpisodeTrailerM
 
 Expected: `BUILD SUCCESSFUL`, both new tests pass, and every pre-existing test in this class still passes unchanged.
 
-- [ ] **Step 5: Run the full backend test suite**
+- [x] **Step 5: Run the full backend test suite**
 
 ```bash
 ./gradlew :api-service:test
@@ -1019,7 +1019,7 @@ Expected: `BUILD SUCCESSFUL`, both new tests pass, and every pre-existing test i
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add api-service/src/main/java/com/tinniestudio/api/modules/playback/controller/PlaybackController.java \
