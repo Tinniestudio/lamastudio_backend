@@ -83,7 +83,9 @@ public class VideoProcessingService {
 
             // 3. PROBING
             updateJobStatus(job, "PROBING");
-            FFprobeRunner.VideoMetadata meta = ffprobeRunner.probe(inputFile.toString());
+            // Trailers may be silent (no audio track) — main videos still require one.
+            boolean requireAudio = !"TRAILER".equals(asset.getAssetType());
+            FFprobeRunner.VideoMetadata meta = ffprobeRunner.probe(inputFile.toString(), requireAudio);
             if (meta.durationSeconds() > workerProperties.getProcessing().getMaxDurationSeconds()) {
                 throw new FFprobeRunner.ValidationException(
                     "Video duration " + meta.durationSeconds() + "s exceeds max allowed "

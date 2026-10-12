@@ -22,7 +22,7 @@ public class FFprobeRunner {
         this.ffprobePath = ffprobePath;
     }
 
-    public VideoMetadata probe(String inputPath) throws Exception {
+    public VideoMetadata probe(String inputPath, boolean requireAudio) throws Exception {
         List<String> command = List.of(
             ffprobePath, "-v", "quiet",
             "-print_format", "json",
@@ -30,10 +30,10 @@ public class FFprobeRunner {
             inputPath
         );
         String output = processRunner.run(command);
-        return parseOutput(output);
+        return parseOutput(output, requireAudio);
     }
 
-    private VideoMetadata parseOutput(String json) throws Exception {
+    private VideoMetadata parseOutput(String json, boolean requireAudio) throws Exception {
         JsonNode root = objectMapper.readTree(json);
         JsonNode streams = root.get("streams");
         JsonNode format = root.get("format");
@@ -57,7 +57,7 @@ public class FFprobeRunner {
         if (videoStream == null) {
             throw new ValidationException("Probe failed: no video stream found in " + json);
         }
-        if (!hasAudio) {
+        if (requireAudio && !hasAudio) {
             throw new ValidationException("Probe failed: no audio stream found in " + json);
         }
 
@@ -70,7 +70,7 @@ public class FFprobeRunner {
             bitrate = format.path("bit_rate").asLong(0);
         }
 
-        return new VideoMetadata(durationSeconds, width, height, codec, bitrate, true);
+        return new VideoMetadata(durationSeconds, width, height, codec, bitrate, hasAudio);
     }
 
     public record VideoMetadata(

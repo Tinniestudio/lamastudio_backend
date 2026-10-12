@@ -104,7 +104,7 @@ class VideoProcessingServiceTest {
 
             FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
                 120, 1920, 1080, "h264", 5_000_000L, true);
-            when(ffprobeRunner.probe(anyString())).thenReturn(meta);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(meta);
 
             service.process(payload);
 
@@ -129,7 +129,7 @@ class VideoProcessingServiceTest {
             when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
             when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
             stubDownloadCreatesFile(12_345L);
-            when(ffprobeRunner.probe(anyString())).thenReturn(
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(
                 new FFprobeRunner.VideoMetadata(120, 1920, 1080, "h264", 5_000_000L, true));
 
             service.process(payload);
@@ -153,7 +153,7 @@ class VideoProcessingServiceTest {
             when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
             when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
             stubDownloadCreatesFile(12_345L);
-            when(ffprobeRunner.probe(anyString())).thenReturn(
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(
                 new FFprobeRunner.VideoMetadata(30, 1920, 1080, "h264", 5_000_000L, true));
 
             service.process(payload);
@@ -162,6 +162,46 @@ class VideoProcessingServiceTest {
             verify(videoAssetRepo, atLeastOnce()).save(captor.capture());
             VideoAsset last = captor.getAllValues().get(captor.getAllValues().size() - 1);
             assertThat(last.getManifestUrl()).isEqualTo("processed/trailers/" + assetId + "/master.m3u8");
+        }
+
+        @Test
+        void requiresAudioWhenProbingAMainVideo() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            asset.setAssetType("MAIN_VIDEO");
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "DONE")).thenReturn(false);
+            when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            stubDownloadCreatesFile(12_345L);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(
+                new FFprobeRunner.VideoMetadata(120, 1920, 1080, "h264", 5_000_000L, true));
+
+            service.process(payload);
+
+            verify(ffprobeRunner).probe(anyString(), eq(true));
+        }
+
+        @Test
+        void doesNotRequireAudioWhenProbingATrailer() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            asset.setAssetType("TRAILER");
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "DONE")).thenReturn(false);
+            when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            stubDownloadCreatesFile(12_345L);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(
+                new FFprobeRunner.VideoMetadata(30, 1920, 1080, "h264", 5_000_000L, false));
+
+            service.process(payload);
+
+            verify(ffprobeRunner).probe(anyString(), eq(false));
         }
 
         @Test
@@ -181,7 +221,7 @@ class VideoProcessingServiceTest {
 
             FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
                 30, 640, 360, "h264", 1_000_000L, true);
-            when(ffprobeRunner.probe(anyString())).thenReturn(meta);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(meta);
 
             service.process(payload);
 
@@ -202,7 +242,7 @@ class VideoProcessingServiceTest {
             service.process(payload);
 
             verify(videoAssetRepo, never()).findById(any());
-            verify(ffprobeRunner, never()).probe(any());
+            verify(ffprobeRunner, never()).probe(any(), anyBoolean());
         }
 
         @Test
@@ -219,7 +259,7 @@ class VideoProcessingServiceTest {
 
             FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
                 60, 1280, 720, "h264", 2_800_000L, true);
-            when(ffprobeRunner.probe(anyString())).thenReturn(meta);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(meta);
 
             service.process(payload);
 
@@ -244,7 +284,7 @@ class VideoProcessingServiceTest {
             // 5-hour video exceeds the 1-hour max
             FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
                 18000, 1920, 1080, "h264", 5_000_000L, true);
-            when(ffprobeRunner.probe(anyString())).thenReturn(meta);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(meta);
 
             service.process(payload);
 
@@ -266,7 +306,7 @@ class VideoProcessingServiceTest {
             when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
             when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
             stubDownloadCreatesFile(1_000L);
-            when(ffprobeRunner.probe(anyString()))
+            when(ffprobeRunner.probe(anyString(), anyBoolean()))
                 .thenThrow(new FFprobeRunner.ValidationException("no audio stream found"));
 
             service.process(payload);
@@ -298,7 +338,7 @@ class VideoProcessingServiceTest {
 
             FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
                 60, 1920, 1080, "h264", 5_000_000L, true);
-            when(ffprobeRunner.probe(anyString())).thenReturn(meta);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(meta);
 
             service.process(payload);
 
@@ -330,7 +370,7 @@ class VideoProcessingServiceTest {
 
             FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
                 30, 640, 360, "h264", 800_000L, true);
-            when(ffprobeRunner.probe(anyString())).thenReturn(meta);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(meta);
 
             service.process(payload);
 

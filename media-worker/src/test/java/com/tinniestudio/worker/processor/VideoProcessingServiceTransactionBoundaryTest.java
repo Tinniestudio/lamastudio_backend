@@ -28,6 +28,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
@@ -109,7 +110,7 @@ class VideoProcessingServiceTransactionBoundaryTest {
             Files.write(target, new byte[]{1, 2, 3, 4});
             return null;
         }).when(storageService).download(anyString(), any(Path.class));
-        when(ffprobeRunner.probe(anyString()))
+        when(ffprobeRunner.probe(anyString(), anyBoolean()))
             .thenThrow(new RuntimeException("ffprobe crashed mid-pipeline"));
 
         boolean threw = false;
