@@ -1,13 +1,11 @@
 package com.tinniestudio.api.billing.service;
 
-import com.tinniestudio.api.modules.auth.service.EmailService;
 import com.tinniestudio.api.modules.billing.dto.*;
 import com.tinniestudio.api.modules.billing.repository.PaymentRepository;
 import com.tinniestudio.api.modules.billing.repository.SubscriptionPlanRepository;
 import com.tinniestudio.api.modules.billing.repository.UserSubscriptionRepository;
 import com.tinniestudio.api.modules.billing.service.*;
 import com.tinniestudio.api.modules.user.repository.UserRepository;
-import com.tinniestudio.api.shared.config.AppProperties;
 import com.tinniestudio.api.shared.entity.*;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
 import com.tinniestudio.api.shared.exception.BadRequestException;
@@ -45,8 +43,6 @@ class SubscriptionServiceTest {
     @Mock private com.tinniestudio.api.modules.user.repository.UserProfileRepository userProfileRepository;
     @Mock private CouponService couponService;
     @Mock private StripeService stripeService;
-    @Mock private EmailService emailService;
-    @Mock private AppProperties appProperties;
 
     @InjectMocks private SubscriptionServiceImpl service;
 
@@ -343,6 +339,36 @@ class SubscriptionServiceTest {
 
             assertThat(sub.getAutoRenew()).isFalse();
             verify(subscriptionRepository).save(sub);
+        }
+
+        @Test
+        @DisplayName("access still granted via getSubscriptionStatus while the paid period hasn't expired yet")
+        void disableCard_periodNotYetExpired_stillHasAccess() {
+            UserSubscription sub = new UserSubscription();
+            sub.setId(UUID.randomUUID());
+            sub.setUserId(userId);
+            sub.setPlan(silverPlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setAutoRenew(true);
+            sub.setStripeCustomerId("cus_mine");
+            sub.setEndDate(Instant.now().plusSeconds(86_400));
+
+            when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId))
+                .thenReturn(Optional.of(sub));
+
+            service.disableCard(userId);
+
+            UserProfile profile = new UserProfile();
+            profile.setPaymentSetup(false);
+            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+                .thenReturn(Optional.of(sub));
+            when(userProfileRepository.findById(userId)).thenReturn(Optional.of(profile));
+            when(paymentRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());
+
+            SubscriptionStatusResponse result = service.getSubscriptionStatus(userId);
+
+            assertThat(result.isHasAccess()).isTrue();
+            assertThat(result.getBlockReason()).isNull();
         }
     }
 

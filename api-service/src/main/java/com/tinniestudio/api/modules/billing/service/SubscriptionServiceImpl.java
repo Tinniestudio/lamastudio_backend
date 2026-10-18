@@ -1,12 +1,10 @@
 package com.tinniestudio.api.modules.billing.service;
 
-import com.tinniestudio.api.modules.auth.service.EmailService;
 import com.tinniestudio.api.modules.billing.dto.*;
 import com.tinniestudio.api.modules.billing.repository.PaymentRepository;
 import com.tinniestudio.api.modules.billing.repository.SubscriptionPlanRepository;
 import com.tinniestudio.api.modules.billing.repository.UserSubscriptionRepository;
 import com.tinniestudio.api.modules.user.repository.UserRepository;
-import com.tinniestudio.api.shared.config.AppProperties;
 import com.tinniestudio.api.shared.entity.*;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
 import com.tinniestudio.api.shared.exception.BadRequestException;
@@ -38,8 +36,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final com.tinniestudio.api.modules.user.repository.UserProfileRepository userProfileRepository;
     private final CouponService couponService;
     private final StripeService stripeService;
-    private final EmailService emailService;
-    private final AppProperties appProperties;
 
     @Override
     @Transactional(readOnly = true)
@@ -241,14 +237,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         subscriptionRepository.save(sub);
     }
 
-    /** Same purchasability rule initiateCheckout used to enforce (SILVER/GOLD only — FREE and any
-     * other plan aren't selectable by a user directly). */
-    private void assertPlanPurchasable(SubscriptionPlan plan) {
-        if (!"SILVER".equalsIgnoreCase(plan.getName()) && !"GOLD".equalsIgnoreCase(plan.getName())) {
-            throw new BadRequestException("Plan is not available for purchase");
-        }
-    }
-
     @Override
     @Transactional(readOnly = true)
     public SubscriptionStatusResponse getSubscriptionStatus(UUID userId) {
@@ -345,6 +333,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             SubscriptionPlan newPlan = planRepository.findById(sub.getPendingPlanId()).orElse(null);
             if (newPlan != null) {
                 sub.setPlan(newPlan);
+            } else {
+                log.warn("Subscription {} had pendingPlanId {} that no longer resolves to a plan — "
+                    + "switch dropped, staying on the current plan", subscriptionId, sub.getPendingPlanId());
             }
             sub.setPendingPlanId(null);
         }
@@ -401,6 +392,15 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    /** Only SILVER/GOLD are user-selectable — FREE is system-assigned, and any other plan isn't
+     * meant to be chosen directly. Enforced wherever a user supplies a planId (initial card setup,
+     * plan switch). */
+    private void assertPlanPurchasable(SubscriptionPlan plan) {
+        if (!"SILVER".equalsIgnoreCase(plan.getName()) && !"GOLD".equalsIgnoreCase(plan.getName())) {
+            throw new BadRequestException("Plan is not available for purchase");
+        }
+    }
+
     private BigDecimal applyDiscount(BigDecimal price, CouponValidationResult coupon) {
         if (coupon.getDiscountType() == DiscountType.PERCENTAGE) {
             BigDecimal factor = BigDecimal.ONE.subtract(
@@ -409,23 +409,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         } else {
             return price.subtract(coupon.getDiscountValue()).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
         }
-    }
-
-    private void notifyUser(UUID userId, String planName, Boolean activated, String failReason) {
-        userRepository.findById(userId).ifPresent(user -> {
-            String name = user.getFirstName() != null ? user.getFirstName() : user.getEmail();
-            try {
-                if (Boolean.TRUE.equals(activated)) {
-                    emailService.sendSubscriptionActivatedEmail(user.getEmail(), name, planName);
-                } else if (Boolean.FALSE.equals(activated)) {
-                    emailService.sendPaymentFailedEmail(user.getEmail(), name, planName, failReason);
-                } else {
-                    emailService.sendSubscriptionCancelledEmail(user.getEmail(), name, "your next billing date");
-                }
-            } catch (Exception ex) {
-                log.warn("Failed to send subscription email to {}: {}", user.getEmail(), ex.getMessage());
-            }
-        });
     }
 
     private String reasonMessage(String reason) {
