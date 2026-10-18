@@ -42,6 +42,7 @@ class SubscriptionServiceTest {
     @Mock private UserSubscriptionRepository subscriptionRepository;
     @Mock private PaymentRepository paymentRepository;
     @Mock private UserRepository userRepository;
+    @Mock private com.tinniestudio.api.modules.user.repository.UserProfileRepository userProfileRepository;
     @Mock private CouponService couponService;
     @Mock private StripeService stripeService;
     @Mock private EmailService emailService;
@@ -80,213 +81,6 @@ class SubscriptionServiceTest {
 
             assertThat(plans).hasSize(1);
             assertThat(plans.get(0).getName()).isEqualTo("SILVER");
-        }
-    }
-
-    @Nested
-    @DisplayName("initiateCheckout()")
-    class InitiateCheckout {
-
-        @Test
-        @DisplayName("creates PENDING payment and returns Stripe checkout URL")
-        void createsPaymentAndReturnsUrl() {
-            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
-                .thenReturn(Optional.empty());
-            when(planRepository.findById(silverPlan.getId())).thenReturn(Optional.of(silverPlan));
-            when(appProperties.getFrontendUrl()).thenReturn("https://frontend.example.com");
-            when(stripeService.createCheckoutSession(anyLong(), anyString(), anyString(), anyString(), anyString(), anyMap()))
-                .thenReturn(new StripeService.CreateCheckoutResult("cs_123", "pi_123",
-                    "https://checkout.stripe.com/pay/cs_123", Instant.now().plus(30, ChronoUnit.MINUTES)));
-
-            Payment savedPayment = new Payment();
-            savedPayment.setId(UUID.randomUUID());
-            savedPayment.setUserId(userId);
-            savedPayment.setPlanId(silverPlan.getId());
-            savedPayment.setAmount(new BigDecimal("9.99"));
-            savedPayment.setCurrency("CAD");
-            savedPayment.setAutoRenew(true);
-            savedPayment.setStatus(PaymentStatus.PENDING);
-            when(paymentRepository.save(any())).thenReturn(savedPayment);
-
-            CheckoutRequest request = new CheckoutRequest();
-            request.setPlanId(silverPlan.getId());
-            request.setAutoRenew(true);
-
-            CheckoutResponse response = service.initiateCheckout(userId, request);
-
-            assertThat(response.getPaymentUrl()).isEqualTo("https://checkout.stripe.com/pay/cs_123");
-            assertThat(response.getPlanName()).isEqualTo("SILVER");
-            verify(paymentRepository, times(1)).save(any());
-        }
-
-        @Test
-        @DisplayName("sets Payment.expiresAt from the Stripe checkout result")
-        void setsPaymentExpiresAtFromCheckoutResult() {
-            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
-                .thenReturn(Optional.empty());
-            when(planRepository.findById(silverPlan.getId())).thenReturn(Optional.of(silverPlan));
-            when(appProperties.getFrontendUrl()).thenReturn("https://frontend.example.com");
-            Instant expiry = Instant.now().plus(30, ChronoUnit.MINUTES);
-            when(stripeService.createCheckoutSession(anyLong(), anyString(), anyString(), anyString(), anyString(), anyMap()))
-                .thenReturn(new StripeService.CreateCheckoutResult("cs_123", "pi_123",
-                    "https://checkout.stripe.com/pay/cs_123", expiry));
-
-            ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
-            when(paymentRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
-
-            CheckoutRequest request = new CheckoutRequest();
-            request.setPlanId(silverPlan.getId());
-            request.setAutoRenew(true);
-
-            service.initiateCheckout(userId, request);
-
-            assertThat(captor.getValue().getExpiresAt()).isEqualTo(expiry);
-        }
-
-        @Test
-        @DisplayName("user with existing active paid subscription throws BadRequestException")
-        void activeSubscriptionExists_throws() {
-            UserSubscription existing = new UserSubscription();
-            existing.setPlan(silverPlan);
-            existing.setStatus(SubscriptionStatus.ACTIVE);
-
-            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
-                .thenReturn(Optional.of(existing));
-
-            CheckoutRequest request = new CheckoutRequest();
-            request.setPlanId(silverPlan.getId());
-            request.setAutoRenew(true);
-
-            assertThatThrownBy(() -> service.initiateCheckout(userId, request))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("already have an active subscription");
-        }
-    }
-
-    @Nested
-    @DisplayName("activateSubscription()")
-    class ActivateSubscription {
-
-        @Test
-        @DisplayName("creates ACTIVE subscription and marks payment SUCCESSFUL")
-        void activatesSubscription() {
-            Payment payment = new Payment();
-            payment.setId(UUID.randomUUID());
-            payment.setUserId(userId);
-            payment.setPlanId(silverPlan.getId());
-            payment.setAmount(new BigDecimal("9.99"));
-            payment.setCurrency("CAD");
-            payment.setAutoRenew(true);
-            payment.setStatus(PaymentStatus.PENDING);
-
-            when(paymentRepository.existsByProviderReferenceAndStatus("pi_123", PaymentStatus.SUCCESSFUL))
-                .thenReturn(false);
-            when(paymentRepository.findByProviderReference("pi_123")).thenReturn(Optional.of(payment));
-            when(planRepository.findById(silverPlan.getId())).thenReturn(Optional.of(silverPlan));
-            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
-                .thenReturn(Optional.empty());
-
-            UserSubscription saved = new UserSubscription();
-            saved.setId(UUID.randomUUID());
-            when(subscriptionRepository.save(any())).thenReturn(saved);
-            when(paymentRepository.save(any())).thenReturn(payment);
-            when(userRepository.findById(userId)).thenReturn(Optional.empty());
-
-            service.activateSubscription("cs_123", "pi_123");
-
-            assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCESSFUL);
-            assertThat(payment.getPaidAt()).isNotNull();
-            verify(subscriptionRepository).save(any());
-        }
-
-        @Test
-        @DisplayName("second webhook for same providerReference is idempotent — no duplicate subscription")
-        void duplicateWebhook_isIdempotent() {
-            when(paymentRepository.existsByProviderReferenceAndStatus("pi_123", PaymentStatus.SUCCESSFUL))
-                .thenReturn(true);
-
-            service.activateSubscription("cs_123", "pi_123");
-
-            verify(subscriptionRepository, never()).save(any());
-        }
-    }
-
-    @Nested
-    @DisplayName("cancelPayment()")
-    class CancelPayment {
-
-        @Test
-        @DisplayName("cancels pending payment and sets cancelledAt")
-        void cancelsPendingPayment() {
-            Payment payment = new Payment();
-            payment.setId(UUID.randomUUID());
-            payment.setUserId(userId);
-            payment.setStatus(PaymentStatus.PENDING);
-            payment.setProviderReference("pi_mine");
-
-            when(paymentRepository.findTopByUserIdAndStatusOrderByCreatedAtDesc(userId, PaymentStatus.PENDING))
-                .thenReturn(Optional.of(payment));
-
-            service.cancelPayment(userId);
-
-            // cancelPayment() returns getSubscriptionStatus(userId) — a response about the
-            // user's overall subscription/plan, not the payment itself (its .status field is
-            // "ACTIVE"/"FREE"/"EXPIRED" subscription state, unrelated to PaymentStatus). What
-            // this test actually verifies is the mutation on the payment entity passed through
-            // the mocked repository.
-            assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELLED);
-            assertThat(payment.getCancelledAt()).isNotNull();
-        }
-
-        @Test
-        @DisplayName("no pending payment throws ResourceNotFoundException")
-        void noPendingPayment_throws() {
-            when(paymentRepository.findTopByUserIdAndStatusOrderByCreatedAtDesc(userId, PaymentStatus.PENDING))
-                .thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> service.cancelPayment(userId))
-                .isInstanceOf(ResourceNotFoundException.class);
-        }
-    }
-
-    @Nested
-    @DisplayName("verifyPayment()")
-    class VerifyPayment {
-
-        @Test
-        @DisplayName("payment reference belonging to another user throws ResourceNotFoundException without calling Stripe")
-        void paymentOwnedByAnotherUser_throwsNotFound() {
-            when(paymentRepository.findByProviderReferenceAndUserId("pi_victim", userId))
-                .thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> service.verifyPayment(userId, "pi_victim"))
-                .isInstanceOf(ResourceNotFoundException.class);
-
-            verifyNoInteractions(stripeService);
-        }
-
-        @Test
-        @DisplayName("owner's already-successful payment returns status without re-verifying with Stripe")
-        void ownPaymentAlreadySuccessful_skipsStripeVerification() {
-            Payment payment = new Payment();
-            payment.setId(UUID.randomUUID());
-            payment.setUserId(userId);
-            payment.setStatus(PaymentStatus.SUCCESSFUL);
-            payment.setProviderReference("pi_mine");
-
-            when(paymentRepository.findByProviderReferenceAndUserId("pi_mine", userId))
-                .thenReturn(Optional.of(payment));
-            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
-                .thenReturn(Optional.empty());
-            when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId))
-                .thenReturn(Optional.empty());
-            when(paymentRepository.findByUserIdOrderByCreatedAtDesc(userId))
-                .thenReturn(List.of());
-
-            SubscriptionStatusResponse result = service.verifyPayment(userId, "pi_mine");
-
-            assertThat(result.getPlan()).isEqualTo("FREE");
-            verifyNoInteractions(stripeService);
         }
     }
 
@@ -358,54 +152,155 @@ class SubscriptionServiceTest {
     }
 
     @Nested
-    @DisplayName("cancelSubscription()")
-    class CancelSubscription {
+    @DisplayName("confirmPaymentSetup()")
+    class ConfirmPaymentSetup {
 
         @Test
-        @DisplayName("active paid subscription sets autoRenew=false and cancelledAt")
-        void cancelsPaidSubscription() {
+        @DisplayName("first-ever setup starts a 30-day trial")
+        void confirmPaymentSetup_firstEverSetup_startsTrial() {
+            UUID planId = silverPlan.getId();
+
+            PaymentSetupConfirmRequest request = new PaymentSetupConfirmRequest();
+            request.setSetupIntentId("seti_123");
+            request.setPlanId(planId);
+
+            when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.empty());
+            when(stripeService.retrieveSetupIntent("seti_123")).thenReturn(
+                new StripeService.VerifySetupIntentResult("seti_123", "cus_123", "pm_123", true));
+            when(planRepository.findById(planId)).thenReturn(Optional.of(silverPlan));
+            when(subscriptionRepository.save(any(UserSubscription.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+            service.confirmPaymentSetup(userId, request);
+
+            ArgumentCaptor<UserSubscription> captor = ArgumentCaptor.forClass(UserSubscription.class);
+            verify(subscriptionRepository, atLeastOnce()).save(captor.capture());
+            UserSubscription saved = captor.getValue();
+
+            assertThat(saved.getStripeCustomerId()).isEqualTo("cus_123");
+            assertThat(saved.getStripePaymentMethodId()).isEqualTo("pm_123");
+            assertThat(saved.getTrialEndsAt()).isNotNull();
+            assertThat(saved.getTrialEndsAt()).isEqualTo(saved.getNextRenewalAt());
+            assertThat(saved.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+            assertThat(saved.getAutoRenew()).isTrue();
+        }
+
+        @Test
+        @DisplayName("rejects a SetupIntent whose resolved customer doesn't match the one already on file")
+        void confirmPaymentSetup_rejectsSetupIntentForDifferentCustomer() {
+            UserSubscription existing = new UserSubscription();
+            existing.setUserId(userId);
+            existing.setStripeCustomerId("cus_mine");
+            existing.setStatus(SubscriptionStatus.PAST_DUE);
+
+            PaymentSetupConfirmRequest request = new PaymentSetupConfirmRequest();
+            request.setSetupIntentId("seti_123");
+
+            when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId))
+                .thenReturn(Optional.of(existing));
+            when(stripeService.retrieveSetupIntent("seti_123")).thenReturn(
+                new StripeService.VerifySetupIntentResult("seti_123", "cus_someone_else", "pm_123", true));
+
+            assertThatThrownBy(() -> service.confirmPaymentSetup(userId, request))
+                .isInstanceOf(BadRequestException.class);
+
+            verify(subscriptionRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("disableCard()")
+    class DisableCard {
+
+        @Test
+        @DisplayName("sets autoRenew false; access rides out the remaining paid period")
+        void disableCard_setsPaymentSetupAndAutoRenewFalse() {
             UserSubscription sub = new UserSubscription();
-            sub.setId(UUID.randomUUID());
-            sub.setPlan(silverPlan);
+            sub.setUserId(userId);
             sub.setStatus(SubscriptionStatus.ACTIVE);
-            sub.setEndDate(Instant.now().plusSeconds(86400));
+            sub.setAutoRenew(true);
 
-            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+            when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId))
                 .thenReturn(Optional.of(sub));
-            when(subscriptionRepository.save(any())).thenReturn(sub);
-            when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
-            service.cancelSubscription(userId);
+            service.disableCard(userId);
 
-            assertThat(sub.getCancelledAt()).isNotNull();
             assertThat(sub.getAutoRenew()).isFalse();
-            assertThat(sub.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+            verify(subscriptionRepository).save(sub);
         }
+    }
+
+    @Nested
+    @DisplayName("processRenewal()")
+    class ProcessRenewal {
 
         @Test
-        @DisplayName("no active subscription throws ResourceNotFoundException")
-        void noSubscription_throws() {
-            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
-                .thenReturn(Optional.empty());
+        @DisplayName("success advances endDate/nextRenewalAt by 30 days and writes a RENEWAL payment")
+        void processRenewal_success_advancesDatesAndWritesPayment() {
+            UUID subscriptionId = UUID.randomUUID();
 
-            assertThatThrownBy(() -> service.cancelSubscription(userId))
-                .isInstanceOf(ResourceNotFoundException.class);
-        }
-
-        @Test
-        @DisplayName("already cancelled subscription throws BadRequestException")
-        void alreadyCancelled_throws() {
             UserSubscription sub = new UserSubscription();
+            sub.setId(subscriptionId);
+            sub.setUserId(userId);
             sub.setPlan(silverPlan);
             sub.setStatus(SubscriptionStatus.ACTIVE);
-            sub.setCancelledAt(Instant.now().minusSeconds(100));
+            sub.setAutoRenew(true);
+            sub.setStripeCustomerId("cus_123");
+            sub.setStripePaymentMethodId("pm_123");
+            Instant dueAt = Instant.now().minusSeconds(60);
+            sub.setNextRenewalAt(dueAt);
+            sub.setTrialEndsAt(dueAt);
 
-            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
-                .thenReturn(Optional.of(sub));
+            when(subscriptionRepository.findByIdForUpdate(subscriptionId)).thenReturn(Optional.of(sub));
+            when(stripeService.chargeOffSession(eq("cus_123"), eq("pm_123"), eq(999L), eq("CAD"), any()))
+                .thenReturn(new StripeService.ChargeResult("pi_123", true, null));
 
-            assertThatThrownBy(() -> service.cancelSubscription(userId))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("already cancelled");
+            service.processRenewal(subscriptionId);
+
+            assertThat(sub.getTrialEndsAt()).isNull();
+            assertThat(sub.getNextRenewalAt()).isAfter(dueAt);
+            assertThat(sub.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+            verify(paymentRepository).save(any());
+        }
+
+        @Test
+        @DisplayName("failure sets status PAST_DUE and writes no payment")
+        void processRenewal_failure_setsPastDue() {
+            UUID subscriptionId = UUID.randomUUID();
+
+            UserSubscription sub = new UserSubscription();
+            sub.setId(subscriptionId);
+            sub.setUserId(userId);
+            sub.setPlan(silverPlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setAutoRenew(true);
+            sub.setStripeCustomerId("cus_123");
+            sub.setStripePaymentMethodId("pm_123");
+            sub.setNextRenewalAt(Instant.now().minusSeconds(60));
+
+            when(subscriptionRepository.findByIdForUpdate(subscriptionId)).thenReturn(Optional.of(sub));
+            when(stripeService.chargeOffSession(any(), any(), anyLong(), any(), any()))
+                .thenReturn(new StripeService.ChargeResult(null, false, "Your card was declined."));
+
+            service.processRenewal(subscriptionId);
+
+            assertThat(sub.getStatus()).isEqualTo(SubscriptionStatus.PAST_DUE);
+            verify(paymentRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("autoRenew turned off under the lock (race with a concurrent disable) does not charge")
+        void processRenewal_autoRenewTurnedOffUnderLock_doesNotCharge() {
+            UUID subscriptionId = UUID.randomUUID();
+            UserSubscription sub = new UserSubscription();
+            sub.setId(subscriptionId);
+            sub.setAutoRenew(false); // flipped off after the job's initial scan, before the lock
+
+            when(subscriptionRepository.findByIdForUpdate(subscriptionId)).thenReturn(Optional.of(sub));
+
+            service.processRenewal(subscriptionId);
+
+            verify(stripeService, never()).chargeOffSession(any(), any(), anyLong(), any(), any());
         }
     }
 }

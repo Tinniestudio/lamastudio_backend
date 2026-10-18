@@ -11,17 +11,20 @@ public interface SubscriptionService {
 
     CouponValidationResponse validateCoupon(String code, UUID userId, UUID planId);
 
-    CheckoutResponse initiateCheckout(UUID userId, CheckoutRequest request);
+    PaymentSetupIntentResponse startPaymentSetup(UUID userId);
 
-    void activateSubscription(String checkoutSessionId, String paymentIntentId);
+    void confirmPaymentSetup(UUID userId, PaymentSetupConfirmRequest request);
 
-    void failPayment(String paymentIntentId, String reason);
+    void disableCard(UUID userId);
+
+    void enableCard(UUID userId);
+
+    void retryPayment(UUID userId);
+
+    void switchPlan(UUID userId, UUID newPlanId);
 
     SubscriptionStatusResponse getSubscriptionStatus(UUID userId);
 
-    void cancelSubscription(UUID userId);
-
-    SubscriptionStatusResponse cancelPayment(UUID userId);
-
-    SubscriptionStatusResponse verifyPayment(UUID userId, String paymentId);
+    /** Called by RecurringBillingRenewalJob for each subscription due for renewal. */
+    void processRenewal(UUID subscriptionId);
 }

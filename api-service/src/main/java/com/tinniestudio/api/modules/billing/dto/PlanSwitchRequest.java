@@ -10,13 +10,8 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
-public class CheckoutRequest {
+public class PlanSwitchRequest {
 
     @NotNull(message = "planId is required")
     private UUID planId;
-
-    @NotNull(message = "autoRenew is required")
-    private Boolean autoRenew;
-
-    private String couponCode;
 }
