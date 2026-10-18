@@ -1,5 +1,6 @@
 package com.tinniestudio.api.shared.entity;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -61,11 +62,10 @@ public class UserSubscription extends BaseEntity {
   @Column(name = "pending_plan_id")
   private UUID pendingPlanId;
 
-  /** Set at payment-setup time if a coupon was applied; consumed (cleared) by the first
-   * successful charge only — this is an intro discount, not a recurring one. */
+  /** Set at payment-setup time if a coupon was applied; consumed (cleared) by the first successful charge only — this is an intro discount, not a recurring one. */
   @Column(name = "pending_coupon_id")
   private UUID pendingCouponId;
 
   @Column(name = "pending_discount_amount", precision = 10, scale = 2)
-  private java.math.BigDecimal pendingDiscountAmount;
+  private BigDecimal pendingDiscountAmount;
 }
