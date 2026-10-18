@@ -30,6 +30,12 @@ public interface UserSubscriptionRepository extends JpaRepository<UserSubscripti
 
     Optional<UserSubscription> findByStripeCustomerId(String stripeCustomerId);
 
+    /**
+     * Caller must invoke this from within its own {@code @Transactional} method — the row lock
+     * is held only for the lifetime of that transaction and is released as soon as it commits.
+     * Calling this without an enclosing transaction acquires and releases the lock immediately,
+     * silently defeating the race-safety this method exists for.
+     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from UserSubscription s where s.id = :id")
     Optional<UserSubscription> findByIdForUpdate(@Param("id") UUID id);
