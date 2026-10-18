@@ -163,22 +163,8 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         // otherwise paymentSetup flipping to true would grant access without ever actually billing
         // the new card (mirrors enableCard's periodExpired check).
         UserSubscription sub = existing.get();
-        boolean periodExpired = sub.getEndDate() != null && sub.getEndDate().isBefore(Instant.now());
         sub.setStripeCustomerId(verified.customerId());
-        sub.setStripePaymentMethodId(verified.paymentMethodId());
-        if (periodExpired || sub.getStatus() == SubscriptionStatus.PAST_DUE) {
-            sub.setAutoRenew(true);
-        }
-        subscriptionRepository.save(sub);
-
-        userProfileRepository.findById(userId).ifPresent(profile -> {
-            profile.setPaymentSetup(true);
-            userProfileRepository.save(profile);
-        });
-
-        if (periodExpired || sub.getStatus() == SubscriptionStatus.PAST_DUE) {
-            processRenewal(sub.getId());
-        }
+        applyPaymentMethod(sub, verified.paymentMethodId());
     }
 
     @Override
@@ -403,7 +389,39 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         }
     }
 
+    @Override
+    @Transactional
+    public void completeSetupFromWebhook(String stripeCustomerId, String paymentMethodId) {
+        subscriptionRepository.findByStripeCustomerId(stripeCustomerId).ifPresentOrElse(sub -> {
+            if (paymentMethodId.equals(sub.getStripePaymentMethodId())) {
+                log.info("setup_intent.succeeded webhook: already applied for customer {}, skipping", stripeCustomerId);
+                return;
+            }
+            applyPaymentMethod(sub, paymentMethodId);
+        }, () -> log.warn("setup_intent.succeeded webhook: no subscription found for customer {}", stripeCustomerId));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /** Shared by confirmPaymentSetup's existing-subscription branch and the setup_intent.succeeded
+     * webhook safety net. Re-triggers a real renewal attempt — not just a flag flip — whenever the
+     * paid period already expired or the last renewal failed, so access is never restored without
+     * an actual successful charge (see the security-review fix in Tasks 4-5). */
+    private void applyPaymentMethod(UserSubscription sub, String paymentMethodId) {
+        boolean periodExpired = sub.getEndDate() != null && sub.getEndDate().isBefore(Instant.now());
+        sub.setStripePaymentMethodId(paymentMethodId);
+        if (periodExpired || sub.getStatus() == SubscriptionStatus.PAST_DUE) {
+            sub.setAutoRenew(true);
+        }
+        subscriptionRepository.save(sub);
+        userProfileRepository.findById(sub.getUserId()).ifPresent(profile -> {
+            profile.setPaymentSetup(true);
+            userProfileRepository.save(profile);
+        });
+        if (periodExpired || sub.getStatus() == SubscriptionStatus.PAST_DUE) {
+            processRenewal(sub.getId());
+        }
+    }
 
     /** Only SILVER/GOLD are user-selectable — FREE is system-assigned, and any other plan isn't
      * meant to be chosen directly. Enforced wherever a user supplies a planId (initial card setup,

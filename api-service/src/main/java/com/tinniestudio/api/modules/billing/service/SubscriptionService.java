@@ -27,4 +27,8 @@ public interface SubscriptionService {
 
     /** Called by RecurringBillingRenewalJob for each subscription due for renewal. */
     void processRenewal(UUID subscriptionId);
+
+    /** Safety net for setup_intent.succeeded: resolves which user owns stripeCustomerId and
+     * applies the same effect as confirmPaymentSetup, idempotently. No-ops if already applied. */
+    void completeSetupFromWebhook(String stripeCustomerId, String paymentMethodId);
 }
