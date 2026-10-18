@@ -69,11 +69,10 @@ public class Payment {
     private Instant cancelledAt;
 
     /**
-     * Stripe Checkout Session deadline, mirrored from the same value sent to Stripe at checkout
-     * creation (see StripeServiceImpl.createCheckoutSession). Nullable: pre-existing PENDING rows
-     * created before this column existed have no known real expiry and are intentionally never
-     * matched by PendingPaymentExpiryJob's sweep — no retroactive backfill (Payment Session Expiry
-     * design, 2026-09-21).
+     * Stripe Checkout Session deadline from the now-removed one-time checkout flow (Payment
+     * Session Expiry design, 2026-09-21). Vestigial since the recurring-billing replacement
+     * (2026-10-18): no code writes or reads this column anymore, kept only because historical
+     * rows have values in it and dropping the column isn't necessary for any current feature.
      */
     @Column(name = "expires_at")
     private Instant expiresAt;
