@@ -444,5 +444,28 @@ class SubscriptionServiceTest {
 
             verify(stripeService, never()).chargeOffSession(any(), any(), anyLong(), any(), any());
         }
+
+        @Test
+        @DisplayName("nextRenewalAt already advanced into the future (a concurrent call already renewed it) does not charge again")
+        void processRenewal_alreadyRenewedConcurrently_doesNotDoubleCharge() {
+            UUID subscriptionId = UUID.randomUUID();
+            UserSubscription sub = new UserSubscription();
+            sub.setId(subscriptionId);
+            sub.setPlan(silverPlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setAutoRenew(true);
+            sub.setStripeCustomerId("cus_123");
+            sub.setStripePaymentMethodId("pm_123");
+            // A concurrent call already succeeded and pushed this into the future before this call
+            // acquired the lock.
+            sub.setNextRenewalAt(Instant.now().plusSeconds(3600));
+
+            when(subscriptionRepository.findByIdForUpdate(subscriptionId)).thenReturn(Optional.of(sub));
+
+            service.processRenewal(subscriptionId);
+
+            verify(stripeService, never()).chargeOffSession(any(), any(), anyLong(), any(), any());
+            verify(paymentRepository, never()).save(any());
+        }
     }
 }

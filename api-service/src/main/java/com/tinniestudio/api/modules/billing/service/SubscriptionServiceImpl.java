@@ -329,6 +329,19 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             return;
         }
 
+        // A concurrent call (e.g. the renewal job overlapping a manual retry, or two overlapping
+        // job runs if one exceeds its lock duration) may have already advanced nextRenewalAt into
+        // the future by the time this call acquires the row lock above. Re-checking here — rather
+        // than trusting the batch SELECT that happened before the lock — prevents a stale duplicate
+        // call from charging the card a second time for the same period: the idempotency key is
+        // derived from nextRenewalAt, so once it's advanced, a second call would compute a
+        // different key and genuinely double-charge instead of being deduplicated by Stripe.
+        if (sub.getNextRenewalAt() != null && sub.getNextRenewalAt().isAfter(Instant.now())) {
+            log.info("Subscription {} already renewed (nextRenewalAt is in the future) — "
+                + "skipping duplicate processRenewal call", subscriptionId);
+            return;
+        }
+
         if (sub.getPendingPlanId() != null) {
             SubscriptionPlan newPlan = planRepository.findById(sub.getPendingPlanId()).orElse(null);
             if (newPlan != null) {

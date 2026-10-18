@@ -32,6 +32,7 @@ public class RecurringBillingRenewalJob {
     public void run() {
         JobExecutionLog logEntry = jobLogger.start("RecurringBillingRenewalJob");
         int processed = 0;
+        int unexpectedFailures = 0;
         try {
             List<UserSubscription> due = subscriptionRepository
                 .findByAutoRenewTrueAndNextRenewalAtLessThanEqual(Instant.now());
@@ -39,11 +40,22 @@ public class RecurringBillingRenewalJob {
                 try {
                     subscriptionService.processRenewal(sub.getId());
                 } catch (Exception ex) {
+                    // A normal decline never reaches here — processRenewal catches that itself and
+                    // sets PAST_DUE without throwing. An exception here means something unexpected
+                    // (DB issue, Stripe infra outage, etc.), not an everyday declined card.
                     log.error("Renewal processing failed for subscription {}: {}", sub.getId(), ex.getMessage(), ex);
+                    unexpectedFailures++;
                 }
                 processed++;
             }
-            jobLogger.success(logEntry, processed);
+            // If every attempted renewal hit an unexpected exception (as opposed to a normal
+            // decline, which doesn't throw), that signals something systemic broke rather than
+            // ordinary payment outcomes — surface it as a job failure instead of a quiet success.
+            if (processed > 0 && unexpectedFailures == processed) {
+                jobLogger.failure(logEntry, "All " + processed + " renewal attempt(s) hit an unexpected error");
+            } else {
+                jobLogger.success(logEntry, processed);
+            }
         } catch (Exception e) {
             jobLogger.failure(logEntry, e.getMessage());
         }
