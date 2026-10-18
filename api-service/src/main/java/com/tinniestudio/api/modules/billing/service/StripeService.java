@@ -10,23 +10,28 @@ import java.util.Map;
  */
 public interface StripeService {
 
+    /** Creates a Stripe Customer, returning its id. */
+    String createCustomer(String email, Map<String, String> metadata);
+
+    /** Creates a SetupIntent for the given customer, for client-side card collection. */
+    CreateSetupIntentResult createSetupIntent(String customerId);
+
+    /** Retrieves a SetupIntent's resolved customer/payment-method ids and status. */
+    VerifySetupIntentResult retrieveSetupIntent(String setupIntentId);
+
     /**
-     * Creates a Stripe Checkout Session (hosted payment page) for a one-time card payment.
-     * Returns the session URL for frontend redirect and the payment intent ID for tracking.
+     * Charges a saved payment method off-session (no customer present). Declines and
+     * authentication-required outcomes are returned as a failed {@link ChargeResult}, never
+     * thrown — these are expected business outcomes, not infrastructure errors.
      */
-    CreateCheckoutResult createCheckoutSession(long amountCents, String currency, String planName,
-                                               String successUrl, String cancelUrl,
-                                               Map<String, String> metadata);
+    ChargeResult chargeOffSession(String customerId, String paymentMethodId, long amountCents,
+                                   String currency, String idempotencyKey);
 
     Event constructWebhookEvent(String payload, String sigHeader);
 
-    /**
-     * Retrieves a Stripe Checkout Session and returns its current payment status.
-     * Used to manually verify payment when a webhook was missed or delayed.
-     */
-    VerifySessionResult verifyCheckoutSession(String checkoutSessionId);
+    record CreateSetupIntentResult(String setupIntentId, String clientSecret) {}
 
-    record CreateCheckoutResult(String checkoutSessionId, String paymentIntentId, String checkoutUrl, java.time.Instant expiresAt) {}
+    record VerifySetupIntentResult(String setupIntentId, String customerId, String paymentMethodId, boolean succeeded) {}
 
-    record VerifySessionResult(String checkoutSessionId, String paymentIntentId, boolean paid, String status) {}
+    record ChargeResult(String paymentIntentId, boolean succeeded, String failureReason) {}
 }

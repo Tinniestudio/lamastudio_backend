@@ -1,19 +1,22 @@
 package com.tinniestudio.api.modules.billing.service;
 
 import com.tinniestudio.api.shared.config.StripeProperties;
+import com.stripe.exception.CardException;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
+import com.stripe.model.Customer;
 import com.stripe.model.Event;
-import com.stripe.model.checkout.Session;
+import com.stripe.model.PaymentIntent;
+import com.stripe.model.SetupIntent;
+import com.stripe.net.RequestOptions;
 import com.stripe.net.Webhook;
-import com.stripe.param.checkout.SessionCreateParams;
-import com.stripe.param.checkout.SessionRetrieveParams;
+import com.stripe.param.CustomerCreateParams;
+import com.stripe.param.PaymentIntentCreateParams;
+import com.stripe.param.SetupIntentCreateParams;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Map;
 
 @Slf4j
@@ -21,69 +24,76 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class StripeServiceImpl implements StripeService {
 
-    /**
-     * 30 minutes is Stripe's own hard minimum for Checkout Session expires_at (validated
-     * server-side by Stripe's API — a shorter value throws InvalidRequestException). This is the
-     * shortest deadline Stripe allows, matching the Payment Session Expiry design's intent of a
-     * short-lived session even though its literal "15 minutes" isn't achievable.
-     */
-    private static final long SESSION_EXPIRY_MINUTES = 30;
-
     private final StripeProperties stripeProperties;
 
     @Override
-    public CreateCheckoutResult createCheckoutSession(long amountCents, String currency, String planName,
-                                                      String successUrl, String cancelUrl,
-                                                      Map<String, String> metadata) {
+    public String createCustomer(String email, Map<String, String> metadata) {
         try {
-            Instant expiresAt = Instant.now().plus(SESSION_EXPIRY_MINUTES, ChronoUnit.MINUTES);
-
-            SessionCreateParams.Builder paramsBuilder = SessionCreateParams.builder()
-                .setMode(SessionCreateParams.Mode.PAYMENT)
-                .addPaymentMethodType(SessionCreateParams.PaymentMethodType.CARD)
-                .addLineItem(SessionCreateParams.LineItem.builder()
-                    .setQuantity(1L)
-                    .setPriceData(SessionCreateParams.LineItem.PriceData.builder()
-                        .setCurrency(currency.toLowerCase())
-                        .setUnitAmount(amountCents)
-                        .setProductData(SessionCreateParams.LineItem.PriceData.ProductData.builder()
-                            .setName(planName + " Subscription")
-                            .build())
-                        .build())
-                    .build())
-                .setSuccessUrl(successUrl)
-                .setCancelUrl(cancelUrl)
-                .setExpiresAt(expiresAt.getEpochSecond());
-
-            metadata.forEach(paramsBuilder::putMetadata);
-
-            Session session = Session.create(paramsBuilder.build());
-            log.info("Stripe Checkout Session created: id={}, expiresAt={}", session.getId(), expiresAt);
-            return new CreateCheckoutResult(session.getId(), session.getPaymentIntent(), session.getUrl(), expiresAt);
-
+            CustomerCreateParams.Builder builder = CustomerCreateParams.builder().setEmail(email);
+            metadata.forEach(builder::putMetadata);
+            Customer customer = Customer.create(builder.build());
+            log.info("Stripe Customer created: id={}", customer.getId());
+            return customer.getId();
         } catch (StripeException ex) {
-            log.error("Failed to create Stripe Checkout Session: {}", ex.getMessage(), ex);
+            log.error("Failed to create Stripe Customer: {}", ex.getMessage(), ex);
             throw new RuntimeException("Payment provider error: " + ex.getMessage(), ex);
         }
     }
 
     @Override
-    public VerifySessionResult verifyCheckoutSession(String checkoutSessionId) {
+    public CreateSetupIntentResult createSetupIntent(String customerId) {
         try {
-            Session session = Session.retrieve(
-                    checkoutSessionId,
-                    SessionRetrieveParams.builder().build(),
-                    null
-            );
-            String paymentIntentId = session.getPaymentIntent();
-            boolean paid = "paid".equals(session.getPaymentStatus())
-                    || "complete".equals(session.getStatus());
-            log.info("Stripe session {} status={} paymentStatus={}", checkoutSessionId,
-                    session.getStatus(), session.getPaymentStatus());
-            return new VerifySessionResult(checkoutSessionId, paymentIntentId, paid, session.getStatus());
+            SetupIntentCreateParams params = SetupIntentCreateParams.builder()
+                .setCustomer(customerId)
+                .addPaymentMethodType("card")
+                .build();
+            SetupIntent setupIntent = SetupIntent.create(params);
+            return new CreateSetupIntentResult(setupIntent.getId(), setupIntent.getClientSecret());
         } catch (StripeException ex) {
-            log.error("Failed to retrieve Stripe session {}: {}", checkoutSessionId, ex.getMessage(), ex);
+            log.error("Failed to create SetupIntent for customer {}: {}", customerId, ex.getMessage(), ex);
             throw new RuntimeException("Payment provider error: " + ex.getMessage(), ex);
+        }
+    }
+
+    @Override
+    public VerifySetupIntentResult retrieveSetupIntent(String setupIntentId) {
+        try {
+            SetupIntent setupIntent = SetupIntent.retrieve(setupIntentId);
+            return new VerifySetupIntentResult(
+                setupIntent.getId(),
+                setupIntent.getCustomer(),
+                setupIntent.getPaymentMethod(),
+                "succeeded".equals(setupIntent.getStatus()));
+        } catch (StripeException ex) {
+            log.error("Failed to retrieve SetupIntent {}: {}", setupIntentId, ex.getMessage(), ex);
+            throw new RuntimeException("Payment provider error: " + ex.getMessage(), ex);
+        }
+    }
+
+    @Override
+    public ChargeResult chargeOffSession(String customerId, String paymentMethodId, long amountCents,
+                                          String currency, String idempotencyKey) {
+        try {
+            PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
+                .setCustomer(customerId)
+                .setPaymentMethod(paymentMethodId)
+                .setAmount(amountCents)
+                .setCurrency(currency.toLowerCase())
+                .setOffSession(true)
+                .setConfirm(true)
+                .build();
+            RequestOptions options = RequestOptions.builder()
+                .setIdempotencyKey(idempotencyKey)
+                .build();
+            PaymentIntent paymentIntent = PaymentIntent.create(params, options);
+            log.info("Off-session charge succeeded: paymentIntentId={}", paymentIntent.getId());
+            return new ChargeResult(paymentIntent.getId(), true, null);
+        } catch (CardException ex) {
+            log.warn("Off-session charge declined for customer {}: {}", customerId, ex.getMessage());
+            return new ChargeResult(null, false, ex.getMessage());
+        } catch (StripeException ex) {
+            log.error("Off-session charge failed for customer {}: {}", customerId, ex.getMessage(), ex);
+            return new ChargeResult(null, false, ex.getMessage());
         }
     }
 
