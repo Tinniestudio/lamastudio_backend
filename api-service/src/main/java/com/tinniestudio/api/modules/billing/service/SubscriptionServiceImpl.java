@@ -121,6 +121,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             }
             SubscriptionPlan plan = planRepository.findById(request.getPlanId())
                 .orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
+            assertPlanPurchasable(plan);
 
             UUID couponId = null;
             BigDecimal discountAmount = null;
@@ -161,10 +162,17 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             return;
         }
 
-        // Retry-with-new-card: update the saved method and, if currently PAST_DUE, retry the charge.
+        // Retry-with-new-card: update the saved method and, if the paid-through period has already
+        // elapsed or the last renewal failed, attempt a fresh charge before access is restored —
+        // otherwise paymentSetup flipping to true would grant access without ever actually billing
+        // the new card (mirrors enableCard's periodExpired check).
         UserSubscription sub = existing.get();
+        boolean periodExpired = sub.getEndDate() != null && sub.getEndDate().isBefore(Instant.now());
         sub.setStripeCustomerId(verified.customerId());
         sub.setStripePaymentMethodId(verified.paymentMethodId());
+        if (periodExpired || sub.getStatus() == SubscriptionStatus.PAST_DUE) {
+            sub.setAutoRenew(true);
+        }
         subscriptionRepository.save(sub);
 
         userProfileRepository.findById(userId).ifPresent(profile -> {
@@ -172,7 +180,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             userProfileRepository.save(profile);
         });
 
-        if (sub.getStatus() == SubscriptionStatus.PAST_DUE) {
+        if (periodExpired || sub.getStatus() == SubscriptionStatus.PAST_DUE) {
             processRenewal(sub.getId());
         }
     }
@@ -226,10 +234,19 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     public void switchPlan(UUID userId, UUID newPlanId) {
         UserSubscription sub = subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId)
             .orElseThrow(() -> new ResourceNotFoundException("No subscription found"));
-        planRepository.findById(newPlanId)
+        SubscriptionPlan newPlan = planRepository.findById(newPlanId)
             .orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
+        assertPlanPurchasable(newPlan);
         sub.setPendingPlanId(newPlanId);
         subscriptionRepository.save(sub);
+    }
+
+    /** Same purchasability rule initiateCheckout used to enforce (SILVER/GOLD only — FREE and any
+     * other plan aren't selectable by a user directly). */
+    private void assertPlanPurchasable(SubscriptionPlan plan) {
+        if (!"SILVER".equalsIgnoreCase(plan.getName()) && !"GOLD".equalsIgnoreCase(plan.getName())) {
+            throw new BadRequestException("Plan is not available for purchase");
+        }
     }
 
     @Override
@@ -275,7 +292,10 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         } else if (sub.getStatus() == SubscriptionStatus.PAST_DUE) {
             blockReason = "PAST_DUE";
             hasAccess = false;
-        } else if (!paymentSetup && periodExpired) {
+        } else if (periodExpired) {
+            // Elapsed paid-through period blocks access regardless of paymentSetup — otherwise
+            // adding a new card (which flips paymentSetup to true) would grant access even if the
+            // renewal charge triggered alongside it hasn't actually succeeded yet.
             blockReason = "EXPIRED";
             hasAccess = false;
         } else {

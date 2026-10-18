@@ -206,6 +206,122 @@ class SubscriptionServiceTest {
 
             verify(subscriptionRepository, never()).save(any());
         }
+
+        @Test
+        @DisplayName("first-ever setup rejects a non-purchasable plan (e.g. FREE)")
+        void confirmPaymentSetup_rejectsNonPurchasablePlan() {
+            SubscriptionPlan freePlan = new SubscriptionPlan();
+            freePlan.setId(UUID.randomUUID());
+            freePlan.setName("FREE");
+            freePlan.setPrice(BigDecimal.ZERO);
+            freePlan.setCurrency("CAD");
+
+            PaymentSetupConfirmRequest request = new PaymentSetupConfirmRequest();
+            request.setSetupIntentId("seti_123");
+            request.setPlanId(freePlan.getId());
+
+            when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.empty());
+            when(stripeService.retrieveSetupIntent("seti_123")).thenReturn(
+                new StripeService.VerifySetupIntentResult("seti_123", "cus_123", "pm_123", true));
+            when(planRepository.findById(freePlan.getId())).thenReturn(Optional.of(freePlan));
+
+            assertThatThrownBy(() -> service.confirmPaymentSetup(userId, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("not available for purchase");
+
+            verify(subscriptionRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("adding a new card after the paid period already expired triggers a real renewal attempt before access is restored")
+        void confirmPaymentSetup_existingSubscriptionPeriodExpired_triggersRenewal() {
+            UserSubscription sub = new UserSubscription();
+            sub.setId(UUID.randomUUID());
+            sub.setUserId(userId);
+            sub.setPlan(silverPlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setAutoRenew(false);
+            sub.setStripeCustomerId("cus_mine");
+            sub.setEndDate(Instant.now().minusSeconds(60));
+            sub.setNextRenewalAt(Instant.now().minusSeconds(60));
+
+            PaymentSetupConfirmRequest request = new PaymentSetupConfirmRequest();
+            request.setSetupIntentId("seti_123");
+
+            when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId))
+                .thenReturn(Optional.of(sub));
+            when(stripeService.retrieveSetupIntent("seti_123")).thenReturn(
+                new StripeService.VerifySetupIntentResult("seti_123", "cus_mine", "pm_new", true));
+            when(subscriptionRepository.findByIdForUpdate(sub.getId())).thenReturn(Optional.of(sub));
+            when(stripeService.chargeOffSession(any(), any(), anyLong(), any(), any()))
+                .thenReturn(new StripeService.ChargeResult("pi_123", true, null));
+
+            service.confirmPaymentSetup(userId, request);
+
+            assertThat(sub.getAutoRenew()).isTrue();
+            verify(stripeService).chargeOffSession(any(), any(), anyLong(), any(), any());
+            verify(paymentRepository).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("switchPlan()")
+    class SwitchPlan {
+
+        @Test
+        @DisplayName("rejects switching to a non-purchasable plan")
+        void switchPlan_rejectsNonPurchasablePlan() {
+            UserSubscription sub = new UserSubscription();
+            sub.setId(UUID.randomUUID());
+            sub.setUserId(userId);
+            sub.setPlan(silverPlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+
+            SubscriptionPlan freePlan = new SubscriptionPlan();
+            freePlan.setId(UUID.randomUUID());
+            freePlan.setName("FREE");
+
+            when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId))
+                .thenReturn(Optional.of(sub));
+            when(planRepository.findById(freePlan.getId())).thenReturn(Optional.of(freePlan));
+
+            assertThatThrownBy(() -> service.switchPlan(userId, freePlan.getId()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("not available for purchase");
+
+            verify(subscriptionRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("getSubscriptionStatus()")
+    class GetSubscriptionStatus {
+
+        @Test
+        @DisplayName("blocks access once the paid period has expired, even if paymentSetup is true")
+        void getSubscriptionStatus_periodExpired_blocksAccessRegardlessOfPaymentSetup() {
+            UserSubscription sub = new UserSubscription();
+            sub.setId(UUID.randomUUID());
+            sub.setUserId(userId);
+            sub.setPlan(silverPlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setAutoRenew(true);
+            sub.setStripeCustomerId("cus_mine");
+            sub.setEndDate(Instant.now().minusSeconds(60));
+
+            UserProfile profile = new UserProfile();
+            profile.setPaymentSetup(true);
+
+            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+                .thenReturn(Optional.of(sub));
+            when(userProfileRepository.findById(userId)).thenReturn(Optional.of(profile));
+            when(paymentRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());
+
+            SubscriptionStatusResponse result = service.getSubscriptionStatus(userId);
+
+            assertThat(result.isHasAccess()).isFalse();
+            assertThat(result.getBlockReason()).isEqualTo("EXPIRED");
+        }
     }
 
     @Nested
