@@ -6,7 +6,7 @@ Replace the current one-time-checkout-only payment model with a card-on-file,
 auto-renewing subscription:
 
 - New users must add a payment method before accessing any content.
-- A 14-day free trial starts the moment the card is saved; no charge during the trial.
+- A 30-day free trial starts the moment the card is saved; no charge during the trial.
 - At trial end, and every 30 days thereafter, the saved card is charged automatically.
 - Users can disable their card (stops auto-renewal, but current access rides out the
   remaining paid period) and re-enable it later.
@@ -51,7 +51,7 @@ Two Stripe integration approaches were considered:
 - `stripeCustomerId: String` — created once, reused across trial/renewals/card changes.
 - `stripePaymentMethodId: String` — the single saved card; replaced wholesale on
   "add new card."
-- `trialEndsAt: Instant` — set at signup (`now + 14 days`); cleared after the first
+- `trialEndsAt: Instant` — set at signup (`now + 30 days`); cleared after the first
   successful charge.
 - `nextRenewalAt: Instant` — date the next charge is due. Initialized to
   `trialEndsAt`, then pushed forward 30 days on each successful charge.
@@ -70,7 +70,7 @@ client gate. They submit a card via Stripe Elements; the client confirms a
 `SetupIntent` with Stripe.js, then POSTs the resulting `setupIntentId` to the backend.
 The backend verifies the SetupIntent server-side (never trusts client-reported state),
 creates/reuses the Stripe `Customer`, stores `stripePaymentMethodId`, sets
-`paymentSetup=true`, `trialEndsAt = now + 14d`, `nextRenewalAt = trialEndsAt`. No
+`paymentSetup=true`, `trialEndsAt = now + 30d`, `nextRenewalAt = trialEndsAt`. No
 charge yet — full access starts immediately (trial).
 
 **Renewal job** (daily cron): selects subscriptions where `autoRenew=true` and
