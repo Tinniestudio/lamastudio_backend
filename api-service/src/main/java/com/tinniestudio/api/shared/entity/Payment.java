@@ -1,6 +1,7 @@
 package com.tinniestudio.api.shared.entity;
 
 import com.tinniestudio.api.shared.entity.DomainEnums.PaymentStatus;
+import com.tinniestudio.api.shared.entity.DomainEnums.PaymentType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -34,6 +35,10 @@ public class Payment {
 
     @Column(name = "provider", nullable = false, length = 20)
     private String provider = "STRIPE";
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type", nullable = false, length = 20)
+    private PaymentType type = PaymentType.ONE_TIME;
 
     @Column(name = "provider_reference", nullable = false, unique = true, length = 255)
     private String providerReference;

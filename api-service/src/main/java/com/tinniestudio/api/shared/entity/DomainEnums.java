@@ -192,6 +192,11 @@ public final class DomainEnums {
         CANCELLED
     }
 
+    public enum PaymentType {
+        ONE_TIME,
+        RENEWAL
+    }
+
     public enum ReviewStatus {
         PENDING,
         APPROVED,
