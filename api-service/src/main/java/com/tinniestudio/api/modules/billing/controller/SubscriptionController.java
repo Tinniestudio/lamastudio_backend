@@ -38,14 +38,6 @@ public class SubscriptionController {
             request.getCode(), CurrentUser.id(principal), request.getPlanId()));
     }
 
-    @Operation(summary = "Initiate Stripe Checkout for a subscription plan")
-    @PostMapping("/checkout")
-    public ResponseEntity<CheckoutResponse> checkout(
-            @AuthenticationPrincipal UserDetails principal,
-            @Valid @RequestBody CheckoutRequest request) {
-        return ResponseEntity.ok(subscriptionService.initiateCheckout(CurrentUser.id(principal), request));
-    }
-
     @Operation(summary = "Get current user's subscription status and payment history")
     @GetMapping("/me")
     public ResponseEntity<SubscriptionStatusResponse> getStatus(
@@ -53,27 +45,58 @@ public class SubscriptionController {
         return ResponseEntity.ok(subscriptionService.getSubscriptionStatus(CurrentUser.id(principal)));
     }
 
-    @Operation(summary = "Cancel active subscription (access continues until end date)")
-    @PatchMapping("/cancel")
-    public ResponseEntity<SubscriptionStatusResponse> cancel(
+    @Operation(summary = "Start payment-method setup: creates/reuses the Stripe Customer and a SetupIntent")
+    @PostMapping("/payment-setup/intent")
+    public ResponseEntity<PaymentSetupIntentResponse> startPaymentSetup(
             @AuthenticationPrincipal UserDetails principal) {
-        subscriptionService.cancelSubscription(CurrentUser.id(principal));
-        return ResponseEntity.ok(subscriptionService.getSubscriptionStatus(CurrentUser.id(principal)));
+        return ResponseEntity.ok(subscriptionService.startPaymentSetup(CurrentUser.id(principal)));
     }
 
-     @Operation(summary = "Cancel a pending payment — use when webhook delivery was missed")
-    @PostMapping("/cancel-payment")
-    public ResponseEntity<SubscriptionStatusResponse> cancelPayment(
-            @AuthenticationPrincipal UserDetails principal) {
-        return ResponseEntity.ok(subscriptionService.cancelPayment(CurrentUser.id(principal)));
-    }
-
-    @Operation(summary = "Verify a pending payment against Stripe — use when webhook delivery was missed")
-    @PostMapping("/verify-payment/{paymentReference}")
-    public ResponseEntity<SubscriptionStatusResponse> verifyPayment(
+    @Operation(summary = "Confirm payment-method setup after the client has confirmed the SetupIntent")
+    @PostMapping("/payment-setup/confirm")
+    public ResponseEntity<SubscriptionStatusResponse> confirmPaymentSetup(
             @AuthenticationPrincipal UserDetails principal,
-            @PathVariable String paymentReference) {
-        return ResponseEntity.ok(subscriptionService.verifyPayment(CurrentUser.id(principal), paymentReference));
+            @Valid @RequestBody PaymentSetupConfirmRequest request) {
+        UUID userId = CurrentUser.id(principal);
+        subscriptionService.confirmPaymentSetup(userId, request);
+        return ResponseEntity.ok(subscriptionService.getSubscriptionStatus(userId));
+    }
+
+    @Operation(summary = "Disable auto-renewal; access continues until the current period ends")
+    @PostMapping("/card/disable")
+    public ResponseEntity<SubscriptionStatusResponse> disableCard(
+            @AuthenticationPrincipal UserDetails principal) {
+        UUID userId = CurrentUser.id(principal);
+        subscriptionService.disableCard(userId);
+        return ResponseEntity.ok(subscriptionService.getSubscriptionStatus(userId));
+    }
+
+    @Operation(summary = "Re-enable auto-renewal with the existing saved card")
+    @PostMapping("/card/enable")
+    public ResponseEntity<SubscriptionStatusResponse> enableCard(
+            @AuthenticationPrincipal UserDetails principal) {
+        UUID userId = CurrentUser.id(principal);
+        subscriptionService.enableCard(userId);
+        return ResponseEntity.ok(subscriptionService.getSubscriptionStatus(userId));
+    }
+
+    @Operation(summary = "Retry a failed renewal charge against the existing saved card")
+    @PostMapping("/payment/retry")
+    public ResponseEntity<SubscriptionStatusResponse> retryPayment(
+            @AuthenticationPrincipal UserDetails principal) {
+        UUID userId = CurrentUser.id(principal);
+        subscriptionService.retryPayment(userId);
+        return ResponseEntity.ok(subscriptionService.getSubscriptionStatus(userId));
+    }
+
+    @Operation(summary = "Switch plans; takes effect at the next renewal, no proration")
+    @PatchMapping("/plan")
+    public ResponseEntity<SubscriptionStatusResponse> switchPlan(
+            @AuthenticationPrincipal UserDetails principal,
+            @Valid @RequestBody PlanSwitchRequest request) {
+        UUID userId = CurrentUser.id(principal);
+        subscriptionService.switchPlan(userId, request.getPlanId());
+        return ResponseEntity.ok(subscriptionService.getSubscriptionStatus(userId));
     }
 
 }
