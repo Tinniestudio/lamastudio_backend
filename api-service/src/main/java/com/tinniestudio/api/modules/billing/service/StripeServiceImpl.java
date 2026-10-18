@@ -71,6 +71,18 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
+    public java.util.Optional<String> resolveCustomerOwnerUserId(String customerId) {
+        try {
+            Customer customer = Customer.retrieve(customerId);
+            String userId = customer.getMetadata() != null ? customer.getMetadata().get("userId") : null;
+            return java.util.Optional.ofNullable(userId);
+        } catch (StripeException ex) {
+            log.error("Failed to retrieve Stripe Customer {}: {}", customerId, ex.getMessage(), ex);
+            throw new RuntimeException("Payment provider error: " + ex.getMessage(), ex);
+        }
+    }
+
+    @Override
     public ChargeResult chargeOffSession(String customerId, String paymentMethodId, long amountCents,
                                           String currency, String idempotencyKey) {
         try {

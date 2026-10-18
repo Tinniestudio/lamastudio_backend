@@ -99,6 +99,36 @@ class StripeServiceTest {
     }
 
     @Test
+    @DisplayName("resolveCustomerOwnerUserId returns the userId stored in the customer's metadata")
+    void resolveCustomerOwnerUserId_returnsStoredUserId() {
+        try (MockedStatic<Customer> mocked = mockStatic(Customer.class)) {
+            Customer fake = new Customer();
+            fake.setId("cus_test_123");
+            fake.setMetadata(Map.of("userId", "u-123"));
+            mocked.when(() -> Customer.retrieve("cus_test_123")).thenReturn(fake);
+
+            java.util.Optional<String> result = stripeService.resolveCustomerOwnerUserId("cus_test_123");
+
+            assertThat(result).contains("u-123");
+        }
+    }
+
+    @Test
+    @DisplayName("resolveCustomerOwnerUserId returns empty when the customer has no userId metadata")
+    void resolveCustomerOwnerUserId_noMetadata_returnsEmpty() {
+        try (MockedStatic<Customer> mocked = mockStatic(Customer.class)) {
+            Customer fake = new Customer();
+            fake.setId("cus_test_123");
+            fake.setMetadata(Map.of());
+            mocked.when(() -> Customer.retrieve("cus_test_123")).thenReturn(fake);
+
+            java.util.Optional<String> result = stripeService.resolveCustomerOwnerUserId("cus_test_123");
+
+            assertThat(result).isEmpty();
+        }
+    }
+
+    @Test
     @DisplayName("chargeOffSession returns a successful result with the payment intent id")
     void chargeOffSession_success() {
         try (MockedStatic<PaymentIntent> mocked = mockStatic(PaymentIntent.class)) {

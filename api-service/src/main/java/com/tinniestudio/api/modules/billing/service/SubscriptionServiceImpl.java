@@ -100,15 +100,19 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             throw new BadRequestException("Card setup was not completed successfully");
         }
 
-        Optional<UserSubscription> existing = subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId);
+        // Cross-user replay guard: a client-supplied setupIntentId must resolve to a Stripe Customer
+        // that was actually created for THIS user. Checked unconditionally against Stripe Customer
+        // metadata (set at creation time in startPaymentSetup) — not merely against whatever happens
+        // to already be stored on an existing row, which fails open whenever that column is null
+        // (e.g. a legacy pre-card-on-file subscription, or simply no row yet for a first-time user),
+        // letting a leaked/stolen setupIntentId belonging to a different user's customer be attached
+        // to this user's subscription.
+        Optional<String> ownerUserId = stripeService.resolveCustomerOwnerUserId(verified.customerId());
+        if (ownerUserId.isEmpty() || !ownerUserId.get().equals(userId.toString())) {
+            throw new BadRequestException("Setup intent does not belong to this user");
+        }
 
-        // Cross-user replay guard: the resolved Stripe Customer must belong to this user — either
-        // it's brand new (no existing row yet) or it matches the customer already on file.
-        existing.ifPresent(sub -> {
-            if (sub.getStripeCustomerId() != null && !sub.getStripeCustomerId().equals(verified.customerId())) {
-                throw new BadRequestException("Setup intent does not belong to this user");
-            }
-        });
+        Optional<UserSubscription> existing = subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId);
 
         if (existing.isEmpty()) {
             // First-ever setup: requires a plan.
@@ -393,7 +397,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     @Transactional
     public void completeSetupFromWebhook(String stripeCustomerId, String paymentMethodId) {
         subscriptionRepository.findByStripeCustomerId(stripeCustomerId).ifPresentOrElse(sub -> {
-            if (paymentMethodId.equals(sub.getStripePaymentMethodId())) {
+            if (java.util.Objects.equals(paymentMethodId, sub.getStripePaymentMethodId())) {
                 log.info("setup_intent.succeeded webhook: already applied for customer {}, skipping", stripeCustomerId);
                 return;
             }

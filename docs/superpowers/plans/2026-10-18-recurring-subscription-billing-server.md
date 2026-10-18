@@ -1493,7 +1493,9 @@ In `SubscriptionService.java`, add:
     void completeSetupFromWebhook(String stripeCustomerId, String paymentMethodId);
 ```
 
-In `SubscriptionServiceImpl.java`, implement it by extracting the shared "save payment method, flip paymentSetup, retry-if-PAST_DUE" logic already written for `confirmPaymentSetup`'s "existing" branch into a small private helper, e.g. `applyPaymentMethod(UserSubscription sub, String paymentMethodId)`, and call it from both places:
+**Correction from original plan:** a security-review fix landed after this task was originally written, changing `confirmPaymentSetup`'s existing-subscription branch to also re-trigger renewal when `periodExpired` (not just `PAST_DUE`) — otherwise adding a card alone could restore access without ever actually charging it. The shared helper below must carry that check forward, not the simpler original version, or this refactor would silently reintroduce that bug.
+
+In `SubscriptionServiceImpl.java`, implement `completeSetupFromWebhook` by extracting the shared "save payment method, flip paymentSetup, retry-if-{PAST_DUE or periodExpired}" logic already in `confirmPaymentSetup`'s existing-subscription branch into a small private helper, `applyPaymentMethod(UserSubscription sub, String paymentMethodId)`, and call it from both places:
 
 ```java
     @Override
@@ -1508,20 +1510,36 @@ In `SubscriptionServiceImpl.java`, implement it by extracting the shared "save p
         }, () -> log.warn("setup_intent.succeeded webhook: no subscription found for customer {}", stripeCustomerId));
     }
 
+    /** Shared by confirmPaymentSetup's existing-subscription branch and the setup_intent.succeeded
+     * webhook safety net. Re-triggers a real renewal attempt — not just a flag flip — whenever the
+     * paid period already expired or the last renewal failed, so access is never restored without
+     * an actual successful charge (see the security-review fix in Tasks 4-5). */
     private void applyPaymentMethod(UserSubscription sub, String paymentMethodId) {
+        boolean periodExpired = sub.getEndDate() != null && sub.getEndDate().isBefore(Instant.now());
         sub.setStripePaymentMethodId(paymentMethodId);
+        if (periodExpired || sub.getStatus() == SubscriptionStatus.PAST_DUE) {
+            sub.setAutoRenew(true);
+        }
         subscriptionRepository.save(sub);
         userProfileRepository.findById(sub.getUserId()).ifPresent(profile -> {
             profile.setPaymentSetup(true);
             userProfileRepository.save(profile);
         });
-        if (sub.getStatus() == SubscriptionStatus.PAST_DUE) {
+        if (periodExpired || sub.getStatus() == SubscriptionStatus.PAST_DUE) {
             processRenewal(sub.getId());
         }
     }
 ```
 
-Refactor `confirmPaymentSetup`'s existing-subscription branch (written in Task 5) to call `applyPaymentMethod(sub, verified.paymentMethodId())` instead of duplicating the save/flip/retry logic inline.
+Refactor `confirmPaymentSetup`'s existing-subscription branch to:
+
+```java
+        UserSubscription sub = existing.get();
+        sub.setStripeCustomerId(verified.customerId());
+        applyPaymentMethod(sub, verified.paymentMethodId());
+```
+
+(`stripeCustomerId` is set directly here, not inside the shared helper, since the webhook path already has it as its lookup key and re-setting it there would be a redundant no-op — only `confirmPaymentSetup` needs to assign it.)
 
 - [ ] **Step 2: Update the webhook controller**
 

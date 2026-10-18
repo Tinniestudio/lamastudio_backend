@@ -163,6 +163,7 @@ class SubscriptionServiceTest {
             when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.empty());
             when(stripeService.retrieveSetupIntent("seti_123")).thenReturn(
                 new StripeService.VerifySetupIntentResult("seti_123", "cus_123", "pm_123", true));
+            when(stripeService.resolveCustomerOwnerUserId("cus_123")).thenReturn(Optional.of(userId.toString()));
             when(planRepository.findById(planId)).thenReturn(Optional.of(silverPlan));
             when(subscriptionRepository.save(any(UserSubscription.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
@@ -182,20 +183,31 @@ class SubscriptionServiceTest {
         }
 
         @Test
-        @DisplayName("rejects a SetupIntent whose resolved customer doesn't match the one already on file")
+        @DisplayName("rejects a SetupIntent whose resolved Stripe Customer belongs to a different user")
         void confirmPaymentSetup_rejectsSetupIntentForDifferentCustomer() {
-            UserSubscription existing = new UserSubscription();
-            existing.setUserId(userId);
-            existing.setStripeCustomerId("cus_mine");
-            existing.setStatus(SubscriptionStatus.PAST_DUE);
-
             PaymentSetupConfirmRequest request = new PaymentSetupConfirmRequest();
             request.setSetupIntentId("seti_123");
 
-            when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId))
-                .thenReturn(Optional.of(existing));
             when(stripeService.retrieveSetupIntent("seti_123")).thenReturn(
                 new StripeService.VerifySetupIntentResult("seti_123", "cus_someone_else", "pm_123", true));
+            when(stripeService.resolveCustomerOwnerUserId("cus_someone_else"))
+                .thenReturn(Optional.of(UUID.randomUUID().toString()));
+
+            assertThatThrownBy(() -> service.confirmPaymentSetup(userId, request))
+                .isInstanceOf(BadRequestException.class);
+
+            verify(subscriptionRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("fails closed (rejects) when the resolved customer has no owning userId in its metadata")
+        void confirmPaymentSetup_rejectsWhenCustomerOwnershipCannotBeResolved() {
+            PaymentSetupConfirmRequest request = new PaymentSetupConfirmRequest();
+            request.setSetupIntentId("seti_123");
+
+            when(stripeService.retrieveSetupIntent("seti_123")).thenReturn(
+                new StripeService.VerifySetupIntentResult("seti_123", "cus_no_metadata", "pm_123", true));
+            when(stripeService.resolveCustomerOwnerUserId("cus_no_metadata")).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.confirmPaymentSetup(userId, request))
                 .isInstanceOf(BadRequestException.class);
@@ -219,6 +231,7 @@ class SubscriptionServiceTest {
             when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.empty());
             when(stripeService.retrieveSetupIntent("seti_123")).thenReturn(
                 new StripeService.VerifySetupIntentResult("seti_123", "cus_123", "pm_123", true));
+            when(stripeService.resolveCustomerOwnerUserId("cus_123")).thenReturn(Optional.of(userId.toString()));
             when(planRepository.findById(freePlan.getId())).thenReturn(Optional.of(freePlan));
 
             assertThatThrownBy(() -> service.confirmPaymentSetup(userId, request))
@@ -248,6 +261,7 @@ class SubscriptionServiceTest {
                 .thenReturn(Optional.of(sub));
             when(stripeService.retrieveSetupIntent("seti_123")).thenReturn(
                 new StripeService.VerifySetupIntentResult("seti_123", "cus_mine", "pm_new", true));
+            when(stripeService.resolveCustomerOwnerUserId("cus_mine")).thenReturn(Optional.of(userId.toString()));
             when(subscriptionRepository.findByIdForUpdate(sub.getId())).thenReturn(Optional.of(sub));
             when(stripeService.chargeOffSession(any(), any(), anyLong(), any(), any()))
                 .thenReturn(new StripeService.ChargeResult("pi_123", true, null));
@@ -286,6 +300,65 @@ class SubscriptionServiceTest {
                 .hasMessageContaining("not available for purchase");
 
             verify(subscriptionRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("completeSetupFromWebhook()")
+    class CompleteSetupFromWebhook {
+
+        @Test
+        @DisplayName("applies the new payment method and re-enables a PAST_DUE subscription")
+        void appliesNewPaymentMethod_andRetriesWhenPastDue() {
+            UserSubscription sub = new UserSubscription();
+            sub.setId(UUID.randomUUID());
+            sub.setUserId(userId);
+            sub.setPlan(silverPlan);
+            sub.setStatus(SubscriptionStatus.PAST_DUE);
+            sub.setAutoRenew(false);
+            sub.setStripeCustomerId("cus_123");
+            sub.setStripePaymentMethodId("pm_old");
+            sub.setNextRenewalAt(Instant.now().minusSeconds(60));
+
+            when(subscriptionRepository.findByStripeCustomerId("cus_123")).thenReturn(Optional.of(sub));
+            when(subscriptionRepository.findByIdForUpdate(sub.getId())).thenReturn(Optional.of(sub));
+            when(stripeService.chargeOffSession(any(), any(), anyLong(), any(), any()))
+                .thenReturn(new StripeService.ChargeResult("pi_123", true, null));
+
+            service.completeSetupFromWebhook("cus_123", "pm_new");
+
+            assertThat(sub.getStripePaymentMethodId()).isEqualTo("pm_new");
+            assertThat(sub.getAutoRenew()).isTrue();
+            verify(stripeService).chargeOffSession(any(), eq("pm_new"), anyLong(), any(), any());
+        }
+
+        @Test
+        @DisplayName("no-ops when the payment method already matches what's stored")
+        void noOpsWhenAlreadyApplied() {
+            UserSubscription sub = new UserSubscription();
+            sub.setId(UUID.randomUUID());
+            sub.setUserId(userId);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setStripeCustomerId("cus_123");
+            sub.setStripePaymentMethodId("pm_123");
+
+            when(subscriptionRepository.findByStripeCustomerId("cus_123")).thenReturn(Optional.of(sub));
+
+            service.completeSetupFromWebhook("cus_123", "pm_123");
+
+            verify(subscriptionRepository, never()).save(any());
+            verify(stripeService, never()).chargeOffSession(any(), any(), anyLong(), any(), any());
+        }
+
+        @Test
+        @DisplayName("no-ops without throwing when no subscription exists for that customer")
+        void noOpsWhenNoSubscriptionFound() {
+            when(subscriptionRepository.findByStripeCustomerId("cus_unknown")).thenReturn(Optional.empty());
+
+            service.completeSetupFromWebhook("cus_unknown", "pm_123");
+
+            verify(subscriptionRepository, never()).save(any());
+            verify(stripeService, never()).chargeOffSession(any(), any(), anyLong(), any(), any());
         }
     }
 

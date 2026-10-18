@@ -28,7 +28,14 @@ public interface SubscriptionService {
     /** Called by RecurringBillingRenewalJob for each subscription due for renewal. */
     void processRenewal(UUID subscriptionId);
 
-    /** Safety net for setup_intent.succeeded: resolves which user owns stripeCustomerId and
-     * applies the same effect as confirmPaymentSetup, idempotently. No-ops if already applied. */
+    /** Safety net for setup_intent.succeeded: resolves which user owns stripeCustomerId and applies
+     * the same effect as confirmPaymentSetup's existing-subscription branch (saves the payment
+     * method, re-triggers a renewal if the period had expired or the last one failed). No-ops
+     * (just logs) if no subscription is found for that customer yet — this only covers the
+     * retry-with-new-card case, not first-ever setup, since there's no plan context available from
+     * the webhook alone. Also no-ops if paymentMethodId already matches what's stored, but doesn't
+     * otherwise guard against Stripe delivering two setup_intent.succeeded events out of order (e.g.
+     * two cards added back-to-back) — rare in practice since this is a fallback path, not the
+     * primary confirmPaymentSetup flow, but a known limitation if it ever needs hardening. */
     void completeSetupFromWebhook(String stripeCustomerId, String paymentMethodId);
 }
