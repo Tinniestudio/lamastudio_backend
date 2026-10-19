@@ -69,4 +69,23 @@ class VideoProcessingConsumerTest {
 
         verify(processingService).markTerminallyFailed(eq(assetId), eq(jobId), eq("boom"));
     }
+
+    @Test
+    void stillRethrowsMaxAttemptsExceededEvenIfMarkTerminallyFailedItselfThrows() throws Exception {
+        UUID assetId = UUID.randomUUID();
+        String jobId = "job-" + assetId;
+        ProcessingJobEnvelope envelope = envelopeFor(assetId, jobId, RetryPublisher.MAX_ATTEMPTS);
+
+        doThrow(new VideoProcessingService.RetryableProcessingException("boom", new RuntimeException("boom")))
+            .when(processingService).process(envelope.getPayload());
+        doThrow(new RetryPublisher.MaxAttemptsExceededException("exhausted"))
+            .when(retryPublisher).retryOrFail(envelope, RetryPublisher.MAX_ATTEMPTS);
+        doThrow(new RuntimeException("DB hiccup"))
+            .when(processingService).markTerminallyFailed(any(), any(), any());
+
+        assertThatThrownBy(() -> consumer.consume(envelope))
+            .as("the original MaxAttemptsExceededException must still propagate (preserving DLQ routing) "
+                + "even if the terminal-write side effect itself fails")
+            .isInstanceOf(RetryPublisher.MaxAttemptsExceededException.class);
+    }
 }

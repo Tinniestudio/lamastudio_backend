@@ -34,8 +34,12 @@ public class VideoProcessingConsumer {
                 retryPublisher.retryOrFail(envelope, attempt);
             } catch (RetryPublisher.MaxAttemptsExceededException ex) {
                 log.error("Job={} exhausted retries, marking terminally failed and routing to failed queue", jobId);
-                processingService.markTerminallyFailed(
-                    envelope.getPayload().getVideoAssetId(), jobId, e.getMessage());
+                try {
+                    processingService.markTerminallyFailed(
+                        envelope.getPayload().getVideoAssetId(), jobId, e.getMessage());
+                } catch (Exception markFailedError) {
+                    log.error("Failed to write terminal FAILED status for job={}: {}", jobId, markFailedError.getMessage(), markFailedError);
+                }
                 throw ex;
             }
         }

@@ -29,10 +29,13 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -218,5 +221,65 @@ class VideoProcessingServiceTransactionBoundaryTest {
             .as("getOrCreateJob must bump attempt on the reused row rather than resetting it")
             .isEqualTo(2);
         assertThat(rowsForJobId.get(0).getStatus()).isEqualTo("DONE");
+    }
+
+    /**
+     * Regression test for Task 3: the terminal-skip guard at the top of process()
+     * (existsByJobIdAndStatus(jobId, "FAILED")) must only ever trip after a real terminal
+     * FAILED write — never after a merely retryable failure. The original mock-based test for
+     * this bug stubbed existsByJobIdAndStatus to a hardcoded false, which can't actually prove
+     * the guard behaves correctly. This test runs the real query against the real H2-backed
+     * ProcessingJobRepository from @DataJpaTest, so the actual guard is exercised end to end:
+     * a retryable failure must leave existsByJobIdAndStatus(jobId, "FAILED") false, and a
+     * second process() call for the same job must therefore actually re-run (not be silently
+     * skipped) and reach DONE on attempt 2.
+     */
+    @Test
+    void secondProcessCallSucceedsAfterFirstCallFailsRetryably_provingTheRealTerminalSkipGuardDoesNotFalselyTrigger() throws Exception {
+        UUID assetId = UUID.randomUUID();
+
+        VideoAsset asset = new VideoAsset();
+        asset.setId(assetId);
+        asset.setRawStorageKey("uploads/" + assetId + "/raw.mp4");
+        asset.setOriginalFilename("raw.mp4");
+        asset.setProcessingStatus("PENDING");
+        asset.setProcessingAttempts(0);
+        videoAssetRepo.saveAndFlush(asset);
+
+        String jobId = "job-" + assetId;
+        MediaProcessingJobPayload payload = new MediaProcessingJobPayload();
+        payload.setJobId(jobId);
+        payload.setVideoAssetId(assetId);
+        payload.setStorageKey(asset.getRawStorageKey());
+
+        // Same download stub as the other tests in this file: process() reads the downloaded
+        // file's size immediately after download(), so a no-op mock would fail before ever
+        // reaching ffprobe.
+        doAnswer(invocation -> {
+            Path target = invocation.getArgument(1);
+            Files.createDirectories(target.getParent());
+            Files.write(target, new byte[]{1, 2, 3, 4});
+            return null;
+        }).when(storageService).download(anyString(), any(Path.class));
+
+        when(ffprobeRunner.probe(anyString(), anyBoolean()))
+            .thenThrow(new RuntimeException("transient ffprobe crash"))
+            .thenReturn(new FFprobeRunner.VideoMetadata(30, 640, 360, "h264", 800_000L, true));
+
+        // Attempt 1: retryable failure.
+        assertThatThrownBy(() -> service.process(payload))
+            .isInstanceOf(VideoProcessingService.RetryableProcessingException.class);
+
+        // The REAL query the terminal-skip guard uses — must be false, proving the retryable
+        // failure did not write a terminal job status.
+        assertThat(processingJobRepo.existsByJobIdAndStatus(jobId, "FAILED")).isFalse();
+
+        // Attempt 2 (same jobId): must actually re-run, not be silently skipped.
+        service.process(payload);
+
+        verify(ffprobeRunner, times(2)).probe(anyString(), anyBoolean());
+        ProcessingJob jobAfterAttempt2 = processingJobRepo.findByJobId(jobId).orElseThrow();
+        assertThat(jobAfterAttempt2.getStatus()).isEqualTo("DONE");
+        assertThat(jobAfterAttempt2.getAttempt()).isEqualTo(2);
     }
 }
