@@ -2,6 +2,7 @@ package com.tinniestudio.worker.processor;
 
 import com.tinniestudio.worker.config.WorkerProperties;
 import com.tinniestudio.worker.dto.MediaProcessingJobPayload;
+import com.tinniestudio.worker.entity.ProcessingJob;
 import com.tinniestudio.worker.entity.VideoAsset;
 import com.tinniestudio.worker.ffmpeg.FFmpegRunner;
 import com.tinniestudio.worker.ffmpeg.FFprobeRunner;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -128,5 +130,83 @@ class VideoProcessingServiceTransactionBoundaryTest {
             .as("FAILED status written in the catch block must survive the exception, not revert to PENDING")
             .isEqualTo("FAILED");
         assertThat(persisted.getProcessingError()).contains("ffprobe crashed mid-pipeline");
+    }
+
+    /**
+     * Regression test for Task 2: getOrCreateJob() looks up the existing row by jobId and
+     * reuses it instead of blindly inserting, so that redelivery of the same jobId (e.g. the
+     * worker process dying mid-pipeline before writing a terminal DONE/FAILED status, followed
+     * by RabbitMQ redelivering the same message) doesn't crash on ProcessingJob.jobId's unique
+     * constraint. A mocked-repository test can't prove this: Mockito's {@code save()} is a
+     * no-op pass-through, whereas real Hibernate runs a detached entity with a non-null id
+     * through {@code EntityManager.merge()} — this test uses the real H2-backed repositories
+     * from {@code @DataJpaTest} so that merge path, and the real unique constraint, are both
+     * actually exercised.
+     */
+    @Test
+    void secondProcessCallWithSameJobIdDoesNotViolateTheUniqueJobIdConstraint() throws Exception {
+        UUID assetId = UUID.randomUUID();
+
+        VideoAsset asset = new VideoAsset();
+        asset.setId(assetId);
+        asset.setRawStorageKey("uploads/" + assetId + "/raw.mp4");
+        asset.setOriginalFilename("raw.mp4");
+        asset.setProcessingStatus("PENDING");
+        asset.setProcessingAttempts(0);
+        videoAssetRepo.saveAndFlush(asset);
+
+        String jobId = "job-" + assetId;
+        MediaProcessingJobPayload payload = new MediaProcessingJobPayload();
+        payload.setJobId(jobId);
+        payload.setVideoAssetId(assetId);
+        payload.setStorageKey(asset.getRawStorageKey());
+
+        // Same download stub as above: process() reads the downloaded file's size immediately
+        // after download(), so a no-op mock would fail before ever reaching ffprobe.
+        doAnswer(invocation -> {
+            Path target = invocation.getArgument(1);
+            Files.createDirectories(target.getParent());
+            Files.write(target, new byte[]{1, 2, 3, 4});
+            return null;
+        }).when(storageService).download(anyString(), any(Path.class));
+        // Unlike the test above, ffprobe must succeed here — this test exercises the happy
+        // path twice. ffmpegRunner's transcode/generateThumbnail and storageService's
+        // uploadDirectory/upload are void methods with no stubbed behavior, so Mockito's
+        // default no-op applies and the pipeline runs through to completion untouched.
+        when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(
+            new FFprobeRunner.VideoMetadata(30, 640, 360, "h264", 800_000L, true));
+
+        // --- First delivery: runs the full pipeline to completion, creating the job row.
+        service.process(payload);
+
+        ProcessingJob firstJob = processingJobRepo.findByJobId(jobId).orElseThrow();
+        assertThat(firstJob.getAttempt()).isEqualTo(1);
+        assertThat(firstJob.getStatus()).isEqualTo("DONE");
+
+        // process() skips re-processing outright when the job already reached a terminal
+        // DONE/FAILED status (see the existsByJobIdAndStatus guard at the top of process()).
+        // That guard only protects against duplicate delivery AFTER a terminal outcome was
+        // recorded; it does nothing for the case getOrCreateJob exists for — a redelivery that
+        // arrives while the job is still in-flight (e.g. the worker process was killed mid-
+        // pipeline before it ever wrote a terminal status). Flip the row back to a non-terminal
+        // in-flight status to reproduce exactly that scenario and drive process() into
+        // getOrCreateJob's reuse path a second time.
+        firstJob.setStatus("TRANSCODING");
+        processingJobRepo.saveAndFlush(firstJob);
+
+        // --- Second delivery of the SAME jobId: must reuse the existing row via merge(),
+        // not attempt an INSERT that would violate ProcessingJob.jobId's unique constraint.
+        service.process(payload);
+
+        List<ProcessingJob> rowsForJobId = processingJobRepo.findAll().stream()
+            .filter(j -> jobId.equals(j.getJobId()))
+            .toList();
+        assertThat(rowsForJobId)
+            .as("retrying the same jobId must reuse the existing row, never insert a duplicate")
+            .hasSize(1);
+        assertThat(rowsForJobId.get(0).getAttempt())
+            .as("getOrCreateJob must bump attempt on the reused row rather than resetting it")
+            .isEqualTo(2);
+        assertThat(rowsForJobId.get(0).getStatus()).isEqualTo("DONE");
     }
 }

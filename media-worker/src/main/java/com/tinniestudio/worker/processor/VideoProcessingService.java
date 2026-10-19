@@ -190,6 +190,9 @@ public class VideoProcessingService {
     }
 
     private ProcessingJob getOrCreateJob(String jobId, UUID videoAssetId, int attempt) {
+        // No optimistic lock on this find-then-write: relies on RetryPublisher only ever
+        // scheduling one delayed republish per attempt, so concurrent delivery of the same jobId
+        // isn't expected in practice — a deliberate tradeoff, not an oversight.
         ProcessingJob job = processingJobRepo.findByJobId(jobId).orElseGet(ProcessingJob::new);
         job.setJobId(jobId);
         job.setVideoAssetId(videoAssetId);
