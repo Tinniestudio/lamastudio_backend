@@ -1,6 +1,7 @@
 package com.tinniestudio.api.modules.playback.service;
 
-import com.tinniestudio.api.modules.billing.repository.UserSubscriptionRepository;
+import com.tinniestudio.api.modules.billing.dto.SubscriptionStatusResponse;
+import com.tinniestudio.api.modules.billing.service.SubscriptionService;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.episode.repository.EpisodeRepository;
 import com.tinniestudio.api.modules.library.repository.WatchHistoryRepository;
@@ -36,7 +37,7 @@ import org.springframework.data.domain.PageRequest;
 public class PlaybackServiceImpl implements PlaybackService {
 
     private final ContentRepository contentRepo;
-    private final UserSubscriptionRepository subscriptionRepo;
+    private final SubscriptionService subscriptionService;
     private final VideoAssetRepository videoAssetRepo;
     private final WatchProgressRepository watchProgressRepo;
     private final EpisodeRepository episodeRepo;
@@ -65,13 +66,17 @@ public class PlaybackServiceImpl implements PlaybackService {
             return AccessCheckResponse.granted();
         }
 
+        // Delegate to SubscriptionService's getSubscriptionStatus — the single source of truth
+        // for access, since it accounts for payment setup, past-due, and period expiration.
+        // The raw UserSubscription.status column alone is NOT reliable: it is never flipped to
+        // EXPIRED when the paid-through period lapses, so checking it directly here previously
+        // let users with a stale ACTIVE status keep watching after their access should have
+        // been revoked.
         UUID userId = com.tinniestudio.api.shared.security.CurrentUser.id(principal);
-        boolean hasSubscription = subscriptionRepo
-            .findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE)
-            .isPresent();
+        SubscriptionStatusResponse status = subscriptionService.getSubscriptionStatus(userId);
 
-        if (!hasSubscription) {
-            return AccessCheckResponse.denied("NO_ACTIVE_SUBSCRIPTION");
+        if (!status.isHasAccess()) {
+            return AccessCheckResponse.denied(status.getBlockReason());
         }
 
         return AccessCheckResponse.granted();
