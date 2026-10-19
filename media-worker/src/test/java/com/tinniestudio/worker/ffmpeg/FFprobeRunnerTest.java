@@ -13,6 +13,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -130,6 +132,25 @@ class FFprobeRunnerTest {
             assertThatThrownBy(() -> runner.probe("/tmp/audio-only.mp3", false))
                 .isInstanceOf(FFprobeRunner.ValidationException.class)
                 .hasMessageContaining("no video stream");
+        }
+
+        @Test
+        void passesTheConfiguredTimeoutThroughToProcessRunner() throws Exception {
+            String json = """
+                {
+                  "streams": [
+                    {"codec_type":"video","codec_name":"h264","width":1920,"height":1080,
+                     "bit_rate":"5000000"},
+                    {"codec_type":"audio","codec_name":"aac"}
+                  ],
+                  "format": {"duration":"120.5","size":"75000000"}
+                }
+                """;
+            when(processRunner.run(anyList(), eq(1800L))).thenReturn(json);
+
+            runner.probe("/tmp/test.mp4", true);
+
+            verify(processRunner).run(anyList(), eq(1800L));
         }
     }
 }
