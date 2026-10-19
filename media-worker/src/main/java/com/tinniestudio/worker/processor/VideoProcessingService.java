@@ -93,6 +93,14 @@ public class VideoProcessingService {
             }
             applyMetadataToAsset(asset, meta);
 
+            // Duration-scaled transcode timeout: the flat worker.ffmpeg.timeout-seconds default
+            // is enough headroom for a short trailer but can easily be exceeded by just the
+            // first resolution tier of a feature-length movie on modest hardware. Scale up to
+            // 3x the source's own duration when that's larger than the default, never below it.
+            long transcodeTimeoutSeconds = Math.max(
+                workerProperties.getFfmpeg().getTimeoutSeconds(),
+                meta.durationSeconds() * 3L);
+
             // 4. RESOLUTION LADDER PLANNING
             List<ResolutionLadder.Tier> tiers = ResolutionLadder.forSourceHeight(meta.height());
 
@@ -106,13 +114,14 @@ public class VideoProcessingService {
                 Path tierDir = jobDir.resolve(tier.label());
                 Files.createDirectories(tierDir);
                 ffmpegRunner.transcode(inputFile.toString(), tierDir.toString(),
-                    tier.width(), tier.height(), tier.videoBitrate(), tier.audioBitrate());
+                    tier.width(), tier.height(), tier.videoBitrate(), tier.audioBitrate(),
+                    transcodeTimeoutSeconds);
             }
 
             // 6. THUMBNAIL GENERATION
             updateJobStatus(job, "THUMBNAIL_GENERATION");
             Path thumbnailPath = jobDir.resolve("thumbnail.jpg");
-            ffmpegRunner.generateThumbnail(inputFile.toString(), thumbnailPath.toString());
+            ffmpegRunner.generateThumbnail(inputFile.toString(), thumbnailPath.toString(), transcodeTimeoutSeconds);
 
             // 7. UPLOADING_OUTPUT
             if (isCancelled(videoAssetId)) {

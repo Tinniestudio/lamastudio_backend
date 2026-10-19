@@ -12,6 +12,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -24,7 +25,7 @@ class FFprobeRunnerTest {
 
     @BeforeEach
     void setUp() {
-        runner = new FFprobeRunner(processRunner, "/usr/bin/ffprobe");
+        runner = new FFprobeRunner(processRunner, "/usr/bin/ffprobe", 1800L);
     }
 
     @Nested
@@ -41,7 +42,7 @@ class FFprobeRunnerTest {
                   "format": {"duration":"120.5","size":"75000000"}
                 }
                 """;
-            when(processRunner.run(anyList())).thenReturn(json);
+            when(processRunner.run(anyList(), anyLong())).thenReturn(json);
 
             FFprobeRunner.VideoMetadata meta = runner.probe("/tmp/test.mp4", true);
 
@@ -61,7 +62,7 @@ class FFprobeRunnerTest {
                   "format": {"duration":"30.0","size":"1000000"}
                 }
                 """;
-            when(processRunner.run(anyList())).thenReturn(json);
+            when(processRunner.run(anyList(), anyLong())).thenReturn(json);
 
             assertThatThrownBy(() -> runner.probe("/tmp/audio-only.mp3", true))
                 .isInstanceOf(FFprobeRunner.ValidationException.class)
@@ -75,7 +76,7 @@ class FFprobeRunnerTest {
                   "format": {"duration":"30.0","size":"1000000"}
                 }
                 """;
-            when(processRunner.run(anyList())).thenReturn(json);
+            when(processRunner.run(anyList(), anyLong())).thenReturn(json);
 
             assertThatThrownBy(() -> runner.probe("/tmp/broken.bin", true))
                 .isInstanceOf(FFprobeRunner.ValidationException.class)
@@ -91,7 +92,7 @@ class FFprobeRunnerTest {
                   "format": {"duration":"60.0","size":"21000000"}
                 }
                 """;
-            when(processRunner.run(anyList())).thenReturn(json);
+            when(processRunner.run(anyList(), anyLong())).thenReturn(json);
 
             assertThatThrownBy(() -> runner.probe("/tmp/silent.mp4", true))
                 .isInstanceOf(FFprobeRunner.ValidationException.class)
@@ -107,7 +108,7 @@ class FFprobeRunnerTest {
                   "format": {"duration":"60.0","size":"21000000"}
                 }
                 """;
-            when(processRunner.run(anyList())).thenReturn(json);
+            when(processRunner.run(anyList(), anyLong())).thenReturn(json);
 
             FFprobeRunner.VideoMetadata meta = runner.probe("/tmp/silent-trailer.mp4", false);
 
@@ -124,7 +125,7 @@ class FFprobeRunnerTest {
                   "format": {"duration":"30.0","size":"1000000"}
                 }
                 """;
-            when(processRunner.run(anyList())).thenReturn(json);
+            when(processRunner.run(anyList(), anyLong())).thenReturn(json);
 
             assertThatThrownBy(() -> runner.probe("/tmp/audio-only.mp3", false))
                 .isInstanceOf(FFprobeRunner.ValidationException.class)

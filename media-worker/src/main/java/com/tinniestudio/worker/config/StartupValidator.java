@@ -29,7 +29,7 @@ public class StartupValidator {
             List<String> cmd = new ArrayList<>();
             cmd.add(binaryPath);
             cmd.addAll(List.of(args));
-            processRunner.run(cmd);
+            processRunner.run(cmd, workerProperties.getFfmpeg().getTimeoutSeconds());
         } catch (Exception e) {
             throw new IllegalStateException(
                 "Required tool not found: " + binaryPath + " — " + e.getMessage(), e);

@@ -14,12 +14,15 @@ public class FFprobeRunner {
 
     private final ProcessRunner processRunner;
     private final String ffprobePath;
+    private final long timeoutSeconds;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public FFprobeRunner(ProcessRunner processRunner,
-                         @Value("${worker.ffmpeg.ffprobe-path:/usr/bin/ffprobe}") String ffprobePath) {
+                         @Value("${worker.ffmpeg.ffprobe-path:/usr/bin/ffprobe}") String ffprobePath,
+                         @Value("${worker.ffmpeg.timeout-seconds:1800}") long timeoutSeconds) {
         this.processRunner = processRunner;
         this.ffprobePath = ffprobePath;
+        this.timeoutSeconds = timeoutSeconds;
     }
 
     public VideoMetadata probe(String inputPath, boolean requireAudio) throws Exception {
@@ -29,7 +32,10 @@ public class FFprobeRunner {
             "-show_streams", "-show_format",
             inputPath
         );
-        String output = processRunner.run(command);
+        // Probing reads container metadata only — it's fast regardless of source
+        // length, so it always uses the flat default, never the duration-scaled
+        // timeout VideoProcessingService computes for actual transcoding.
+        String output = processRunner.run(command, timeoutSeconds);
         return parseOutput(output, requireAudio);
     }
 

@@ -25,7 +25,8 @@ public class FFmpegRunner {
 
     public void transcode(String inputPath, String outputDir,
                           int width, int height,
-                          String videoBitrate, String audioBitrate) throws Exception {
+                          String videoBitrate, String audioBitrate,
+                          long timeoutSeconds) throws Exception {
         String segmentPattern = outputDir + "/segment_%04d.ts";
         String playlistPath   = outputDir + "/playlist.m3u8";
 
@@ -44,11 +45,11 @@ public class FFmpegRunner {
             "-hls_segment_filename", segmentPattern,
             playlistPath
         ));
-        log.info("Transcoding → {} at {}x{} {}", outputDir, width, height, videoBitrate);
-        processRunner.run(cmd);
+        log.info("Transcoding → {} at {}x{} {} (timeout {}s)", outputDir, width, height, videoBitrate, timeoutSeconds);
+        processRunner.run(cmd, timeoutSeconds);
     }
 
-    public void generateThumbnail(String inputPath, String outputPath) throws Exception {
+    public void generateThumbnail(String inputPath, String outputPath, long timeoutSeconds) throws Exception {
         List<String> cmd = new ArrayList<>(List.of(
             ffmpegPath,
             "-i", inputPath,
@@ -58,7 +59,7 @@ public class FFmpegRunner {
             outputPath
         ));
         log.info("Generating thumbnail → {}", outputPath);
-        processRunner.run(cmd);
+        processRunner.run(cmd, timeoutSeconds);
     }
 
     private int parseBitrateKbps(String bitrate) {

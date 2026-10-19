@@ -268,6 +268,54 @@ class VideoProcessingServiceTest {
         }
 
         @Test
+        void scalesTranscodeTimeoutToTripleSourceDurationWhenLongerThanDefault() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "DONE")).thenReturn(false);
+            when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            stubDownloadCreatesFile(1_000L);
+
+            // 20-minute (1200s) source: 1200*3=3600s exceeds the 1800s default timeout.
+            FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
+                1200, 640, 360, "h264", 800_000L, true);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(meta);
+
+            service.process(payload);
+
+            ArgumentCaptor<Long> timeoutCaptor = ArgumentCaptor.forClass(Long.class);
+            verify(ffmpegRunner).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString(), timeoutCaptor.capture());
+            assertThat(timeoutCaptor.getValue()).isEqualTo(3600L);
+        }
+
+        @Test
+        void keepsDefaultTranscodeTimeoutWhenSourceIsShort() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "DONE")).thenReturn(false);
+            when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            stubDownloadCreatesFile(1_000L);
+
+            // 30s trailer: 30*3=90s is well under the 1800s default, so the default wins.
+            FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
+                30, 640, 360, "h264", 800_000L, true);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(meta);
+
+            service.process(payload);
+
+            ArgumentCaptor<Long> timeoutCaptor = ArgumentCaptor.forClass(Long.class);
+            verify(ffmpegRunner).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString(), timeoutCaptor.capture());
+            assertThat(timeoutCaptor.getValue()).isEqualTo(1800L);
+        }
+
+        @Test
         void setsFailedStatusWhenDurationExceedsMax() throws Exception {
             UUID assetId = UUID.randomUUID();
             VideoAsset asset = buildAsset(assetId);
@@ -342,7 +390,7 @@ class VideoProcessingServiceTest {
 
             service.process(payload);
 
-            verify(ffmpegRunner, never()).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString());
+            verify(ffmpegRunner, never()).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString(), anyLong());
             verify(storageService, never()).uploadDirectory(anyString(), any(Path.class));
             verify(videoAssetRepo, never()).save(argThat(a -> "READY".equals(a.getProcessingStatus())));
         }
@@ -374,7 +422,7 @@ class VideoProcessingServiceTest {
 
             service.process(payload);
 
-            verify(ffmpegRunner, times(1)).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString());
+            verify(ffmpegRunner, times(1)).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString(), anyLong());
             verify(storageService, never()).uploadDirectory(anyString(), any(Path.class));
             verify(videoVariantRepo, never()).save(any(VideoVariant.class));
             verify(videoAssetRepo, never()).save(argThat(a -> "READY".equals(a.getProcessingStatus())));
