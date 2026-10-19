@@ -45,11 +45,12 @@ public class VideoProcessingService {
     // save/find in its own transaction when no transaction is already active), so as
     // long as this method stays free of an enclosing @Transactional, every status
     // write below - marking PROCESSING at the start, each per-stage updateJobStatus,
-    // and markFailed()/the final success write - commits independently and immediately.
-    // If this method were wrapped in one long transaction, an exception thrown after
-    // markFailed() (e.g. RetryableProcessingException) would roll the whole thing back,
-    // erasing the FAILED write and reverting the asset to its pre-processing status -
-    // invisible to both retry logic and the stale-job-recovery scan. Do not re-add
+    // markAssetAndJobFailed()/recordRetryableFailure(), and the final success write -
+    // commits independently and immediately. If this method were wrapped in one long
+    // transaction, an exception thrown after markAssetAndJobFailed() (e.g. on a
+    // non-retryable ValidationException) would roll the whole thing back, erasing the
+    // FAILED write and reverting the asset to its pre-processing status - invisible to
+    // both retry logic and the stale-job-recovery scan. Do not re-add
     // @Transactional here; if a narrower atomic grouping is ever needed, use a separate
     // collaborator bean with @Transactional(propagation = Propagation.REQUIRES_NEW) on
     // its own methods (self-invocation within this class would not apply the proxy).
