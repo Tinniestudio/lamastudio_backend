@@ -50,6 +50,13 @@ public class UploadConfig {
     // (and thus the "resume" lookup) stays valid, not any one signed URL.
     public static final java.time.Duration MULTIPART_SESSION_TTL = java.time.Duration.ofHours(24);
 
+    // Must stay in sync with worker.processing.max-duration-seconds (media-worker's
+    // WorkerProperties.Processing.maxDurationSeconds) — media-worker is the sole actual
+    // enforcer (checked post-upload via ffprobe, during processing). This copy only powers
+    // the /uploads/constraints endpoint so partner-web can warn before a multi-GB upload
+    // that would otherwise only fail hours later.
+    public static final int MAX_DURATION_SECONDS = 14_400; // 4 hours
+
     public boolean isMimeTypeAllowed(UploadType type, String mimeType) {
         Set<String> allowed = ALLOWED_MIME_TYPES.get(type);
         return allowed != null && allowed.contains(mimeType);
@@ -57,5 +64,13 @@ public class UploadConfig {
 
     public long getMaxBytes(UploadType type) {
         return MAX_BYTES.getOrDefault(type, 0L);
+    }
+
+    public Set<String> getAllowedMimeTypes(UploadType type) {
+        return ALLOWED_MIME_TYPES.getOrDefault(type, Set.of());
+    }
+
+    public boolean isAudioRequired(UploadType type) {
+        return type == UploadType.RAW_VIDEO;
     }
 }
