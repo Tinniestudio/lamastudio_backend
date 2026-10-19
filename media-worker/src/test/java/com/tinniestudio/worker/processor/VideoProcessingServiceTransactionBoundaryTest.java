@@ -87,7 +87,7 @@ class VideoProcessingServiceTransactionBoundaryTest {
     @MockBean RabbitTemplate rabbitTemplate;
 
     @Test
-    void failedStatusWriteSurvivesExceptionThrownLaterInThePipeline() throws Exception {
+    void jobAttemptFailureWriteSurvivesExceptionThrownLaterInThePipeline() throws Exception {
         UUID assetId = UUID.randomUUID();
 
         VideoAsset asset = new VideoAsset();
@@ -125,11 +125,21 @@ class VideoProcessingServiceTransactionBoundaryTest {
             .as("process() must rethrow so the consumer/RetryPublisher can decide retry vs DLQ")
             .isTrue();
 
-        VideoAsset persisted = videoAssetRepo.findById(assetId).orElseThrow();
-        assertThat(persisted.getProcessingStatus())
-            .as("FAILED status written in the catch block must survive the exception, not revert to PENDING")
-            .isEqualTo("FAILED");
-        assertThat(persisted.getProcessingError()).contains("ffprobe crashed mid-pipeline");
+        VideoAsset persistedAsset = videoAssetRepo.findById(assetId).orElseThrow();
+        assertThat(persistedAsset.getProcessingStatus())
+            .as("a retryable failure must leave the asset PROCESSING (not FAILED, not reverted to "
+                + "PENDING) so a stale terminal write can't block the next retry attempt")
+            .isEqualTo("PROCESSING");
+
+        ProcessingJob job = processingJobRepo.findByJobId(payload.getJobId()).orElseThrow();
+        assertThat(job.getErrorMessage())
+            .as("the attempt-scoped failure write in the catch block must survive the exception "
+                + "thrown later in the same method, not roll back with it")
+            .contains("ffprobe crashed mid-pipeline");
+        assertThat(job.getStatus())
+            .as("job status must not become FAILED on a retryable attempt — that would make the "
+                + "terminal-skip check at the top of the next process() call falsely skip it")
+            .isNotEqualTo("FAILED");
     }
 
     /**

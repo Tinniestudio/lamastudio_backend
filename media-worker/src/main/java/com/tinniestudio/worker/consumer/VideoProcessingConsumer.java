@@ -33,7 +33,9 @@ public class VideoProcessingConsumer {
             try {
                 retryPublisher.retryOrFail(envelope, attempt);
             } catch (RetryPublisher.MaxAttemptsExceededException ex) {
-                log.error("Job={} exhausted retries, routing to failed queue", jobId);
+                log.error("Job={} exhausted retries, marking terminally failed and routing to failed queue", jobId);
+                processingService.markTerminallyFailed(
+                    envelope.getPayload().getVideoAssetId(), jobId, e.getMessage());
                 throw ex;
             }
         }

@@ -179,10 +179,10 @@ public class VideoProcessingService {
 
         } catch (FFprobeRunner.ValidationException e) {
             log.error("Non-retryable validation failure for asset {}: {}", videoAssetId, e.getMessage());
-            markFailed(asset, job, e.getMessage());
+            markAssetAndJobFailed(asset, job, e.getMessage());
         } catch (Exception e) {
             log.error("Retryable error processing asset {}: {}", videoAssetId, e.getMessage());
-            markFailed(asset, job, e.getMessage());
+            recordRetryableFailure(job, e.getMessage());
             throw new RetryableProcessingException(e.getMessage(), e);
         } finally {
             cleanup(jobDir);
@@ -245,7 +245,7 @@ public class VideoProcessingService {
         return v;
     }
 
-    private void markFailed(VideoAsset asset, ProcessingJob job, String error) {
+    private void markAssetAndJobFailed(VideoAsset asset, ProcessingJob job, String error) {
         asset.setProcessingStatus("FAILED");
         asset.setProcessingError(error);
         videoAssetRepo.save(asset);
@@ -254,6 +254,41 @@ public class VideoProcessingService {
         job.setErrorMessage(error);
         job.setCompletedAt(Instant.now());
         processingJobRepo.save(job);
+    }
+
+    /**
+     * A retryable failure records attempt-scoped error info on the ProcessingJob row only —
+     * the asset stays PROCESSING and the job's status field is left as whatever stage it failed
+     * at. getOrCreateJob() clears errorMessage/completedAt on the next attempt. The asset/job
+     * are only driven to terminal FAILED by markTerminallyFailed(), called from
+     * VideoProcessingConsumer once RetryPublisher reports attempts exhausted.
+     */
+    private void recordRetryableFailure(ProcessingJob job, String error) {
+        job.setErrorMessage(error);
+        job.setCompletedAt(Instant.now());
+        processingJobRepo.save(job);
+    }
+
+    /**
+     * Called by VideoProcessingConsumer when RetryPublisher.retryOrFail() throws
+     * MaxAttemptsExceededException — the terminal FAILED write for a retryable error lives here,
+     * not in process() itself, since process() must leave the asset PROCESSING after every
+     * individual retryable attempt (see recordRetryableFailure). Loads fresh entities since this
+     * runs in a separate method invocation from the process() call that originally failed.
+     */
+    @Transactional
+    public void markTerminallyFailed(UUID videoAssetId, String jobId, String errorMessage) {
+        videoAssetRepo.findById(videoAssetId).ifPresent(asset -> {
+            asset.setProcessingStatus("FAILED");
+            asset.setProcessingError(errorMessage);
+            videoAssetRepo.save(asset);
+        });
+        processingJobRepo.findByJobId(jobId).ifPresent(job -> {
+            job.setStatus("FAILED");
+            job.setErrorMessage(errorMessage);
+            job.setCompletedAt(Instant.now());
+            processingJobRepo.save(job);
+        });
     }
 
     private void cleanup(Path jobDir) {
