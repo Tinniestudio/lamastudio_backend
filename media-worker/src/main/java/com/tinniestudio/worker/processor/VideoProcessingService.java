@@ -66,7 +66,7 @@ public class VideoProcessingService {
         VideoAsset asset = videoAssetRepo.findById(videoAssetId)
             .orElseThrow(() -> new IllegalStateException("VideoAsset not found: " + videoAssetId));
 
-        ProcessingJob job = createJob(jobId, videoAssetId, asset.getProcessingAttempts() + 1);
+        ProcessingJob job = getOrCreateJob(jobId, videoAssetId, asset.getProcessingAttempts() + 1);
         asset.setProcessingStatus("PROCESSING");
         asset.setProcessingAttempts(asset.getProcessingAttempts() + 1);
         videoAssetRepo.save(asset);
@@ -189,13 +189,15 @@ public class VideoProcessingService {
         }
     }
 
-    private ProcessingJob createJob(String jobId, UUID videoAssetId, int attempt) {
-        ProcessingJob job = new ProcessingJob();
+    private ProcessingJob getOrCreateJob(String jobId, UUID videoAssetId, int attempt) {
+        ProcessingJob job = processingJobRepo.findByJobId(jobId).orElseGet(ProcessingJob::new);
         job.setJobId(jobId);
         job.setVideoAssetId(videoAssetId);
         job.setStatus("VALIDATING");
         job.setAttempt(attempt);
         job.setStageStartedAt(Instant.now());
+        job.setErrorMessage(null);
+        job.setCompletedAt(null);
         return processingJobRepo.save(job);
     }
 

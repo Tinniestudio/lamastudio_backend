@@ -427,5 +427,47 @@ class VideoProcessingServiceTest {
             verify(videoVariantRepo, never()).save(any(VideoVariant.class));
             verify(videoAssetRepo, never()).save(argThat(a -> "READY".equals(a.getProcessingStatus())));
         }
+
+        @Test
+        void reusesExistingProcessingJobRowOnASecondCallWithTheSameJobIdInsteadOfInsertingADuplicate() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            // Deliberately stub the terminal-skip guard to false regardless of what gets
+            // written internally — this isolates getOrCreateJob()'s reuse behavior from the
+            // separate "don't write FAILED prematurely" fix (a later task), which this test
+            // doesn't depend on.
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "DONE")).thenReturn(false);
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "FAILED")).thenReturn(false);
+            when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+
+            java.util.concurrent.atomic.AtomicReference<ProcessingJob> savedJob =
+                new java.util.concurrent.atomic.AtomicReference<>();
+            when(processingJobRepo.findByJobId(payload.getJobId()))
+                .thenAnswer(inv -> Optional.ofNullable(savedJob.get()));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> {
+                ProcessingJob j = inv.getArgument(0);
+                savedJob.set(j);
+                return j;
+            });
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            stubDownloadCreatesFile(1_000L);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(
+                new FFprobeRunner.VideoMetadata(30, 640, 360, "h264", 800_000L, true));
+
+            service.process(payload);
+            ProcessingJob jobAfterFirstCall = savedJob.get();
+            assertThat(jobAfterFirstCall).isNotNull();
+
+            service.process(payload);
+            ProcessingJob jobAfterSecondCall = savedJob.get();
+
+            assertThat(jobAfterSecondCall)
+                .as("the second call must reuse the same ProcessingJob entity, not construct a new one "
+                    + "(which would violate the DB-level unique constraint on jobId)")
+                .isSameAs(jobAfterFirstCall);
+            assertThat(jobAfterSecondCall.getAttempt()).isEqualTo(2);
+        }
     }
 }
