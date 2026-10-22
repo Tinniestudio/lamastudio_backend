@@ -16,7 +16,8 @@ public class UploadConfig {
         UploadType.RAW_VIDEO, Set.of(
             "video/mp4",          // MP4 — GoPro, DJI, Sony XAVC-S, Canon, Panasonic, phones
             "video/quicktime",    // MOV — Apple, Canon mirrorless, Sony
-            "video/x-matroska",   // MKV — Android, OBS, Panasonic
+            "video/x-matroska",   // MKV — Android, OBS, Panasonic (RFC-correct MIME type)
+            "video/matroska",     // MKV — same container, bare (non-"x-") MIME string some browsers/OSes report
             "video/mp2t",         // MPEG-TS (.mts) — AVCHD Sony/Panasonic/Canon camcorders
             "video/x-m2ts",       // M2TS (.m2ts) — Sony XAVC AVCHD variant
             "video/x-msvideo",    // AVI — legacy prosumer DSLR/camcorders

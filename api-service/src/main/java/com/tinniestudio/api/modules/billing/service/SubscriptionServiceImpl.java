@@ -356,6 +356,18 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 amountCents, plan.getCurrency(), idempotencyKey);
 
         if (result.succeeded()) {
+            // Anchor the new 30-day period to the moment the charge actually succeeded, not to the
+            // (possibly long-stale) scheduled nextRenewalAt. This method is only ever reached once
+            // nextRenewalAt <= now (see the dedup guard above), so "on time" and "lapsed" renewals
+            // both land here with nextRenewalAt in the past — for an on-time renewal that's just the
+            // cron's processing lag (minutes/hours), but for a subscription that lapsed (declined
+            // card retried days later, or a user recharging after letting it expire) nextRenewalAt
+            // can be weeks stale. Anchoring to nextRenewalAt in that case would grant only a few days
+            // of access for a full period's payment and could even schedule the next charge almost
+            // immediately. There is no legitimate path where a renewal is processed BEFORE its
+            // scheduled date, so using "now" here never costs an on-time renewer any days.
+            Instant renewedAt = Instant.now();
+
             Payment payment = new Payment();
             payment.setUserId(sub.getUserId());
             payment.setSubscriptionId(sub.getId());
@@ -365,7 +377,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             payment.setAmount(amount);
             payment.setCurrency(plan.getCurrency());
             payment.setStatus(PaymentStatus.SUCCESSFUL);
-            payment.setPaidAt(Instant.now());
+            payment.setPaidAt(renewedAt);
             payment.setCouponId(sub.getPendingCouponId());
             payment.setDiscountAmount(sub.getPendingDiscountAmount());
             paymentRepository.save(payment);
@@ -382,8 +394,8 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             sub.setTrialEndsAt(null);
             sub.setPendingCouponId(null);
             sub.setPendingDiscountAmount(null);
-            sub.setEndDate(sub.getNextRenewalAt().plus(30, ChronoUnit.DAYS));
-            sub.setNextRenewalAt(sub.getNextRenewalAt().plus(30, ChronoUnit.DAYS));
+            sub.setEndDate(renewedAt.plus(30, ChronoUnit.DAYS));
+            sub.setNextRenewalAt(renewedAt.plus(30, ChronoUnit.DAYS));
             subscriptionRepository.save(sub);
             log.info("Renewal succeeded: subscriptionId={}, nextRenewalAt={}", subscriptionId, sub.getNextRenewalAt());
         } else {

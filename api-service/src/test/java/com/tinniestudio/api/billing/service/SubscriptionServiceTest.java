@@ -479,6 +479,43 @@ class SubscriptionServiceTest {
         }
 
         @Test
+        @DisplayName("success on a lapsed subscription anchors the new period to now, not to the stale nextRenewalAt")
+        void processRenewal_successAfterLapse_anchorsNewPeriodToNowNotStaleRenewalDate() {
+            UUID subscriptionId = UUID.randomUUID();
+
+            UserSubscription sub = new UserSubscription();
+            sub.setId(subscriptionId);
+            sub.setUserId(userId);
+            sub.setPlan(silverPlan);
+            sub.setStatus(SubscriptionStatus.PAST_DUE);
+            sub.setAutoRenew(true);
+            sub.setStripeCustomerId("cus_123");
+            sub.setStripePaymentMethodId("pm_123");
+            // Subscription lapsed over three weeks ago (e.g. card declined, or the user simply
+            // stopped paying) and is only being recharged/retried now.
+            Instant staleNextRenewalAt = Instant.now().minus(22, ChronoUnit.DAYS);
+            sub.setNextRenewalAt(staleNextRenewalAt);
+
+            when(subscriptionRepository.findByIdForUpdate(subscriptionId)).thenReturn(Optional.of(sub));
+            when(stripeService.chargeOffSession(eq("cus_123"), eq("pm_123"), eq(999L), eq("CAD"), any()))
+                .thenReturn(new StripeService.ChargeResult("pi_123", true, null));
+
+            Instant before = Instant.now();
+            service.processRenewal(subscriptionId);
+            Instant after = Instant.now();
+
+            // The new period must be ~30 days from the actual recharge time (now), not 30 days from
+            // the stale scheduled date — anchoring to the stale date would land the new
+            // nextRenewalAt/endDate only ~8 days out instead of a full 30.
+            Instant buggyAnchorResult = staleNextRenewalAt.plus(30, ChronoUnit.DAYS);
+            assertThat(Math.abs(java.time.Duration.between(sub.getNextRenewalAt(), buggyAnchorResult).toSeconds()))
+                .isGreaterThan(60);
+            assertThat(sub.getNextRenewalAt()).isBetween(before.plus(30, ChronoUnit.DAYS), after.plus(30, ChronoUnit.DAYS));
+            assertThat(sub.getEndDate()).isBetween(before.plus(30, ChronoUnit.DAYS), after.plus(30, ChronoUnit.DAYS));
+            assertThat(sub.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+        }
+
+        @Test
         @DisplayName("failure sets status PAST_DUE and writes no payment")
         void processRenewal_failure_setsPastDue() {
             UUID subscriptionId = UUID.randomUUID();
