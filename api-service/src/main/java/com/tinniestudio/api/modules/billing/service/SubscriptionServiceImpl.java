@@ -4,7 +4,6 @@ import com.tinniestudio.api.modules.billing.dto.*;
 import com.tinniestudio.api.modules.billing.repository.PaymentRepository;
 import com.tinniestudio.api.modules.billing.repository.SubscriptionPlanRepository;
 import com.tinniestudio.api.modules.billing.repository.UserSubscriptionRepository;
-import com.tinniestudio.api.modules.user.repository.UserRepository;
 import com.tinniestudio.api.shared.entity.*;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
 import com.tinniestudio.api.shared.exception.BadRequestException;
@@ -394,8 +393,10 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             sub.setTrialEndsAt(null);
             sub.setPendingCouponId(null);
             sub.setPendingDiscountAmount(null);
-            sub.setEndDate(renewedAt.plus(30, ChronoUnit.DAYS));
-            sub.setNextRenewalAt(renewedAt.plus(30, ChronoUnit.DAYS));
+            // The new paid-through period is always 3 days from the moment the charge actually succeeded, not from the (possibly long-stale) nextRenewalAt. See the comment above for why this is important.
+            // Dont forget to change tp 30days after testing the payment flow. This is just for testing purposes.
+            sub.setEndDate(renewedAt.plus(3, ChronoUnit.DAYS));
+            sub.setNextRenewalAt(renewedAt.plus(3, ChronoUnit.DAYS));
             subscriptionRepository.save(sub);
             log.info("Renewal succeeded: subscriptionId={}, nextRenewalAt={}", subscriptionId, sub.getNextRenewalAt());
         } else {
