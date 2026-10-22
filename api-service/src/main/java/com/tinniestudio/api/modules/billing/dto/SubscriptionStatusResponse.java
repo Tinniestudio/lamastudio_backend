@@ -23,6 +23,12 @@ public class SubscriptionStatusResponse {
     private int contentWatchesUsed;
     private Integer contentWatchesLimit;
     private List<PaymentSummary> payments;
+    private boolean paymentSetup;
+    private boolean hasAccess;
+    private String blockReason;
+    private Instant trialEndsAt;
+    private Instant nextRenewalAt;
+    private UUID pendingPlanId;
 
     @Getter
     @Builder

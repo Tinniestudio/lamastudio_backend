@@ -1,6 +1,5 @@
 package com.tinniestudio.worker.ffmpeg;
 
-import com.tinniestudio.worker.config.WorkerProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -14,14 +13,8 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class SystemProcessRunner implements ProcessRunner {
 
-    private final long timeoutSeconds;
-
-    public SystemProcessRunner(WorkerProperties workerProperties) {
-        this.timeoutSeconds = workerProperties.getFfmpeg().getTimeoutSeconds();
-    }
-
     @Override
-    public String run(List<String> command) throws IOException, InterruptedException {
+    public String run(List<String> command, long timeoutSeconds) throws IOException, InterruptedException {
         // Redirect stdout/stderr to a temp file instead of reading via a pipe
         // (InputStream#readAllBytes() blocks until the pipe closes, which would
         // hang forever alongside a stuck process even with a waitFor timeout).

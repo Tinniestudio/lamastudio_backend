@@ -1,6 +1,7 @@
 package com.tinniestudio.api.modules.playback.service;
 
-import com.tinniestudio.api.modules.billing.repository.UserSubscriptionRepository;
+import com.tinniestudio.api.modules.billing.dto.SubscriptionStatusResponse;
+import com.tinniestudio.api.modules.billing.service.SubscriptionService;
 import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.episode.repository.EpisodeRepository;
 import com.tinniestudio.api.modules.library.repository.WatchHistoryRepository;
@@ -34,7 +35,7 @@ import static org.mockito.Mockito.*;
 class PlaybackServiceTest {
 
     @Mock ContentRepository contentRepo;
-    @Mock UserSubscriptionRepository subscriptionRepo;
+    @Mock SubscriptionService subscriptionService;
     @Mock VideoAssetRepository videoAssetRepo;
     @Mock WatchProgressRepository watchProgressRepo;
     @Mock EpisodeRepository episodeRepo;
@@ -49,7 +50,7 @@ class PlaybackServiceTest {
         AppProperties props = new AppProperties();
         props.getCdn().setBaseUrl("http://cdn.test");
         service = new PlaybackServiceImpl(
-            contentRepo, subscriptionRepo, videoAssetRepo,
+            contentRepo, subscriptionService, videoAssetRepo,
             watchProgressRepo, episodeRepo, seasonRepo, rabbitTemplate, props, watchHistoryRepo
         );
     }
@@ -96,13 +97,14 @@ class PlaybackServiceTest {
             Content content = new Content();
             content.setStatus(ContentStatus.PUBLISHED);
             when(contentRepo.findById(any())).thenReturn(Optional.of(content));
-            when(subscriptionRepo.findByUserIdAndStatus(eq(userId), eq(SubscriptionStatus.ACTIVE)))
-                .thenReturn(Optional.empty());
+            when(subscriptionService.getSubscriptionStatus(userId))
+                .thenReturn(SubscriptionStatusResponse.builder()
+                    .hasAccess(false).blockReason("NEEDS_SETUP").build());
 
             AccessCheckResponse resp = service.checkAccess(principalFor(userId), UUID.randomUUID());
 
             assertThat(resp.isHasAccess()).isFalse();
-            assertThat(resp.getReason()).isEqualTo("NO_ACTIVE_SUBSCRIPTION");
+            assertThat(resp.getReason()).isEqualTo("NEEDS_SETUP");
         }
 
         @Test
@@ -110,11 +112,9 @@ class PlaybackServiceTest {
             UUID userId = UUID.randomUUID();
             Content content = new Content();
             content.setStatus(ContentStatus.PUBLISHED);
-            UserSubscription sub = new UserSubscription();
-            sub.setStatus(SubscriptionStatus.ACTIVE);
             when(contentRepo.findById(any())).thenReturn(Optional.of(content));
-            when(subscriptionRepo.findByUserIdAndStatus(eq(userId), eq(SubscriptionStatus.ACTIVE)))
-                .thenReturn(Optional.of(sub));
+            when(subscriptionService.getSubscriptionStatus(userId))
+                .thenReturn(SubscriptionStatusResponse.builder().hasAccess(true).build());
 
             AccessCheckResponse resp = service.checkAccess(principalFor(userId), UUID.randomUUID());
 
@@ -130,7 +130,27 @@ class PlaybackServiceTest {
             AccessCheckResponse resp = service.checkAccess(adminPrincipal(), UUID.randomUUID());
 
             assertThat(resp.isHasAccess()).isTrue();
-            verify(subscriptionRepo, never()).findByUserIdAndStatus(any(), any());
+            verify(subscriptionService, never()).getSubscriptionStatus(any());
+        }
+
+        @Test
+        void deniesWhenUnderlyingSubscriptionStatusIsStaleActiveButPeriodExpired() {
+            // Regression: UserSubscription.status is never flipped to EXPIRED when the paid-through
+            // period lapses — it stays whatever it was last explicitly set to (e.g. ACTIVE). Access
+            // must be driven by SubscriptionService's freshly-computed hasAccess/blockReason, not by
+            // re-deriving (or trusting) the raw status column.
+            UUID userId = UUID.randomUUID();
+            Content content = new Content();
+            content.setStatus(ContentStatus.PUBLISHED);
+            when(contentRepo.findById(any())).thenReturn(Optional.of(content));
+            when(subscriptionService.getSubscriptionStatus(userId))
+                .thenReturn(SubscriptionStatusResponse.builder()
+                    .status("ACTIVE").hasAccess(false).blockReason("EXPIRED").build());
+
+            AccessCheckResponse resp = service.checkAccess(principalFor(userId), UUID.randomUUID());
+
+            assertThat(resp.isHasAccess()).isFalse();
+            assertThat(resp.getReason()).isEqualTo("EXPIRED");
         }
     }
 
@@ -153,10 +173,9 @@ class PlaybackServiceTest {
         void throwsWhenNoReadyVideoAsset() {
             Content content = new Content();
             content.setStatus(ContentStatus.PUBLISHED);
-            UserSubscription sub = new UserSubscription();
-            sub.setStatus(SubscriptionStatus.ACTIVE);
             when(contentRepo.findById(any())).thenReturn(Optional.of(content));
-            when(subscriptionRepo.findByUserIdAndStatus(any(), any())).thenReturn(Optional.of(sub));
+            when(subscriptionService.getSubscriptionStatus(any()))
+                .thenReturn(SubscriptionStatusResponse.builder().hasAccess(true).build());
             when(videoAssetRepo.findByContent_IdAndAssetTypeAndIsActiveTrue(
                 any(), eq(VideoAssetType.MAIN_VIDEO)))
                 .thenReturn(Optional.empty());
@@ -173,9 +192,6 @@ class PlaybackServiceTest {
             Content content = new Content();
             content.setStatus(ContentStatus.PUBLISHED);
 
-            UserSubscription sub = new UserSubscription();
-            sub.setStatus(SubscriptionStatus.ACTIVE);
-
             Subtitle subtitle = new Subtitle();
             subtitle.setLanguageCode("en");
             subtitle.setLabel("English");
@@ -191,8 +207,8 @@ class PlaybackServiceTest {
             progress.setProgressSeconds(120);
 
             when(contentRepo.findById(contentId)).thenReturn(Optional.of(content));
-            when(subscriptionRepo.findByUserIdAndStatus(eq(userId), eq(SubscriptionStatus.ACTIVE)))
-                .thenReturn(Optional.of(sub));
+            when(subscriptionService.getSubscriptionStatus(userId))
+                .thenReturn(SubscriptionStatusResponse.builder().hasAccess(true).build());
             when(videoAssetRepo.findByContent_IdAndAssetTypeAndIsActiveTrue(
                 eq(contentId), eq(VideoAssetType.MAIN_VIDEO)))
                 .thenReturn(Optional.of(asset));

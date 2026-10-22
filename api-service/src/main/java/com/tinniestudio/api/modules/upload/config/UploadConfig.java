@@ -16,7 +16,8 @@ public class UploadConfig {
         UploadType.RAW_VIDEO, Set.of(
             "video/mp4",          // MP4 — GoPro, DJI, Sony XAVC-S, Canon, Panasonic, phones
             "video/quicktime",    // MOV — Apple, Canon mirrorless, Sony
-            "video/x-matroska",   // MKV — Android, OBS, Panasonic
+            "video/x-matroska",   // MKV — Android, OBS, Panasonic (RFC-correct MIME type)
+            "video/matroska",     // MKV — same container, bare (non-"x-") MIME string some browsers/OSes report
             "video/mp2t",         // MPEG-TS (.mts) — AVCHD Sony/Panasonic/Canon camcorders
             "video/x-m2ts",       // M2TS (.m2ts) — Sony XAVC AVCHD variant
             "video/x-msvideo",    // AVI — legacy prosumer DSLR/camcorders
@@ -50,6 +51,13 @@ public class UploadConfig {
     // (and thus the "resume" lookup) stays valid, not any one signed URL.
     public static final java.time.Duration MULTIPART_SESSION_TTL = java.time.Duration.ofHours(24);
 
+    // Must stay in sync with worker.processing.max-duration-seconds (media-worker's
+    // WorkerProperties.Processing.maxDurationSeconds) — media-worker is the sole actual
+    // enforcer (checked post-upload via ffprobe, during processing). This copy only powers
+    // the /uploads/constraints endpoint so partner-web can warn before a multi-GB upload
+    // that would otherwise only fail hours later.
+    public static final int MAX_DURATION_SECONDS = 14_400; // 4 hours
+
     public boolean isMimeTypeAllowed(UploadType type, String mimeType) {
         Set<String> allowed = ALLOWED_MIME_TYPES.get(type);
         return allowed != null && allowed.contains(mimeType);
@@ -57,5 +65,13 @@ public class UploadConfig {
 
     public long getMaxBytes(UploadType type) {
         return MAX_BYTES.getOrDefault(type, 0L);
+    }
+
+    public Set<String> getAllowedMimeTypes(UploadType type) {
+        return ALLOWED_MIME_TYPES.getOrDefault(type, Set.of());
+    }
+
+    public boolean isAudioRequired(UploadType type) {
+        return type == UploadType.RAW_VIDEO;
     }
 }

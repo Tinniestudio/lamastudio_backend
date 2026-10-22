@@ -6,8 +6,7 @@ import com.tinniestudio.api.shared.cache.CacheService;
 import com.tinniestudio.api.shared.exception.BadRequestException;
 import com.stripe.model.Event;
 import com.stripe.model.EventDataObjectDeserializer;
-import com.stripe.model.PaymentIntent;
-import com.stripe.model.checkout.Session;
+import com.stripe.model.SetupIntent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -86,16 +85,18 @@ class StripeWebhookIntegrationTest {
     }
 
     @Test
-    @DisplayName("POST /webhooks/stripe with payment_intent.succeeded calls activateSubscription and returns 200")
-    void paymentSucceeded_activatesSubscription() throws Exception {
-        PaymentIntent pi = new PaymentIntent();
-        pi.setId("pi_test_123");
+    @DisplayName("POST /webhooks/stripe with setup_intent.succeeded calls completeSetupFromWebhook with the customer and payment method ids")
+    void setupIntentSucceeded_completesSetupFromWebhook() throws Exception {
+        SetupIntent setupIntent = new SetupIntent();
+        setupIntent.setId("seti_test_123");
+        setupIntent.setCustomer("cus_test_123");
+        setupIntent.setPaymentMethod("pm_test_123");
 
         EventDataObjectDeserializer des = mock(EventDataObjectDeserializer.class);
-        when(des.getObject()).thenReturn(Optional.of(pi));
+        when(des.getObject()).thenReturn(Optional.of(setupIntent));
 
         Event event = mock(Event.class);
-        when(event.getType()).thenReturn("payment_intent.succeeded");
+        when(event.getType()).thenReturn("setup_intent.succeeded");
         when(event.getId()).thenReturn("evt_test_123");
         when(event.getDataObjectDeserializer()).thenReturn(des);
 
@@ -104,66 +105,11 @@ class StripeWebhookIntegrationTest {
         mockMvc.perform(postCtx("/webhooks/stripe")
                    .contentType(MediaType.APPLICATION_JSON)
                    .header("Stripe-Signature", "t=valid,v1=validsig")
-                   .content("{\"type\":\"payment_intent.succeeded\"}"))
+                   .content("{\"type\":\"setup_intent.succeeded\"}"))
                .andExpect(status().isOk())
                .andExpect(jsonPath("$.received").value(true));
 
-        verify(subscriptionService).activateSubscription(isNull(), eq("pi_test_123"));
-    }
-
-    @Test
-    @DisplayName("POST /webhooks/stripe with checkout.session.expired fails the payment by its payment intent id")
-    void checkoutSessionExpired_failsPaymentByPaymentIntentId() throws Exception {
-        Session session = new Session();
-        session.setId("cs_expired_123");
-        session.setPaymentIntent("pi_expired_123");
-
-        EventDataObjectDeserializer des = mock(EventDataObjectDeserializer.class);
-        when(des.getObject()).thenReturn(Optional.of(session));
-
-        Event event = mock(Event.class);
-        when(event.getType()).thenReturn("checkout.session.expired");
-        when(event.getId()).thenReturn("evt_expired_123");
-        when(event.getDataObjectDeserializer()).thenReturn(des);
-
-        when(stripeService.constructWebhookEvent(anyString(), anyString())).thenReturn(event);
-
-        mockMvc.perform(postCtx("/webhooks/stripe")
-                   .contentType(MediaType.APPLICATION_JSON)
-                   .header("Stripe-Signature", "t=valid,v1=validsig")
-                   .content("{\"type\":\"checkout.session.expired\"}"))
-               .andExpect(status().isOk())
-               .andExpect(jsonPath("$.received").value(true));
-
-        verify(subscriptionService).failPayment(eq("pi_expired_123"), eq("Checkout session expired"));
-    }
-
-    @Test
-    @DisplayName("POST /webhooks/stripe with checkout.session.expired falls back to the session id when no payment intent exists")
-    void checkoutSessionExpired_fallsBackToSessionIdWhenNoPaymentIntent() throws Exception {
-        Session session = new Session();
-        session.setId("cs_expired_456");
-        // No payment intent set on this session — the handler must fall back to the session id,
-        // matching the exact fallback SubscriptionServiceImpl.initiateCheckout() used when it
-        // originally decided what to store as Payment.providerReference.
-
-        EventDataObjectDeserializer des = mock(EventDataObjectDeserializer.class);
-        when(des.getObject()).thenReturn(Optional.of(session));
-
-        Event event = mock(Event.class);
-        when(event.getType()).thenReturn("checkout.session.expired");
-        when(event.getId()).thenReturn("evt_expired_456");
-        when(event.getDataObjectDeserializer()).thenReturn(des);
-
-        when(stripeService.constructWebhookEvent(anyString(), anyString())).thenReturn(event);
-
-        mockMvc.perform(postCtx("/webhooks/stripe")
-                   .contentType(MediaType.APPLICATION_JSON)
-                   .header("Stripe-Signature", "t=valid,v1=validsig")
-                   .content("{\"type\":\"checkout.session.expired\"}"))
-               .andExpect(status().isOk());
-
-        verify(subscriptionService).failPayment(eq("cs_expired_456"), eq("Checkout session expired"));
+        verify(subscriptionService).completeSetupFromWebhook(eq("cus_test_123"), eq("pm_test_123"));
     }
 
     @Test
@@ -184,38 +130,5 @@ class StripeWebhookIntegrationTest {
                    .header("Stripe-Signature", "t=valid,v1=validsig")
                    .content("{\"type\":\"unknown.event\"}"))
                .andExpect(status().isOk());
-    }
-
-    @Test
-    @DisplayName("POST /webhooks/stripe with duplicate payment_intent.succeeded is idempotent")
-    void duplicateWebhook_isIdempotent() throws Exception {
-        PaymentIntent pi = new PaymentIntent();
-        pi.setId("pi_dup_123");
-
-        EventDataObjectDeserializer des = mock(EventDataObjectDeserializer.class);
-        when(des.getObject()).thenReturn(Optional.of(pi));
-
-        Event event = mock(Event.class);
-        when(event.getType()).thenReturn("payment_intent.succeeded");
-        when(event.getId()).thenReturn("evt_dup");
-        when(event.getDataObjectDeserializer()).thenReturn(des);
-        when(stripeService.constructWebhookEvent(anyString(), anyString())).thenReturn(event);
-
-        // First call
-        mockMvc.perform(postCtx("/webhooks/stripe")
-                   .contentType(MediaType.APPLICATION_JSON)
-                   .header("Stripe-Signature", "t=valid,v1=validsig")
-                   .content("{\"type\":\"payment_intent.succeeded\"}"))
-               .andExpect(status().isOk());
-
-        // Second call — same event
-        mockMvc.perform(postCtx("/webhooks/stripe")
-                   .contentType(MediaType.APPLICATION_JSON)
-                   .header("Stripe-Signature", "t=valid,v1=validsig")
-                   .content("{\"type\":\"payment_intent.succeeded\"}"))
-               .andExpect(status().isOk());
-
-        // SubscriptionService handles idempotency internally; controller returns 200 both times
-        verify(subscriptionService, times(2)).activateSubscription(isNull(), eq("pi_dup_123"));
     }
 }

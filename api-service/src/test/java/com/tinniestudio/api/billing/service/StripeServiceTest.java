@@ -4,8 +4,12 @@ import com.tinniestudio.api.modules.billing.service.StripeService;
 import com.tinniestudio.api.modules.billing.service.StripeServiceImpl;
 import com.tinniestudio.api.shared.config.StripeProperties;
 import com.tinniestudio.api.shared.exception.BadRequestException;
-import com.stripe.model.checkout.Session;
-import com.stripe.param.checkout.SessionCreateParams;
+import com.stripe.model.Customer;
+import com.stripe.model.PaymentIntent;
+import com.stripe.model.SetupIntent;
+import com.stripe.param.CustomerCreateParams;
+import com.stripe.param.PaymentIntentCreateParams;
+import com.stripe.param.SetupIntentCreateParams;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,8 +19,6 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,30 +47,124 @@ class StripeServiceTest {
     }
 
     @Test
-    @DisplayName("createCheckoutSession sets a 30-minute session expiry (Stripe's own minimum) and returns it")
-    void createCheckoutSession_setsThirtyMinuteExpiry() {
-        try (MockedStatic<Session> mockedSession = mockStatic(Session.class)) {
-            Session fakeSession = new Session();
-            fakeSession.setId("cs_test_123");
-            fakeSession.setPaymentIntent("pi_test_123");
-            fakeSession.setUrl("https://checkout.stripe.com/pay/cs_test_123");
+    @DisplayName("createCustomer creates a Stripe Customer and returns its id")
+    void createCustomer_returnsCustomerId() {
+        try (MockedStatic<Customer> mockedCustomer = mockStatic(Customer.class)) {
+            Customer fake = new Customer();
+            fake.setId("cus_test_123");
+            ArgumentCaptor<CustomerCreateParams> captor = ArgumentCaptor.forClass(CustomerCreateParams.class);
+            mockedCustomer.when(() -> Customer.create(captor.capture())).thenReturn(fake);
 
-            ArgumentCaptor<SessionCreateParams> captor = ArgumentCaptor.forClass(SessionCreateParams.class);
-            mockedSession.when(() -> Session.create(captor.capture())).thenReturn(fakeSession);
+            String customerId = stripeService.createCustomer("user@example.com", Map.of("userId", "u-1"));
 
-            Instant before = Instant.now();
-            StripeService.CreateCheckoutResult result = stripeService.createCheckoutSession(
-                1999L, "CAD", "Silver",
-                "https://app.example.com/success", "https://app.example.com/cancel",
-                Map.of("paymentId", "pid-1"));
-            Instant after = Instant.now();
+            assertThat(customerId).isEqualTo("cus_test_123");
+            assertThat(captor.getValue().getEmail()).isEqualTo("user@example.com");
+        }
+    }
 
-            long minExpected = before.plus(30, ChronoUnit.MINUTES).getEpochSecond();
-            long maxExpected = after.plus(30, ChronoUnit.MINUTES).getEpochSecond();
+    @Test
+    @DisplayName("createSetupIntent returns the client secret and setup intent id")
+    void createSetupIntent_returnsClientSecret() {
+        try (MockedStatic<SetupIntent> mocked = mockStatic(SetupIntent.class)) {
+            SetupIntent fake = new SetupIntent();
+            fake.setId("seti_test_123");
+            fake.setClientSecret("seti_test_123_secret_abc");
+            mocked.when(() -> SetupIntent.create(org.mockito.ArgumentMatchers.any(SetupIntentCreateParams.class)))
+                .thenReturn(fake);
 
-            assertThat(captor.getValue().getExpiresAt()).isBetween(minExpected, maxExpected);
-            assertThat(result.expiresAt()).isNotNull();
-            assertThat(result.expiresAt().getEpochSecond()).isBetween(minExpected, maxExpected);
+            StripeService.CreateSetupIntentResult result = stripeService.createSetupIntent("cus_test_123");
+
+            assertThat(result.setupIntentId()).isEqualTo("seti_test_123");
+            assertThat(result.clientSecret()).isEqualTo("seti_test_123_secret_abc");
+        }
+    }
+
+    @Test
+    @DisplayName("retrieveSetupIntent returns the resolved customer and payment method ids")
+    void retrieveSetupIntent_returnsCustomerAndPaymentMethod() {
+        try (MockedStatic<SetupIntent> mocked = mockStatic(SetupIntent.class)) {
+            SetupIntent fake = new SetupIntent();
+            fake.setId("seti_test_123");
+            fake.setCustomer("cus_test_123");
+            fake.setPaymentMethod("pm_test_123");
+            fake.setStatus("succeeded");
+            mocked.when(() -> SetupIntent.retrieve("seti_test_123")).thenReturn(fake);
+
+            StripeService.VerifySetupIntentResult result = stripeService.retrieveSetupIntent("seti_test_123");
+
+            assertThat(result.customerId()).isEqualTo("cus_test_123");
+            assertThat(result.paymentMethodId()).isEqualTo("pm_test_123");
+            assertThat(result.succeeded()).isTrue();
+        }
+    }
+
+    @Test
+    @DisplayName("resolveCustomerOwnerUserId returns the userId stored in the customer's metadata")
+    void resolveCustomerOwnerUserId_returnsStoredUserId() {
+        try (MockedStatic<Customer> mocked = mockStatic(Customer.class)) {
+            Customer fake = new Customer();
+            fake.setId("cus_test_123");
+            fake.setMetadata(Map.of("userId", "u-123"));
+            mocked.when(() -> Customer.retrieve("cus_test_123")).thenReturn(fake);
+
+            java.util.Optional<String> result = stripeService.resolveCustomerOwnerUserId("cus_test_123");
+
+            assertThat(result).contains("u-123");
+        }
+    }
+
+    @Test
+    @DisplayName("resolveCustomerOwnerUserId returns empty when the customer has no userId metadata")
+    void resolveCustomerOwnerUserId_noMetadata_returnsEmpty() {
+        try (MockedStatic<Customer> mocked = mockStatic(Customer.class)) {
+            Customer fake = new Customer();
+            fake.setId("cus_test_123");
+            fake.setMetadata(Map.of());
+            mocked.when(() -> Customer.retrieve("cus_test_123")).thenReturn(fake);
+
+            java.util.Optional<String> result = stripeService.resolveCustomerOwnerUserId("cus_test_123");
+
+            assertThat(result).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("chargeOffSession returns a successful result with the payment intent id")
+    void chargeOffSession_success() {
+        try (MockedStatic<PaymentIntent> mocked = mockStatic(PaymentIntent.class)) {
+            PaymentIntent fake = new PaymentIntent();
+            fake.setId("pi_test_123");
+            fake.setStatus("succeeded");
+            mocked.when(() -> PaymentIntent.create(
+                    org.mockito.ArgumentMatchers.any(PaymentIntentCreateParams.class),
+                    org.mockito.ArgumentMatchers.any(com.stripe.net.RequestOptions.class)))
+                .thenReturn(fake);
+
+            StripeService.ChargeResult result = stripeService.chargeOffSession(
+                "cus_test_123", "pm_test_123", 1999L, "CAD", "idem-key-1");
+
+            assertThat(result.succeeded()).isTrue();
+            assertThat(result.paymentIntentId()).isEqualTo("pi_test_123");
+            assertThat(result.failureReason()).isNull();
+        }
+    }
+
+    @Test
+    @DisplayName("chargeOffSession returns a failed result (not an exception) when Stripe declines the card")
+    void chargeOffSession_declined_returnsFailureResult() {
+        try (MockedStatic<PaymentIntent> mocked = mockStatic(PaymentIntent.class)) {
+            mocked.when(() -> PaymentIntent.create(
+                    org.mockito.ArgumentMatchers.any(PaymentIntentCreateParams.class),
+                    org.mockito.ArgumentMatchers.any(com.stripe.net.RequestOptions.class)))
+                .thenThrow(new com.stripe.exception.CardException(
+                    "Your card was declined.", "req_123", "card_declined", "number",
+                    "generic_decline", null, 402, null));
+
+            StripeService.ChargeResult result = stripeService.chargeOffSession(
+                "cus_test_123", "pm_test_123", 1999L, "CAD", "idem-key-2");
+
+            assertThat(result.succeeded()).isFalse();
+            assertThat(result.failureReason()).contains("declined");
         }
     }
 }

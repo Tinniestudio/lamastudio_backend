@@ -40,6 +40,9 @@ public class UserProfile {
     @Column(name = "notification_email", nullable = false)
     private boolean notificationEmail = true;
 
+    @Column(name = "payment_setup", nullable = false)
+    private boolean paymentSetup = false;
+
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;

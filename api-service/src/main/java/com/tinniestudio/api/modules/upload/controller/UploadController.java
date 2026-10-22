@@ -1,10 +1,12 @@
 package com.tinniestudio.api.modules.upload.controller;
 
 import com.tinniestudio.api.shared.security.CurrentUser;
+import com.tinniestudio.api.modules.upload.config.UploadConfig;
 import com.tinniestudio.api.modules.upload.dto.CompleteUploadRequest;
 import com.tinniestudio.api.modules.upload.dto.CompleteUploadResponse;
 import com.tinniestudio.api.modules.upload.dto.CreateUploadSessionRequest;
 import com.tinniestudio.api.modules.upload.dto.PartUploadUrlResponse;
+import com.tinniestudio.api.modules.upload.dto.UploadConstraintsResponse;
 import com.tinniestudio.api.modules.upload.dto.UploadedPartResponse;
 import com.tinniestudio.api.modules.upload.dto.UploadSessionResponse;
 import com.tinniestudio.api.modules.upload.dto.UploadStatusResponse;
@@ -32,6 +34,7 @@ import java.util.UUID;
 public class UploadController {
 
     private final UploadService uploadService;
+    private final UploadConfig uploadConfig;
 
     @Operation(summary = "Create a presigned upload session — returns a URL for direct-to-bucket upload")
     @RateLimit(maxRequests = 10, windowMinutes = 15, keyStrategy = "USER_OR_IP",
@@ -94,5 +97,16 @@ public class UploadController {
             @PathVariable UUID sessionId) {
         UUID userId = CurrentUser.id(principal);
         return ResponseEntity.ok(uploadService.getStatus(userId, sessionId));
+    }
+
+    @Operation(summary = "Get the server-enforced upload constraints for a given asset type, for client-side pre-upload guidance and validation")
+    @GetMapping("/constraints")
+    public ResponseEntity<UploadConstraintsResponse> getConstraints(@RequestParam UploadType assetType) {
+        return ResponseEntity.ok(new UploadConstraintsResponse(
+            uploadConfig.getAllowedMimeTypes(assetType),
+            uploadConfig.getMaxBytes(assetType),
+            UploadConfig.MAX_DURATION_SECONDS,
+            uploadConfig.isAudioRequired(assetType)
+        ));
     }
 }

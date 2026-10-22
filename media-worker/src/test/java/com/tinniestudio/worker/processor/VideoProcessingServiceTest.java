@@ -25,6 +25,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -268,6 +269,54 @@ class VideoProcessingServiceTest {
         }
 
         @Test
+        void scalesTranscodeTimeoutToTripleSourceDurationWhenLongerThanDefault() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "DONE")).thenReturn(false);
+            when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            stubDownloadCreatesFile(1_000L);
+
+            // 20-minute (1200s) source: 1200*3=3600s exceeds the 1800s default timeout.
+            FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
+                1200, 640, 360, "h264", 800_000L, true);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(meta);
+
+            service.process(payload);
+
+            ArgumentCaptor<Long> timeoutCaptor = ArgumentCaptor.forClass(Long.class);
+            verify(ffmpegRunner).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString(), timeoutCaptor.capture());
+            assertThat(timeoutCaptor.getValue()).isEqualTo(3600L);
+        }
+
+        @Test
+        void keepsDefaultTranscodeTimeoutWhenSourceIsShort() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "DONE")).thenReturn(false);
+            when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            stubDownloadCreatesFile(1_000L);
+
+            // 30s trailer: 30*3=90s is well under the 1800s default, so the default wins.
+            FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
+                30, 640, 360, "h264", 800_000L, true);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(meta);
+
+            service.process(payload);
+
+            ArgumentCaptor<Long> timeoutCaptor = ArgumentCaptor.forClass(Long.class);
+            verify(ffmpegRunner).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString(), timeoutCaptor.capture());
+            assertThat(timeoutCaptor.getValue()).isEqualTo(1800L);
+        }
+
+        @Test
         void setsFailedStatusWhenDurationExceedsMax() throws Exception {
             UUID assetId = UUID.randomUUID();
             VideoAsset asset = buildAsset(assetId);
@@ -342,7 +391,7 @@ class VideoProcessingServiceTest {
 
             service.process(payload);
 
-            verify(ffmpegRunner, never()).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString());
+            verify(ffmpegRunner, never()).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString(), anyLong());
             verify(storageService, never()).uploadDirectory(anyString(), any(Path.class));
             verify(videoAssetRepo, never()).save(argThat(a -> "READY".equals(a.getProcessingStatus())));
         }
@@ -374,10 +423,107 @@ class VideoProcessingServiceTest {
 
             service.process(payload);
 
-            verify(ffmpegRunner, times(1)).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString());
+            verify(ffmpegRunner, times(1)).transcode(anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString(), anyLong());
             verify(storageService, never()).uploadDirectory(anyString(), any(Path.class));
             verify(videoVariantRepo, never()).save(any(VideoVariant.class));
             verify(videoAssetRepo, never()).save(argThat(a -> "READY".equals(a.getProcessingStatus())));
+        }
+
+        @Test
+        void reusesExistingProcessingJobRowOnASecondCallWithTheSameJobIdInsteadOfInsertingADuplicate() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            // Deliberately stub the terminal-skip guard to false regardless of what gets
+            // written internally — this isolates getOrCreateJob()'s reuse behavior from the
+            // separate "don't write FAILED prematurely" fix (a later task), which this test
+            // doesn't depend on.
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "DONE")).thenReturn(false);
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "FAILED")).thenReturn(false);
+            when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+
+            java.util.concurrent.atomic.AtomicReference<ProcessingJob> savedJob =
+                new java.util.concurrent.atomic.AtomicReference<>();
+            when(processingJobRepo.findByJobId(payload.getJobId()))
+                .thenAnswer(inv -> Optional.ofNullable(savedJob.get()));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> {
+                ProcessingJob j = inv.getArgument(0);
+                savedJob.set(j);
+                return j;
+            });
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            stubDownloadCreatesFile(1_000L);
+            when(ffprobeRunner.probe(anyString(), anyBoolean())).thenReturn(
+                new FFprobeRunner.VideoMetadata(30, 640, 360, "h264", 800_000L, true));
+
+            service.process(payload);
+            ProcessingJob jobAfterFirstCall = savedJob.get();
+            assertThat(jobAfterFirstCall).isNotNull();
+
+            service.process(payload);
+            ProcessingJob jobAfterSecondCall = savedJob.get();
+
+            assertThat(jobAfterSecondCall)
+                .as("the second call must reuse the same ProcessingJob entity, not construct a new one "
+                    + "(which would violate the DB-level unique constraint on jobId)")
+                .isSameAs(jobAfterFirstCall);
+            assertThat(jobAfterSecondCall.getAttempt()).isEqualTo(2);
+        }
+
+        @Test
+        void retryableFailureFollowedBySuccessfulRetryActuallyReExecutesInsteadOfBeingSkipped() throws Exception {
+            UUID assetId = UUID.randomUUID();
+            VideoAsset asset = buildAsset(assetId);
+            MediaProcessingJobPayload payload = buildPayload(assetId);
+
+            // With the fix, a retryable failure never writes job.status="FAILED", so this guard
+            // must keep returning false across both attempts — reproducing the original bug would
+            // require it to flip true after attempt 1, which is exactly what the fix prevents.
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "DONE")).thenReturn(false);
+            when(processingJobRepo.existsByJobIdAndStatus(payload.getJobId(), "FAILED")).thenReturn(false);
+            when(videoAssetRepo.findById(assetId)).thenReturn(Optional.of(asset));
+
+            java.util.concurrent.atomic.AtomicReference<ProcessingJob> savedJob =
+                new java.util.concurrent.atomic.AtomicReference<>();
+            when(processingJobRepo.findByJobId(payload.getJobId()))
+                .thenAnswer(inv -> Optional.ofNullable(savedJob.get()));
+            when(processingJobRepo.save(any())).thenAnswer(inv -> {
+                ProcessingJob j = inv.getArgument(0);
+                savedJob.set(j);
+                return j;
+            });
+            when(videoAssetRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            stubDownloadCreatesFile(1_000L);
+
+            FFprobeRunner.VideoMetadata meta = new FFprobeRunner.VideoMetadata(
+                60, 1280, 720, "h264", 2_800_000L, true);
+            // Attempt 1: ffprobe throws a retryable error. Attempt 2 (same jobId): succeeds.
+            when(ffprobeRunner.probe(anyString(), anyBoolean()))
+                .thenThrow(new RuntimeException("transient ffprobe failure"))
+                .thenReturn(meta);
+
+            // Attempt 1
+            assertThatThrownBy(() -> service.process(payload))
+                .isInstanceOf(VideoProcessingService.RetryableProcessingException.class);
+
+            assertThat(savedJob.get().getStatus())
+                .as("a retryable failure must not write a terminal job status")
+                .isNotEqualTo("FAILED");
+            assertThat(savedJob.get().getErrorMessage()).contains("transient ffprobe failure");
+            verify(videoAssetRepo, never()).save(argThat(a -> "FAILED".equals(a.getProcessingStatus())));
+            ProcessingJob jobAfterAttempt1 = savedJob.get();
+
+            // Attempt 2 — must actually re-run ffprobe/transcode, not be silently skipped.
+            service.process(payload);
+
+            verify(ffprobeRunner, times(2)).probe(anyString(), anyBoolean());
+            assertThat(savedJob.get())
+                .as("attempt 2 must reuse the same ProcessingJob row, not insert a duplicate")
+                .isSameAs(jobAfterAttempt1);
+            assertThat(savedJob.get().getStatus()).isEqualTo("DONE");
+            assertThat(savedJob.get().getAttempt()).isEqualTo(2);
+            verify(videoAssetRepo, atLeastOnce()).save(argThat(a -> "READY".equals(a.getProcessingStatus())));
         }
     }
 }

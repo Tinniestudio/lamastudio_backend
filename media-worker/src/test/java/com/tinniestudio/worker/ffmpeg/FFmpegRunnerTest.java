@@ -10,6 +10,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -28,14 +30,14 @@ class FFmpegRunnerTest {
     class transcode {
         @Test
         void buildsCorrectHlsCommandFor1080p() throws Exception {
-            when(processRunner.run(anyList())).thenReturn("");
+            when(processRunner.run(anyList(), anyLong())).thenReturn("");
 
             runner.transcode("/tmp/input.mp4", "/tmp/jobs/abc/1080p",
-                1920, 1080, "5000k", "192k");
+                1920, 1080, "5000k", "192k", 1800);
 
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
-            verify(processRunner).run(captor.capture());
+            verify(processRunner).run(captor.capture(), eq(1800L));
             List<String> cmd = captor.getValue();
 
             assertThat(cmd).contains("/usr/bin/ffmpeg");
@@ -49,17 +51,27 @@ class FFmpegRunnerTest {
 
         @Test
         void buildsCorrectScaleFilterFor720p() throws Exception {
-            when(processRunner.run(anyList())).thenReturn("");
+            when(processRunner.run(anyList(), anyLong())).thenReturn("");
 
             runner.transcode("/tmp/input.mp4", "/tmp/jobs/abc/720p",
-                1280, 720, "2800k", "128k");
+                1280, 720, "2800k", "128k", 1800);
 
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
-            verify(processRunner).run(captor.capture());
+            verify(processRunner).run(captor.capture(), anyLong());
             List<String> cmd = captor.getValue();
 
             assertThat(cmd).contains("-vf", "scale=1280:720");
+        }
+
+        @Test
+        void passesTheGivenTimeoutThroughToProcessRunner() throws Exception {
+            when(processRunner.run(anyList(), anyLong())).thenReturn("");
+
+            runner.transcode("/tmp/input.mp4", "/tmp/jobs/abc/1080p",
+                1920, 1080, "5000k", "192k", 5400);
+
+            verify(processRunner).run(anyList(), eq(5400L));
         }
     }
 
@@ -67,13 +79,13 @@ class FFmpegRunnerTest {
     class generateThumbnail {
         @Test
         void buildsCorrectThumbnailCommand() throws Exception {
-            when(processRunner.run(anyList())).thenReturn("");
+            when(processRunner.run(anyList(), anyLong())).thenReturn("");
 
-            runner.generateThumbnail("/tmp/input.mp4", "/tmp/jobs/abc/thumbnail.jpg");
+            runner.generateThumbnail("/tmp/input.mp4", "/tmp/jobs/abc/thumbnail.jpg", 1800);
 
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
-            verify(processRunner).run(captor.capture());
+            verify(processRunner).run(captor.capture(), eq(1800L));
             List<String> cmd = captor.getValue();
 
             assertThat(cmd).contains("/usr/bin/ffmpeg");

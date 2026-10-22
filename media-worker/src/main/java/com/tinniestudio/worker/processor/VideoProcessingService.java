@@ -45,11 +45,12 @@ public class VideoProcessingService {
     // save/find in its own transaction when no transaction is already active), so as
     // long as this method stays free of an enclosing @Transactional, every status
     // write below - marking PROCESSING at the start, each per-stage updateJobStatus,
-    // and markFailed()/the final success write - commits independently and immediately.
-    // If this method were wrapped in one long transaction, an exception thrown after
-    // markFailed() (e.g. RetryableProcessingException) would roll the whole thing back,
-    // erasing the FAILED write and reverting the asset to its pre-processing status -
-    // invisible to both retry logic and the stale-job-recovery scan. Do not re-add
+    // markAssetAndJobFailed()/recordRetryableFailure(), and the final success write -
+    // commits independently and immediately. If this method were wrapped in one long
+    // transaction, an exception thrown after markAssetAndJobFailed() (e.g. on a
+    // non-retryable ValidationException) would roll the whole thing back, erasing the
+    // FAILED write and reverting the asset to its pre-processing status - invisible to
+    // both retry logic and the stale-job-recovery scan. Do not re-add
     // @Transactional here; if a narrower atomic grouping is ever needed, use a separate
     // collaborator bean with @Transactional(propagation = Propagation.REQUIRES_NEW) on
     // its own methods (self-invocation within this class would not apply the proxy).
@@ -66,7 +67,7 @@ public class VideoProcessingService {
         VideoAsset asset = videoAssetRepo.findById(videoAssetId)
             .orElseThrow(() -> new IllegalStateException("VideoAsset not found: " + videoAssetId));
 
-        ProcessingJob job = createJob(jobId, videoAssetId, asset.getProcessingAttempts() + 1);
+        ProcessingJob job = getOrCreateJob(jobId, videoAssetId, asset.getProcessingAttempts() + 1);
         asset.setProcessingStatus("PROCESSING");
         asset.setProcessingAttempts(asset.getProcessingAttempts() + 1);
         videoAssetRepo.save(asset);
@@ -93,6 +94,14 @@ public class VideoProcessingService {
             }
             applyMetadataToAsset(asset, meta);
 
+            // Duration-scaled transcode timeout: the flat worker.ffmpeg.timeout-seconds default
+            // is enough headroom for a short trailer but can easily be exceeded by just the
+            // first resolution tier of a feature-length movie on modest hardware. Scale up to
+            // 3x the source's own duration when that's larger than the default, never below it.
+            long transcodeTimeoutSeconds = Math.max(
+                workerProperties.getFfmpeg().getTimeoutSeconds(),
+                meta.durationSeconds() * 3L);
+
             // 4. RESOLUTION LADDER PLANNING
             List<ResolutionLadder.Tier> tiers = ResolutionLadder.forSourceHeight(meta.height());
 
@@ -106,13 +115,14 @@ public class VideoProcessingService {
                 Path tierDir = jobDir.resolve(tier.label());
                 Files.createDirectories(tierDir);
                 ffmpegRunner.transcode(inputFile.toString(), tierDir.toString(),
-                    tier.width(), tier.height(), tier.videoBitrate(), tier.audioBitrate());
+                    tier.width(), tier.height(), tier.videoBitrate(), tier.audioBitrate(),
+                    transcodeTimeoutSeconds);
             }
 
             // 6. THUMBNAIL GENERATION
             updateJobStatus(job, "THUMBNAIL_GENERATION");
             Path thumbnailPath = jobDir.resolve("thumbnail.jpg");
-            ffmpegRunner.generateThumbnail(inputFile.toString(), thumbnailPath.toString());
+            ffmpegRunner.generateThumbnail(inputFile.toString(), thumbnailPath.toString(), transcodeTimeoutSeconds);
 
             // 7. UPLOADING_OUTPUT
             if (isCancelled(videoAssetId)) {
@@ -170,23 +180,28 @@ public class VideoProcessingService {
 
         } catch (FFprobeRunner.ValidationException e) {
             log.error("Non-retryable validation failure for asset {}: {}", videoAssetId, e.getMessage());
-            markFailed(asset, job, e.getMessage());
+            markAssetAndJobFailed(asset, job, e.getMessage());
         } catch (Exception e) {
             log.error("Retryable error processing asset {}: {}", videoAssetId, e.getMessage());
-            markFailed(asset, job, e.getMessage());
+            recordRetryableFailure(job, e.getMessage());
             throw new RetryableProcessingException(e.getMessage(), e);
         } finally {
             cleanup(jobDir);
         }
     }
 
-    private ProcessingJob createJob(String jobId, UUID videoAssetId, int attempt) {
-        ProcessingJob job = new ProcessingJob();
+    private ProcessingJob getOrCreateJob(String jobId, UUID videoAssetId, int attempt) {
+        // No optimistic lock on this find-then-write: relies on RetryPublisher only ever
+        // scheduling one delayed republish per attempt, so concurrent delivery of the same jobId
+        // isn't expected in practice — a deliberate tradeoff, not an oversight.
+        ProcessingJob job = processingJobRepo.findByJobId(jobId).orElseGet(ProcessingJob::new);
         job.setJobId(jobId);
         job.setVideoAssetId(videoAssetId);
         job.setStatus("VALIDATING");
         job.setAttempt(attempt);
         job.setStageStartedAt(Instant.now());
+        job.setErrorMessage(null);
+        job.setCompletedAt(null);
         return processingJobRepo.save(job);
     }
 
@@ -231,7 +246,7 @@ public class VideoProcessingService {
         return v;
     }
 
-    private void markFailed(VideoAsset asset, ProcessingJob job, String error) {
+    private void markAssetAndJobFailed(VideoAsset asset, ProcessingJob job, String error) {
         asset.setProcessingStatus("FAILED");
         asset.setProcessingError(error);
         videoAssetRepo.save(asset);
@@ -240,6 +255,41 @@ public class VideoProcessingService {
         job.setErrorMessage(error);
         job.setCompletedAt(Instant.now());
         processingJobRepo.save(job);
+    }
+
+    /**
+     * A retryable failure records attempt-scoped error info on the ProcessingJob row only —
+     * the asset stays PROCESSING and the job's status field is left as whatever stage it failed
+     * at. getOrCreateJob() clears errorMessage/completedAt on the next attempt. The asset/job
+     * are only driven to terminal FAILED by markTerminallyFailed(), called from
+     * VideoProcessingConsumer once RetryPublisher reports attempts exhausted.
+     */
+    private void recordRetryableFailure(ProcessingJob job, String error) {
+        job.setErrorMessage(error);
+        job.setCompletedAt(Instant.now());
+        processingJobRepo.save(job);
+    }
+
+    /**
+     * Called by VideoProcessingConsumer when RetryPublisher.retryOrFail() throws
+     * MaxAttemptsExceededException — the terminal FAILED write for a retryable error lives here,
+     * not in process() itself, since process() must leave the asset PROCESSING after every
+     * individual retryable attempt (see recordRetryableFailure). Loads fresh entities since this
+     * runs in a separate method invocation from the process() call that originally failed.
+     */
+    @Transactional
+    public void markTerminallyFailed(UUID videoAssetId, String jobId, String errorMessage) {
+        videoAssetRepo.findById(videoAssetId).ifPresent(asset -> {
+            asset.setProcessingStatus("FAILED");
+            asset.setProcessingError(errorMessage);
+            videoAssetRepo.save(asset);
+        });
+        processingJobRepo.findByJobId(jobId).ifPresent(job -> {
+            job.setStatus("FAILED");
+            job.setErrorMessage(errorMessage);
+            job.setCompletedAt(Instant.now());
+            processingJobRepo.save(job);
+        });
     }
 
     private void cleanup(Path jobDir) {
