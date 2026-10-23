@@ -367,6 +367,37 @@ class SubscriptionServiceTest {
     class GetSubscriptionStatus {
 
         @Test
+        @DisplayName("legacy FREE-plan subscription with no card on file still has access, not NEEDS_SETUP")
+        void getSubscriptionStatus_legacyFreePlanNoCard_stillHasAccess() {
+            SubscriptionPlan freePlan = new SubscriptionPlan();
+            freePlan.setId(UUID.randomUUID());
+            freePlan.setName("FREE");
+
+            UserSubscription sub = new UserSubscription();
+            sub.setId(UUID.randomUUID());
+            sub.setUserId(userId);
+            sub.setPlan(freePlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setContentWatchesUsed(0);
+            // Legacy free signup: no Stripe customer, no card ever set up.
+            sub.setStripeCustomerId(null);
+            sub.setEndDate(null);
+
+            UserProfile profile = new UserProfile();
+            profile.setPaymentSetup(false);
+
+            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+                .thenReturn(Optional.of(sub));
+            when(userProfileRepository.findById(userId)).thenReturn(Optional.of(profile));
+            when(paymentRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());
+
+            SubscriptionStatusResponse result = service.getSubscriptionStatus(userId);
+
+            assertThat(result.isHasAccess()).isTrue();
+            assertThat(result.getBlockReason()).isNull();
+        }
+
+        @Test
         @DisplayName("blocks access once the paid period has expired, even if paymentSetup is true")
         void getSubscriptionStatus_periodExpired_blocksAccessRegardlessOfPaymentSetup() {
             UserSubscription sub = new UserSubscription();
