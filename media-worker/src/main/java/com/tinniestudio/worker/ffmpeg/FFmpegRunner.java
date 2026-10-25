@@ -43,6 +43,7 @@ public class FFmpegRunner {
             "-hls_time", String.valueOf(hlsSegmentDuration),
             "-hls_playlist_type", "vod",
             "-hls_segment_filename", segmentPattern,
+            "-preset","veryfast",
             playlistPath
         ));
         log.info("Transcoding → {} at {}x{} {} (timeout {}s)", outputDir, width, height, videoBitrate, timeoutSeconds);
