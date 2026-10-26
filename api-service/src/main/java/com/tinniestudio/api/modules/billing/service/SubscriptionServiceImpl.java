@@ -190,6 +190,16 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         UserSubscription sub = subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId)
             .orElseThrow(() -> new ResourceNotFoundException("No subscription found"));
 
+        // An account that never completed card setup (no Stripe customer/payment method at all —
+        // e.g. a grandfathered legacy subscriber, see docs/superpowers/specs/2026-10-26-legacy-
+        // card-setup-grandfathering-design.md) has nothing to "re-enable." Without this check,
+        // chargeOffSession(null, null, ...) fails inside Stripe, gets swallowed into a normal
+        // PAST_DUE status update by processRenewal, and this method would return successfully
+        // anyway — the client then shows "Card re-enabled!" for a card that was never added.
+        if (sub.getStripeCustomerId() == null || sub.getStripePaymentMethodId() == null) {
+            throw new BadRequestException("No card on file to re-enable — add a new card instead");
+        }
+
         boolean expired = sub.getEndDate() != null && sub.getEndDate().isBefore(Instant.now());
         sub.setAutoRenew(true);
         subscriptionRepository.save(sub);

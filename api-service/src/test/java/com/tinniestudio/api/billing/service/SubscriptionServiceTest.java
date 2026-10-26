@@ -559,6 +559,31 @@ class SubscriptionServiceTest {
     }
 
     @Nested
+    @DisplayName("enableCard()")
+    class EnableCard {
+
+        @Test
+        @DisplayName("rejects re-enabling when there is no card on file to re-enable")
+        void enableCard_noStripeCustomerId_throwsBadRequest() {
+            UserSubscription sub = new UserSubscription();
+            sub.setUserId(userId);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setStripeCustomerId(null);
+            sub.setStripePaymentMethodId(null);
+
+            when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId))
+                .thenReturn(Optional.of(sub));
+
+            assertThatThrownBy(() -> service.enableCard(userId))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("No card on file");
+
+            verify(subscriptionRepository, never()).save(any());
+            verify(userProfileRepository, never()).save(any());
+        }
+    }
+
+    @Nested
     @DisplayName("processRenewal()")
     class ProcessRenewal {
 
