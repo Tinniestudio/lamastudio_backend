@@ -766,6 +766,92 @@ Note any deviation from the expected behavior above before considering this plan
 
 ---
 
+### Task 11: Fix NEEDS_SETUP/EXPIRED priority ordering bug
+
+**Why this task exists:** live end-to-end verification against the real backend + Postgres (performed while executing Task 10) found that `SubscriptionServiceImpl.getSubscriptionStatus` reports `blockReason="NEEDS_SETUP"` instead of `"EXPIRED"` for a subscriber whose paid period has expired AND who also has no card on file AND is not grandfathered (`cardSetupRequired=true` or no profile row at all — the default for every user, since `UserProfile` rows are created lazily and registration never creates one). This bug **predates** this plan (the original pre-Task-5 condition had the identical ordering problem — the `NEEDS_SETUP` check never excluded `periodExpired` before either), but it sits in the exact method this plan is correcting, and it directly contradicts CLAUDE.md's requirement that an expired user (new or existing) be routed to "confirm/renew" billing, not "set up a new card" — `BillingGate.tsx` shows genuinely different copy for the two reasons (`NEEDS_SETUP`: "Add a payment method to continue... 30-day free trial starts"; `EXPIRED`: "Your plan has expired... re-enable your card or add a new one").
+
+**Files:**
+- Modify: `api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java` (the `if` condition added in Task 5)
+- Modify: `api-service/src/test/java/com/tinniestudio/api/billing/service/SubscriptionServiceTest.java`
+
+- [ ] **Step 1: Add a failing pinning test**
+
+Add this test inside the `GetSubscriptionStatus` nested class, right after `getSubscriptionStatus_newPaidPlanNoCard_blocksWithNeedsSetup` (the test added in Task 4):
+
+```java
+        @Test
+        @DisplayName("expired non-grandfathered subscriber with no card is blocked with EXPIRED, not NEEDS_SETUP")
+        void getSubscriptionStatus_newPaidPlanNoCardAndExpired_blocksWithExpiredNotNeedsSetup() {
+            UserSubscription sub = new UserSubscription();
+            sub.setId(UUID.randomUUID());
+            sub.setUserId(userId);
+            sub.setPlan(silverPlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setContentWatchesUsed(0);
+            sub.setStripeCustomerId(null);
+            sub.setEndDate(Instant.now().minusSeconds(60));
+
+            UserProfile profile = new UserProfile();
+            profile.setPaymentSetup(false);
+            profile.setCardSetupRequired(true);
+
+            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+                .thenReturn(Optional.of(sub));
+            when(userProfileRepository.findById(userId)).thenReturn(Optional.of(profile));
+            when(paymentRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());
+
+            SubscriptionStatusResponse result = service.getSubscriptionStatus(userId);
+
+            assertThat(result.isHasAccess()).isFalse();
+            assertThat(result.getBlockReason()).isEqualTo("EXPIRED");
+        }
+```
+
+- [ ] **Step 2: Run it, confirm it currently fails**
+
+Run: `cd api-service && ../gradlew test --tests "com.tinniestudio.api.billing.service.SubscriptionServiceTest"`
+Expected: `getSubscriptionStatus_newPaidPlanNoCardAndExpired_blocksWithExpiredNotNeedsSetup` FAILS — `result.getBlockReason()` is `"NEEDS_SETUP"`, not `"EXPIRED"`.
+
+- [ ] **Step 3: Fix the condition**
+
+Find the `if` condition Task 5 introduced:
+
+```java
+        if (cardSetupRequired && !isFreePlan && !paymentSetup && sub.getStripeCustomerId() == null) {
+            blockReason = "NEEDS_SETUP";
+            hasAccess = false;
+        } else if (sub.getStatus() == SubscriptionStatus.PAST_DUE) {
+```
+
+Add `&& !periodExpired` (the variable is already computed earlier in this same method, right before the `paymentSetup` lookup):
+
+```java
+        if (cardSetupRequired && !isFreePlan && !paymentSetup && sub.getStripeCustomerId() == null && !periodExpired) {
+            blockReason = "NEEDS_SETUP";
+            hasAccess = false;
+        } else if (sub.getStatus() == SubscriptionStatus.PAST_DUE) {
+```
+
+This makes `EXPIRED` win over `NEEDS_SETUP` whenever both would otherwise apply — an expired subscription is never reported as "needs initial setup," regardless of grandfathering status. No other line in the method changes.
+
+- [ ] **Step 4: Run the full test class, confirm everything passes**
+
+Run: `cd api-service && ../gradlew test --tests "com.tinniestudio.api.billing.service.SubscriptionServiceTest"`
+Expected: `BUILD SUCCESSFUL` except for the one already-known, pre-existing, unrelated `ProcessRenewal` failure (see Task 5's notes) — every `GetSubscriptionStatus` test, including the new one, passes.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java api-service/src/test/java/com/tinniestudio/api/billing/service/SubscriptionServiceTest.java
+git commit -m "fix: EXPIRED takes priority over NEEDS_SETUP when both conditions apply"
+```
+
+- [ ] **Step 6: Re-run live verification for the expired case only**
+
+Re-run the specific scenario from Task 10 that failed: a non-grandfathered (or no-profile-row) subscriber on a paid plan, no card, `endDate` in the past. Confirm `GET /api/v1/subscriptions/me` now returns `blockReason: "EXPIRED"` (not `"NEEDS_SETUP"`). Clean up any test rows created for this check the same way Task 10 did.
+
+---
+
 ## Self-Review Notes
 
 - **Spec coverage:** Problem/Goals → Tasks 1-7. Migration semantics (unconditional exemption, lazy-profile backfill) → Task 2 + verified by Task 3. Nudge dismissibility ("can close the page") → Task 7. `EXPIRED`/`PAST_DUE` platform-access-but-no-content → Task 6 (removes app-wide block) relies on the pre-existing, unchanged watch-page gate (`watch/[slug]/page.tsx:67-78`) — no code change needed there, confirmed already correct in the design doc's research. Testing section → Tasks 3, 4, 8.
