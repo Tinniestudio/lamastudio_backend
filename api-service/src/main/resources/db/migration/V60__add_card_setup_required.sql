@@ -6,6 +6,11 @@
 ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS card_setup_required BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- Backfill: any user who already has a profile row is exempt.
+-- NOTE: unlike the IF NOT EXISTS DDL above, this UPDATE has no WHERE clause and is NOT
+-- idempotent/re-runnable; it is only safe because Flyway guarantees each migration applies
+-- exactly once. It will also bump updated_at on every existing user_profiles row via the
+-- trg_user_profiles_updated_at trigger (V9__add_user_profiles.sql) as a side effect -- harmless
+-- today since no application code reads UserProfile.updatedAt, but worth knowing if that changes.
 UPDATE user_profiles SET card_setup_required = FALSE;
 
 -- Backfill: profiles are created lazily (see UserProfileServiceImpl.createEmptyProfile), so many
