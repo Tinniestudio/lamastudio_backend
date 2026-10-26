@@ -31,7 +31,7 @@
 **Files:**
 - Modify: `api-service/src/main/java/com/tinniestudio/api/shared/entity/UserProfile.java`
 
-- [ ] **Step 1: Add the field**
+- [x] **Step 1: Add the field**
 
 In `UserProfile.java`, add the new field right after `paymentSetup` (currently lines 43-44):
 
@@ -43,12 +43,12 @@ In `UserProfile.java`, add the new field right after `paymentSetup` (currently l
     private boolean cardSetupRequired = true;
 ```
 
-- [ ] **Step 2: Compile to confirm Lombok generates `isCardSetupRequired()`/`setCardSetupRequired(boolean)`**
+- [x] **Step 2: Compile to confirm Lombok generates `isCardSetupRequired()`/`setCardSetupRequired(boolean)`**
 
 Run: `cd api-service && ../gradlew compileJava`
 Expected: `BUILD SUCCESSFUL`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add api-service/src/main/java/com/tinniestudio/api/shared/entity/UserProfile.java
@@ -62,7 +62,7 @@ git commit -m "feat: add UserProfile.cardSetupRequired field"
 **Files:**
 - Create: `api-service/src/main/resources/db/migration/V60__add_card_setup_required.sql`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```sql
 -- V60__add_card_setup_required.sql
@@ -86,14 +86,14 @@ WHERE p.user_id IS NULL;
 
 Note the ordering: `UPDATE ... SET card_setup_required = FALSE` with no `WHERE` clause runs before the `INSERT`, so it only ever touches rows that existed before this migration — the newly inserted rows are added after, already `FALSE`, and are not re-touched.
 
-- [ ] **Step 2: Verify the migration runs cleanly against a disposable DB**
+- [x] **Step 2: Verify the migration runs cleanly against a disposable DB**
 
 Run: `cd api-service && ../gradlew flywayMigrate -Dflyway.url=jdbc:postgresql://localhost:5432/tinniestudio_dev -Dflyway.user=<local-dev-user> -Dflyway.password=<local-dev-password>` (use whatever local Postgres the repo's existing dev setup already points at — check `api-service/src/main/resources/application.yml` / `.env` for the actual datasource if these placeholders don't match).
 Expected: `Successfully applied 1 migration to schema "public", now at version v60`.
 
 If there's no convenient local Postgres to hand, skip this step — Task 3's Testcontainers test exercises the same SQL and is the real verification.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add api-service/src/main/resources/db/migration/V60__add_card_setup_required.sql
@@ -109,7 +109,7 @@ git commit -m "feat: add V60 migration backfilling card_setup_required for exist
 
 This test runs Flyway up to V59 directly (not via Spring Boot autoconfiguration, which always migrates to latest), inserts rows simulating pre-existing legacy data, then migrates to V60 and checks the backfill. There's no existing precedent in this repo for a versioned-migration-step test (existing Testcontainers tests like `EpisodeSlugTriggerTest` always run to latest via `@DataJpaTest`), so this uses the Flyway Java API directly instead.
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```java
 package com.tinniestudio.api.modules.billing.migration;
@@ -193,12 +193,12 @@ class CardSetupRequiredMigrationTest {
 }
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `cd api-service && ../gradlew test --tests "com.tinniestudio.api.modules.billing.migration.CardSetupRequiredMigrationTest"`
 Expected: `BUILD SUCCESSFUL`, 1 test passed. (Requires Docker running locally for Testcontainers — same requirement as the repo's other `@Testcontainers` tests.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add api-service/src/test/java/com/tinniestudio/api/modules/billing/migration/CardSetupRequiredMigrationTest.java
@@ -212,7 +212,7 @@ git commit -m "test: verify V60 backfills existing users as card-setup-exempt"
 **Files:**
 - Modify: `api-service/src/test/java/com/tinniestudio/api/billing/service/SubscriptionServiceTest.java`
 
-- [ ] **Step 1: Add two failing tests inside the existing `GetSubscriptionStatus` nested class**
+- [x] **Step 1: Add two failing tests inside the existing `GetSubscriptionStatus` nested class**
 
 Add these two methods right after the existing `getSubscriptionStatus_legacyFreePlanNoCard_stillHasAccess` test (the one ending around current line 393 of that file):
 
@@ -273,12 +273,12 @@ Add these two methods right after the existing `getSubscriptionStatus_legacyFree
         }
 ```
 
-- [ ] **Step 2: Run the tests to confirm the first one currently fails**
+- [x] **Step 2: Run the tests to confirm the first one currently fails**
 
 Run: `cd api-service && ../gradlew test --tests "com.tinniestudio.api.billing.service.SubscriptionServiceTest"`
 Expected: `getSubscriptionStatus_grandfatheredPaidPlanNoCard_stillHasAccess` FAILS (`result.isHasAccess()` is `false`, not `true` — the current code blocks it). `getSubscriptionStatus_newPaidPlanNoCard_blocksWithNeedsSetup` PASSES already (current behavior already blocks this case; the test exists to pin the behavior so Task 5 can't accidentally remove it).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add api-service/src/test/java/com/tinniestudio/api/billing/service/SubscriptionServiceTest.java
@@ -292,7 +292,7 @@ git commit -m "test: pin grandfathered-vs-new NEEDS_SETUP behavior for getSubscr
 **Files:**
 - Modify: `api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java:261-272`
 
-- [ ] **Step 1: Replace the block**
+- [x] **Step 1: Replace the block**
 
 Current code (`SubscriptionServiceImpl.java:261-274`):
 
@@ -344,12 +344,12 @@ Replace with:
 
 (Everything after this `else if` is unchanged — only the opening `if` condition and the `paymentSetup`/new `cardSetupRequired` lookups above it change.)
 
-- [ ] **Step 2: Run the full subscription test class**
+- [x] **Step 2: Run the full subscription test class**
 
 Run: `cd api-service && ../gradlew test --tests "com.tinniestudio.api.billing.service.SubscriptionServiceTest"`
 Expected: `BUILD SUCCESSFUL`, all tests pass, including both new ones from Task 4 and the pre-existing `getSubscriptionStatus_legacyFreePlanNoCard_stillHasAccess` / `getSubscriptionStatus_periodExpired_blocksAccessRegardlessOfPaymentSetup` / `disableCard_periodNotYetExpired_stillHasAccess` tests.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java
@@ -363,7 +363,7 @@ git commit -m "fix: only block NEEDS_SETUP for accounts where cardSetupRequired 
 **Files:**
 - Modify: `tinniestudio-client-web/src/features/auth/components/AuthGuard.tsx`
 
-- [ ] **Step 1: Update the effect's redirect condition**
+- [x] **Step 1: Update the effect's redirect condition**
 
 Current (`AuthGuard.tsx:39-48`):
 
@@ -397,7 +397,7 @@ Replace with:
     }
 ```
 
-- [ ] **Step 2: Update the matching render guard**
+- [x] **Step 2: Update the matching render guard**
 
 Current (`AuthGuard.tsx:76-82`):
 
@@ -423,12 +423,12 @@ Replace with:
   }
 ```
 
-- [ ] **Step 3: Type-check and lint**
+- [x] **Step 3: Type-check and lint**
 
 Run: `cd tinniestudio-client-web && npm run type-check && npm run lint`
 Expected: both succeed with no new errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/features/auth/components/AuthGuard.tsx
@@ -443,7 +443,7 @@ git commit -m "fix: only hard-block the whole app for NEEDS_SETUP, not EXPIRED/P
 - Create: `tinniestudio-client-web/src/features/account/components/CardSetupNudge.tsx`
 - Modify: `tinniestudio-client-web/src/app/(root)/(protected)/layout.tsx`
 
-- [ ] **Step 1: Write the banner component**
+- [x] **Step 1: Write the banner component**
 
 ```tsx
 'use client';
@@ -501,7 +501,7 @@ export function CardSetupNudge() {
 }
 ```
 
-- [ ] **Step 2: Render it in the protected layout**
+- [x] **Step 2: Render it in the protected layout**
 
 Current (`app/(root)/(protected)/layout.tsx`):
 
@@ -542,12 +542,12 @@ export default async function ProtectedLayout({
 
 (This also drops the dead `// return <>{children}</>;` comment line while touching this file.)
 
-- [ ] **Step 3: Type-check and lint**
+- [x] **Step 3: Type-check and lint**
 
 Run: `cd tinniestudio-client-web && npm run type-check && npm run lint`
 Expected: both succeed with no new errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/features/account/components/CardSetupNudge.tsx "src/app/(root)/(protected)/layout.tsx"
@@ -563,7 +563,7 @@ git commit -m "feat: add non-blocking card-setup nudge banner for grandfathered 
 **Files:**
 - Modify: `tinniestudio-client-web/src/features/account/components/ProfilePanelSubscription.tsx`
 
-- [ ] **Step 1: Add the new imports**
+- [x] **Step 1: Add the new imports**
 
 Current imports (top of file):
 
@@ -610,7 +610,7 @@ import {
 import { CardSetupForm } from './CardSetupForm';
 ```
 
-- [ ] **Step 2: Add the new hooks and state**
+- [x] **Step 2: Add the new hooks and state**
 
 Current (lines ~61-64):
 
@@ -633,7 +633,7 @@ Replace with:
   const [addCardClientSecret, setAddCardClientSecret] = useState<string | null>(null);
 ```
 
-- [ ] **Step 3: Add the two handler functions**
+- [x] **Step 3: Add the two handler functions**
 
 Add directly after the existing `handleEnableCard` function (right before the `return (` that starts the main `hasAccess=true` JSX, i.e. after what's currently the closing `};` of `handleEnableCard`):
 
@@ -664,7 +664,7 @@ Add directly after the existing `handleEnableCard` function (right before the `r
   };
 ```
 
-- [ ] **Step 4: Render the new card**
+- [x] **Step 4: Render the new card**
 
 Find the end of the main plan `<Card>` block — it closes right before the Payment History section:
 
@@ -723,12 +723,12 @@ Insert a new conditional `<Card>` between them:
       {subscription.payments && subscription.payments.length > 0 && (
 ```
 
-- [ ] **Step 5: Type-check and lint**
+- [x] **Step 5: Type-check and lint**
 
 Run: `cd tinniestudio-client-web && npm run type-check && npm run lint`
 Expected: both succeed with no new errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/features/account/components/ProfilePanelSubscription.tsx
@@ -745,12 +745,12 @@ No test framework exists in `tinniestudio-client-web` ([[feedback_no_frontend_te
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: Start the backend and frontend dev servers**
+- [x] **Step 1: Start the backend and frontend dev servers**
 
 Run backend: `cd api-service && ../gradlew bootRun` (confirm it points at a Postgres you can freely write test rows into).
 Run frontend: `cd tinniestudio-client-web && npm run dev`
 
-- [ ] **Step 2: Seed four account states directly in the DB and confirm each behaves correctly**
+- [x] **Step 2: Seed four account states directly in the DB and confirm each behaves correctly**
 
 For a grandfathered legacy paid subscriber (`card_setup_required=false`, active non-free plan, no `stripe_customer_id`): log in as that user, confirm you can navigate anywhere in the app, confirm the yellow "Add a card to keep your plan active" banner is visible and dismissible without blocking navigation (and does not render while already under `/account`), and confirm the new "Add a Card" section on the Billing & Plans tab actually lets you submit a test card and ends with `paymentSetup=true` (banner and "Add a Card" section both disappear after refresh).
 
@@ -760,7 +760,7 @@ For a genuinely new signup forced into the `NEEDS_SETUP` shape (`card_setup_requ
 
 For the same grandfathered user as above, before adding a card: visit `/account?action=billing` directly (the nudge banner's link target) and confirm the auto-opened Plans dialog can be closed without issue, revealing the working "Add a Card" section underneath (the known wrinkle noted in Task 9).
 
-- [ ] **Step 3: Report results**
+- [x] **Step 3: Report results**
 
 Note any deviation from the expected behavior above before considering this plan done.
 
@@ -774,7 +774,7 @@ Note any deviation from the expected behavior above before considering this plan
 - Modify: `api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java` (the `if` condition added in Task 5)
 - Modify: `api-service/src/test/java/com/tinniestudio/api/billing/service/SubscriptionServiceTest.java`
 
-- [ ] **Step 1: Add a failing pinning test**
+- [x] **Step 1: Add a failing pinning test**
 
 Add this test inside the `GetSubscriptionStatus` nested class, right after `getSubscriptionStatus_newPaidPlanNoCard_blocksWithNeedsSetup` (the test added in Task 4):
 
@@ -807,12 +807,12 @@ Add this test inside the `GetSubscriptionStatus` nested class, right after `getS
         }
 ```
 
-- [ ] **Step 2: Run it, confirm it currently fails**
+- [x] **Step 2: Run it, confirm it currently fails**
 
 Run: `cd api-service && ../gradlew test --tests "com.tinniestudio.api.billing.service.SubscriptionServiceTest"`
 Expected: `getSubscriptionStatus_newPaidPlanNoCardAndExpired_blocksWithExpiredNotNeedsSetup` FAILS — `result.getBlockReason()` is `"NEEDS_SETUP"`, not `"EXPIRED"`.
 
-- [ ] **Step 3: Fix the condition**
+- [x] **Step 3: Fix the condition**
 
 Find the `if` condition Task 5 introduced:
 
@@ -834,19 +834,19 @@ Add `&& !periodExpired` (the variable is already computed earlier in this same m
 
 This makes `EXPIRED` win over `NEEDS_SETUP` whenever both would otherwise apply — an expired subscription is never reported as "needs initial setup," regardless of grandfathering status. No other line in the method changes.
 
-- [ ] **Step 4: Run the full test class, confirm everything passes**
+- [x] **Step 4: Run the full test class, confirm everything passes**
 
 Run: `cd api-service && ../gradlew test --tests "com.tinniestudio.api.billing.service.SubscriptionServiceTest"`
 Expected: `BUILD SUCCESSFUL` except for the one already-known, pre-existing, unrelated `ProcessRenewal` failure (see Task 5's notes) — every `GetSubscriptionStatus` test, including the new one, passes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java api-service/src/test/java/com/tinniestudio/api/billing/service/SubscriptionServiceTest.java
 git commit -m "fix: EXPIRED takes priority over NEEDS_SETUP when both conditions apply"
 ```
 
-- [ ] **Step 6: Re-run live verification for the expired case only**
+- [x] **Step 6: Re-run live verification for the expired case only**
 
 Re-run the specific scenario from Task 10 that failed: a non-grandfathered (or no-profile-row) subscriber on a paid plan, no card, `endDate` in the past. Confirm `GET /api/v1/subscriptions/me` now returns `blockReason: "EXPIRED"` (not `"NEEDS_SETUP"`). Clean up any test rows created for this check the same way Task 10 did.
 
@@ -860,7 +860,7 @@ Re-run the specific scenario from Task 10 that failed: a non-grandfathered (or n
 - Modify: `api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java`
 - Modify: `api-service/src/test/java/com/tinniestudio/api/billing/service/SubscriptionServiceTest.java`
 
-- [ ] **Step 1: Add a failing test**
+- [x] **Step 1: Add a failing test**
 
 Add a new `@Nested` class for `enableCard()`, right after the existing `@Nested @DisplayName("disableCard()") class DisableCard { ... }` block:
 
@@ -891,12 +891,12 @@ Add a new `@Nested` class for `enableCard()`, right after the existing `@Nested 
     }
 ```
 
-- [ ] **Step 2: Run it, confirm it currently fails**
+- [x] **Step 2: Run it, confirm it currently fails**
 
 Run: `cd api-service && ../gradlew test --tests "com.tinniestudio.api.billing.service.SubscriptionServiceTest"`
 Expected: the new test FAILS — today `enableCard` doesn't throw at all (no exception is thrown, so `assertThatThrownBy` fails).
 
-- [ ] **Step 3: Add the guard**
+- [x] **Step 3: Add the guard**
 
 Current `enableCard` (`SubscriptionServiceImpl.java`):
 
@@ -954,12 +954,12 @@ Replace with:
     }
 ```
 
-- [ ] **Step 4: Run the full test class, confirm everything passes**
+- [x] **Step 4: Run the full test class, confirm everything passes**
 
 Run: `cd api-service && ../gradlew test --tests "com.tinniestudio.api.billing.service.SubscriptionServiceTest"`
 Expected: `BUILD SUCCESSFUL` except for the one already-known, pre-existing, unrelated `ProcessRenewal` failure. The new `EnableCard` test passes, and the existing `disableCard_periodNotYetExpired_stillHasAccess` test (which exercises a subscription WITH a `stripeCustomerId` already set, per Task 5's review notes) is unaffected since it already has a non-null `stripeCustomerId`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java api-service/src/test/java/com/tinniestudio/api/billing/service/SubscriptionServiceTest.java
@@ -972,7 +972,7 @@ No frontend change is needed — `ProfilePanelSubscription.tsx`'s existing `hand
 
 ## Self-Review Notes
 
-- **Spec coverage:** Problem/Goals → Tasks 1-7. Migration semantics (unconditional exemption, lazy-profile backfill) → Task 2 + verified by Task 3. Nudge dismissibility ("can close the page") → Task 7. `EXPIRED`/`PAST_DUE` platform-access-but-no-content → Task 6 (removes app-wide block) relies on the pre-existing, unchanged watch-page gate (`watch/[slug]/page.tsx:67-78`) — no code change needed there, confirmed already correct in the design doc's research. Testing section → Tasks 3, 4, 8.
+- **Spec coverage:** Problem/Goals → Tasks 1-7. Migration semantics (unconditional exemption, lazy-profile backfill) → Task 2 + verified by Task 3. Nudge dismissibility ("can close the page") → Task 7. `EXPIRED`/`PAST_DUE` platform-access-but-no-content → Task 6 (removes app-wide block) relies on the pre-existing, unchanged watch-page gate (`watch/[slug]/page.tsx:67-78`) — no code change needed there, confirmed already correct in the design doc's research. Testing section → Tasks 3, 4, 10 (manual, backend-verifiable portion executed live; full browser walkthrough not possible in this environment).
 - **Type consistency:** `cardSetupRequired` / `isCardSetupRequired()` / `setCardSetupRequired()` used identically in Task 1 (entity), Task 4 (tests), Task 5 (service). `card_setup_required` column name consistent across Task 2 SQL and Task 3 test SQL.
 - Pre-existing, unrelated stray token at `AuthGuard.tsx:16` (`const router = useRouter();AuthGuard`) is out of scope for this plan — flagged separately, not touched here.
 - **Task 9 addendum (post-review):** code review of Task 7 found the nudge banner's CTA had no working destination for a grandfathered user — `SubscriptionPlansPanel` only knows "first-ever setup" (`blockReason=NEEDS_SETUP`) or "switch plan," nothing in between. Task 9 closes that gap with a frontend-only addition (the backend's `confirmPaymentSetup` already handles a card-only update against an existing subscription with no `planId`). Task 10 (originally numbered Task 8) absorbed a fourth manual-check scenario for it.
