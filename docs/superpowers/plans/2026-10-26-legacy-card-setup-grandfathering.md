@@ -852,6 +852,124 @@ Re-run the specific scenario from Task 10 that failed: a non-grandfathered (or n
 
 ---
 
+### Task 12: Reject re-enabling a card that was never set up
+
+**Why this task exists:** code review of Task 11 traced through what happens when an account that has never completed card setup (no `stripeCustomerId`/`stripePaymentMethodId` at all — exactly the grandfathered/expired population Task 11's fix newly routes to the `EXPIRED` billing-gate screen) clicks "Re-enable my card" there. `enableCard` sets `autoRenew=true`/`paymentSetup=true` unconditionally, then calls `processRenewal`, which calls `stripeService.chargeOffSession(null, null, ...)`. That fails inside Stripe but `chargeOffSession`'s `catch (StripeException ex)` converts it into a normal `ChargeResult(null, false, ...)`, so `processRenewal` just sets `status=PAST_DUE` and returns normally — `enableCard` never throws, the controller returns 200, and `ProfilePanelSubscription.tsx`'s `handleEnableCard` shows `toast.success('Card re-enabled!')` even though no card exists and `paymentSetup` was just incorrectly flipped to `true`. There's a working fallback right below it ("Add a new card"), so this isn't a dead end, but it's misleading. The fix is backend-only: reject the request before any mutation happens, which the existing frontend error-handling (`handleEnableCard`'s existing `try/catch` → `toast.error`) already displays correctly with zero frontend changes needed.
+
+**Files:**
+- Modify: `api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java`
+- Modify: `api-service/src/test/java/com/tinniestudio/api/billing/service/SubscriptionServiceTest.java`
+
+- [ ] **Step 1: Add a failing test**
+
+Add a new `@Nested` class for `enableCard()`, right after the existing `@Nested @DisplayName("disableCard()") class DisableCard { ... }` block:
+
+```java
+    @Nested
+    @DisplayName("enableCard()")
+    class EnableCard {
+
+        @Test
+        @DisplayName("rejects re-enabling when there is no card on file to re-enable")
+        void enableCard_noStripeCustomerId_throwsBadRequest() {
+            UserSubscription sub = new UserSubscription();
+            sub.setUserId(userId);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setStripeCustomerId(null);
+            sub.setStripePaymentMethodId(null);
+
+            when(subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId))
+                .thenReturn(Optional.of(sub));
+
+            assertThatThrownBy(() -> service.enableCard(userId))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("No card on file");
+
+            verify(subscriptionRepository, never()).save(any());
+            verify(userProfileRepository, never()).save(any());
+        }
+    }
+```
+
+- [ ] **Step 2: Run it, confirm it currently fails**
+
+Run: `cd api-service && ../gradlew test --tests "com.tinniestudio.api.billing.service.SubscriptionServiceTest"`
+Expected: the new test FAILS — today `enableCard` doesn't throw at all (no exception is thrown, so `assertThatThrownBy` fails).
+
+- [ ] **Step 3: Add the guard**
+
+Current `enableCard` (`SubscriptionServiceImpl.java`):
+
+```java
+    @Override
+    @Transactional
+    public void enableCard(UUID userId) {
+        UserSubscription sub = subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("No subscription found"));
+
+        boolean expired = sub.getEndDate() != null && sub.getEndDate().isBefore(Instant.now());
+        sub.setAutoRenew(true);
+        subscriptionRepository.save(sub);
+        userProfileRepository.findById(userId).ifPresent(profile -> {
+            profile.setPaymentSetup(true);
+            userProfileRepository.save(profile);
+        });
+
+        if (expired) {
+            processRenewal(sub.getId());
+        }
+    }
+```
+
+Replace with:
+
+```java
+    @Override
+    @Transactional
+    public void enableCard(UUID userId) {
+        UserSubscription sub = subscriptionRepository.findTopByUserIdOrderByCreatedAtDesc(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("No subscription found"));
+
+        // An account that never completed card setup (no Stripe customer/payment method at all —
+        // e.g. a grandfathered legacy subscriber, see docs/superpowers/specs/2026-10-26-legacy-
+        // card-setup-grandfathering-design.md) has nothing to "re-enable." Without this check,
+        // chargeOffSession(null, null, ...) fails inside Stripe, gets swallowed into a normal
+        // PAST_DUE status update by processRenewal, and this method would return successfully
+        // anyway — the client then shows "Card re-enabled!" for a card that was never added.
+        if (sub.getStripeCustomerId() == null || sub.getStripePaymentMethodId() == null) {
+            throw new BadRequestException("No card on file to re-enable — add a new card instead");
+        }
+
+        boolean expired = sub.getEndDate() != null && sub.getEndDate().isBefore(Instant.now());
+        sub.setAutoRenew(true);
+        subscriptionRepository.save(sub);
+        userProfileRepository.findById(userId).ifPresent(profile -> {
+            profile.setPaymentSetup(true);
+            userProfileRepository.save(profile);
+        });
+
+        if (expired) {
+            processRenewal(sub.getId());
+        }
+    }
+```
+
+- [ ] **Step 4: Run the full test class, confirm everything passes**
+
+Run: `cd api-service && ../gradlew test --tests "com.tinniestudio.api.billing.service.SubscriptionServiceTest"`
+Expected: `BUILD SUCCESSFUL` except for the one already-known, pre-existing, unrelated `ProcessRenewal` failure. The new `EnableCard` test passes, and the existing `disableCard_periodNotYetExpired_stillHasAccess` test (which exercises a subscription WITH a `stripeCustomerId` already set, per Task 5's review notes) is unaffected since it already has a non-null `stripeCustomerId`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java api-service/src/test/java/com/tinniestudio/api/billing/service/SubscriptionServiceTest.java
+git commit -m "fix: reject re-enabling a card on a subscription that never had one"
+```
+
+No frontend change is needed — `ProfilePanelSubscription.tsx`'s existing `handleEnableCard` already has a `try/catch` that shows `toast.error(message)` on any thrown error from this endpoint.
+
+---
+
 ## Self-Review Notes
 
 - **Spec coverage:** Problem/Goals → Tasks 1-7. Migration semantics (unconditional exemption, lazy-profile backfill) → Task 2 + verified by Task 3. Nudge dismissibility ("can close the page") → Task 7. `EXPIRED`/`PAST_DUE` platform-access-but-no-content → Task 6 (removes app-wide block) relies on the pre-existing, unchanged watch-page gate (`watch/[slug]/page.tsx:67-78`) — no code change needed there, confirmed already correct in the design doc's research. Testing section → Tasks 3, 4, 8.
