@@ -22,6 +22,7 @@
 - Modify: `tinniestudio-client-web/src/features/auth/components/AuthGuard.tsx` — narrow the redirect condition.
 - Create: `tinniestudio-client-web/src/features/account/components/CardSetupNudge.tsx` — the non-blocking banner.
 - Modify: `tinniestudio-client-web/src/app/(root)/(protected)/layout.tsx` — render the banner above `children`.
+- Modify: `tinniestudio-client-web/src/features/account/components/ProfilePanelSubscription.tsx` — add the "Add a Card" entry point the banner links to (Task 9, added after code review surfaced the gap).
 
 ---
 
@@ -555,7 +556,190 @@ git commit -m "feat: add non-blocking card-setup nudge banner for grandfathered 
 
 ---
 
-### Task 8: Manual verification in the browser
+### Task 9: Add a working "add a card" flow for grandfathered users
+
+**Why this task exists:** code review of Task 7 found that the nudge banner's "Add card" button led to a dead end. It links to `/account?action=billing`, which opens `SubscriptionPlansPanel` in "switch plan" mode for any user whose `blockReason` isn't `NEEDS_SETUP` (`SubscriptionPlansPanel.tsx:85`, `isFirstEverSetup = subscription?.blockReason === 'NEEDS_SETUP'`) — a grandfathered user (`blockReason=null`) has no way to actually submit a card anywhere in the app. The backend already fully supports this case with no changes needed: `SubscriptionServiceImpl.confirmPaymentSetup` (`api-service/.../SubscriptionServiceImpl.java:164-169`), when called with an existing subscription and no `planId`, takes the "retry-with-new-card" branch — sets `stripeCustomerId`/`stripePaymentMethodId` and flips `paymentSetup=true` via `applyPaymentMethod`. This task only needs to add the missing frontend entry point.
+
+**Files:**
+- Modify: `tinniestudio-client-web/src/features/account/components/ProfilePanelSubscription.tsx`
+
+- [ ] **Step 1: Add the new imports**
+
+Current imports (top of file):
+
+```tsx
+import {
+  AlertCircle,
+  Check,
+  Zap,
+  Monitor,
+  ChevronRight,
+  Sparkles,
+  Receipt,
+} from 'lucide-react';
+```
+
+Add `CreditCard` to this list:
+
+```tsx
+import {
+  AlertCircle,
+  Check,
+  Zap,
+  Monitor,
+  ChevronRight,
+  Sparkles,
+  Receipt,
+  CreditCard,
+} from 'lucide-react';
+```
+
+Current:
+```tsx
+import { useDisableCard, useEnableCard } from '../service/mutations';
+```
+
+Replace with:
+```tsx
+import {
+  useDisableCard,
+  useEnableCard,
+  useStartPaymentSetup,
+  useConfirmPaymentSetup,
+} from '../service/mutations';
+import { CardSetupForm } from './CardSetupForm';
+```
+
+- [ ] **Step 2: Add the new hooks and state**
+
+Current (lines ~61-64):
+
+```tsx
+  const router = useRouter();
+  const disableMutation = useDisableCard();
+  const enableMutation = useEnableCard();
+  const [isPlansOpen, setIsPlansOpen] = useState(openPlansDialog || false);
+```
+
+Replace with:
+
+```tsx
+  const router = useRouter();
+  const disableMutation = useDisableCard();
+  const enableMutation = useEnableCard();
+  const startSetup = useStartPaymentSetup();
+  const confirmSetup = useConfirmPaymentSetup();
+  const [isPlansOpen, setIsPlansOpen] = useState(openPlansDialog || false);
+  const [addCardClientSecret, setAddCardClientSecret] = useState<string | null>(null);
+```
+
+- [ ] **Step 3: Add the two handler functions**
+
+Add directly after the existing `handleEnableCard` function (right before the `return (` that starts the main `hasAccess=true` JSX, i.e. after what's currently the closing `};` of `handleEnableCard`):
+
+```tsx
+  const handleStartAddCard = async () => {
+    try {
+      const intent = await startSetup.mutateAsync();
+      setAddCardClientSecret(intent.clientSecret);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not start card setup';
+      toast.error(message);
+    }
+  };
+
+  // No planId sent here — SubscriptionServiceImpl.confirmPaymentSetup takes its
+  // "retry-with-new-card" branch for any existing subscription, which is exactly
+  // "add a card, keep my current plan" (see Task 9's note above).
+  const handleAddCardSetupIntentConfirmed = async (setupIntentId: string) => {
+    try {
+      await confirmSetup.mutateAsync({ setupIntentId });
+      toast.success('Card saved!');
+      setAddCardClientSecret(null);
+      router.refresh();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not confirm card setup';
+      toast.error(message);
+    }
+  };
+```
+
+- [ ] **Step 4: Render the new card**
+
+Find the end of the main plan `<Card>` block — it closes right before the Payment History section:
+
+```tsx
+        </CardFooter>
+      </Card>
+
+      {subscription.payments && subscription.payments.length > 0 && (
+```
+
+Insert a new conditional `<Card>` between them:
+
+```tsx
+        </CardFooter>
+      </Card>
+
+      {!subscription.paymentSetup && (
+        <Card className='bg-white/5 border-white/10 backdrop-blur-md rounded-3xl overflow-hidden'>
+          <CardHeader className='p-8 pb-4'>
+            <div className='flex items-center gap-3'>
+              <div className='p-2 rounded-xl bg-white/5 border border-white/10'>
+                <CreditCard className='w-5 h-5 text-white/60' />
+              </div>
+              <CardTitle className='text-xl font-semibold text-white font-manrope'>
+                Add a Card
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className='p-8 pt-0'>
+            {addCardClientSecret ? (
+              <CardSetupForm
+                clientSecret={addCardClientSecret}
+                onSetupIntentConfirmed={handleAddCardSetupIntentConfirmed}
+                submitLabel='Save card'
+              />
+            ) : (
+              <>
+                <p className='text-white/60 text-sm mb-4'>
+                  No card on file yet. Add one to keep your {subscription.plan} plan renewing
+                  automatically.
+                </p>
+                <Button
+                  onClick={handleStartAddCard}
+                  disabled={startSetup.isPending}
+                  className='h-12 bg-tls-secondary hover:bg-tls-secondary/90 text-tls-primary rounded-xl font-bold'
+                >
+                  <CreditCard className='w-4 h-4 mr-2' />
+                  Add a card
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {subscription.payments && subscription.payments.length > 0 && (
+```
+
+- [ ] **Step 5: Type-check and lint**
+
+Run: `cd tinniestudio-client-web && npm run type-check && npm run lint`
+Expected: both succeed with no new errors.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/features/account/components/ProfilePanelSubscription.tsx
+git commit -m "feat: add working card-setup flow for grandfathered subscribers"
+```
+
+**Known, deliberately out-of-scope wrinkle:** `AccountClient.tsx:112` passes `openPlansDialog={!!action}` whenever the URL has any `?action=...` param, so navigating from the nudge banner to `/account?action=billing` will still auto-open the (now-irrelevant, for this case) Plans switch dialog on top of this new card. The user can close that dialog (it's not a hard block) and the new "Add a Card" card underneath works correctly regardless. Not fixed here — this pre-existing `openPlansDialog` behavior predates this plan and affects other states too; narrowing it is a separate, independent cleanup, not required to make the add-card flow functional.
+
+---
+
+### Task 10: Manual verification in the browser
 
 No test framework exists in `tinniestudio-client-web` ([[feedback_no_frontend_test_framework]]) — this task is a manual walkthrough, not automated.
 
@@ -566,13 +750,15 @@ No test framework exists in `tinniestudio-client-web` ([[feedback_no_frontend_te
 Run backend: `cd api-service && ../gradlew bootRun` (confirm it points at a Postgres you can freely write test rows into).
 Run frontend: `cd tinniestudio-client-web && npm run dev`
 
-- [ ] **Step 2: Seed three account states directly in the DB and confirm each behaves correctly**
+- [ ] **Step 2: Seed four account states directly in the DB and confirm each behaves correctly**
 
-For a grandfathered legacy paid subscriber (`card_setup_required=false`, active non-free plan, no `stripe_customer_id`): log in as that user, confirm you can navigate anywhere in the app, and confirm the yellow "Add a card to keep your plan active" banner is visible and dismissible without blocking navigation.
+For a grandfathered legacy paid subscriber (`card_setup_required=false`, active non-free plan, no `stripe_customer_id`): log in as that user, confirm you can navigate anywhere in the app, confirm the yellow "Add a card to keep your plan active" banner is visible and dismissible without blocking navigation (and does not render while already under `/account`), and confirm the new "Add a Card" section on the Billing & Plans tab actually lets you submit a test card and ends with `paymentSetup=true` (banner and "Add a Card" section both disappear after refresh).
 
 For an expired subscriber (`sub.end_date` in the past): log in, confirm general navigation works (no redirect to billing-gate on page load), then open any content's watch page and confirm it redirects to `/account/billing-gate` with the "Your plan has expired" copy.
 
 For a genuinely new signup forced into the `NEEDS_SETUP` shape (`card_setup_required=true`, active non-free plan, no card): log in, confirm every route except `/account/*` immediately redirects to `/account/billing-gate`.
+
+For the same grandfathered user as above, before adding a card: visit `/account?action=billing` directly (the nudge banner's link target) and confirm the auto-opened Plans dialog can be closed without issue, revealing the working "Add a Card" section underneath (the known wrinkle noted in Task 9).
 
 - [ ] **Step 3: Report results**
 
@@ -585,3 +771,4 @@ Note any deviation from the expected behavior above before considering this plan
 - **Spec coverage:** Problem/Goals → Tasks 1-7. Migration semantics (unconditional exemption, lazy-profile backfill) → Task 2 + verified by Task 3. Nudge dismissibility ("can close the page") → Task 7. `EXPIRED`/`PAST_DUE` platform-access-but-no-content → Task 6 (removes app-wide block) relies on the pre-existing, unchanged watch-page gate (`watch/[slug]/page.tsx:67-78`) — no code change needed there, confirmed already correct in the design doc's research. Testing section → Tasks 3, 4, 8.
 - **Type consistency:** `cardSetupRequired` / `isCardSetupRequired()` / `setCardSetupRequired()` used identically in Task 1 (entity), Task 4 (tests), Task 5 (service). `card_setup_required` column name consistent across Task 2 SQL and Task 3 test SQL.
 - Pre-existing, unrelated stray token at `AuthGuard.tsx:16` (`const router = useRouter();AuthGuard`) is out of scope for this plan — flagged separately, not touched here.
+- **Task 9 addendum (post-review):** code review of Task 7 found the nudge banner's CTA had no working destination for a grandfathered user — `SubscriptionPlansPanel` only knows "first-ever setup" (`blockReason=NEEDS_SETUP`) or "switch plan," nothing in between. Task 9 closes that gap with a frontend-only addition (the backend's `confirmPaymentSetup` already handles a card-only update against an existing subscription with no `planId`). Task 10 (originally numbered Task 8) absorbed a fourth manual-check scenario for it.
