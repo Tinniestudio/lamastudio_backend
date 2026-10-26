@@ -277,7 +277,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
         String blockReason;
         boolean hasAccess;
-        if (cardSetupRequired && !isFreePlan && !paymentSetup && sub.getStripeCustomerId() == null) {
+        if (cardSetupRequired && !isFreePlan && !paymentSetup && sub.getStripeCustomerId() == null && !periodExpired) {
             blockReason = "NEEDS_SETUP";
             hasAccess = false;
         } else if (sub.getStatus() == SubscriptionStatus.PAST_DUE) {

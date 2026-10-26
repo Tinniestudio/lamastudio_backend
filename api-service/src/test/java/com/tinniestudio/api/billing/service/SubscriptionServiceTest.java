@@ -453,6 +453,33 @@ class SubscriptionServiceTest {
         }
 
         @Test
+        @DisplayName("expired non-grandfathered subscriber with no card is blocked with EXPIRED, not NEEDS_SETUP")
+        void getSubscriptionStatus_newPaidPlanNoCardAndExpired_blocksWithExpiredNotNeedsSetup() {
+            UserSubscription sub = new UserSubscription();
+            sub.setId(UUID.randomUUID());
+            sub.setUserId(userId);
+            sub.setPlan(silverPlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setContentWatchesUsed(0);
+            sub.setStripeCustomerId(null);
+            sub.setEndDate(Instant.now().minusSeconds(60));
+
+            UserProfile profile = new UserProfile();
+            profile.setPaymentSetup(false);
+            profile.setCardSetupRequired(true);
+
+            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+                .thenReturn(Optional.of(sub));
+            when(userProfileRepository.findById(userId)).thenReturn(Optional.of(profile));
+            when(paymentRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());
+
+            SubscriptionStatusResponse result = service.getSubscriptionStatus(userId);
+
+            assertThat(result.isHasAccess()).isFalse();
+            assertThat(result.getBlockReason()).isEqualTo("EXPIRED");
+        }
+
+        @Test
         @DisplayName("blocks access once the paid period has expired, even if paymentSetup is true")
         void getSubscriptionStatus_periodExpired_blocksAccessRegardlessOfPaymentSetup() {
             UserSubscription sub = new UserSubscription();
