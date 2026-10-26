@@ -398,6 +398,61 @@ class SubscriptionServiceTest {
         }
 
         @Test
+        @DisplayName("grandfathered legacy paid subscriber with no card still has access, not NEEDS_SETUP")
+        void getSubscriptionStatus_grandfatheredPaidPlanNoCard_stillHasAccess() {
+            UserSubscription sub = new UserSubscription();
+            sub.setId(UUID.randomUUID());
+            sub.setUserId(userId);
+            sub.setPlan(silverPlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setContentWatchesUsed(0);
+            sub.setStripeCustomerId(null);
+            sub.setEndDate(null);
+
+            UserProfile profile = new UserProfile();
+            profile.setPaymentSetup(false);
+            profile.setCardSetupRequired(false);
+
+            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+                .thenReturn(Optional.of(sub));
+            when(userProfileRepository.findById(userId)).thenReturn(Optional.of(profile));
+            when(paymentRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());
+
+            SubscriptionStatusResponse result = service.getSubscriptionStatus(userId);
+
+            assertThat(result.isHasAccess()).isTrue();
+            assertThat(result.getBlockReason()).isNull();
+            assertThat(result.isPaymentSetup()).isFalse();
+        }
+
+        @Test
+        @DisplayName("non-grandfathered paid subscriber with no card is blocked with NEEDS_SETUP")
+        void getSubscriptionStatus_newPaidPlanNoCard_blocksWithNeedsSetup() {
+            UserSubscription sub = new UserSubscription();
+            sub.setId(UUID.randomUUID());
+            sub.setUserId(userId);
+            sub.setPlan(silverPlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setContentWatchesUsed(0);
+            sub.setStripeCustomerId(null);
+            sub.setEndDate(null);
+
+            UserProfile profile = new UserProfile();
+            profile.setPaymentSetup(false);
+            profile.setCardSetupRequired(true);
+
+            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+                .thenReturn(Optional.of(sub));
+            when(userProfileRepository.findById(userId)).thenReturn(Optional.of(profile));
+            when(paymentRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());
+
+            SubscriptionStatusResponse result = service.getSubscriptionStatus(userId);
+
+            assertThat(result.isHasAccess()).isFalse();
+            assertThat(result.getBlockReason()).isEqualTo("NEEDS_SETUP");
+        }
+
+        @Test
         @DisplayName("blocks access once the paid period has expired, even if paymentSetup is true")
         void getSubscriptionStatus_periodExpired_blocksAccessRegardlessOfPaymentSetup() {
             UserSubscription sub = new UserSubscription();
