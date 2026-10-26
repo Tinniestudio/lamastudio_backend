@@ -258,8 +258,16 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         boolean periodExpired = sub.getEndDate() != null && sub.getEndDate().isBefore(now);
         String effectiveStatus = periodExpired ? SubscriptionStatus.EXPIRED.name() : sub.getStatus().name();
 
-        boolean paymentSetup = userProfileRepository.findById(userId)
-            .map(UserProfile::isPaymentSetup).orElse(false);
+        Optional<UserProfile> profile = userProfileRepository.findById(userId);
+        boolean paymentSetup = profile.map(UserProfile::isPaymentSetup).orElse(false);
+
+        // The card-required-before-access policy (V59, 2026-10-18) only applies to accounts
+        // created after it shipped. V60 backfilled every pre-existing user's profile to
+        // cardSetupRequired=false, so this flag — not isFreePlan/paymentSetup alone — is what
+        // actually distinguishes a genuinely new blocked signup from a grandfathered legacy
+        // subscriber who was never asked for a card. See
+        // docs/superpowers/specs/2026-10-26-legacy-card-setup-grandfathering-design.md.
+        boolean cardSetupRequired = profile.map(UserProfile::isCardSetupRequired).orElse(true);
 
         // A subscription still on the FREE plan never needed a card under the pre-recurring-billing
         // model — only SILVER/GOLD (trial or paid) requires one. Without this, every legacy free
@@ -269,7 +277,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
         String blockReason;
         boolean hasAccess;
-        if (!isFreePlan && !paymentSetup && sub.getStripeCustomerId() == null) {
+        if (cardSetupRequired && !isFreePlan && !paymentSetup && sub.getStripeCustomerId() == null) {
             blockReason = "NEEDS_SETUP";
             hasAccess = false;
         } else if (sub.getStatus() == SubscriptionStatus.PAST_DUE) {
