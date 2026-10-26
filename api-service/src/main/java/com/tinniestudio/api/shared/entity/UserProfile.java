@@ -43,6 +43,9 @@ public class UserProfile {
     @Column(name = "payment_setup", nullable = false)
     private boolean paymentSetup = false;
 
+    @Column(name = "card_setup_required", nullable = false)
+    private boolean cardSetupRequired = true;
+
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
