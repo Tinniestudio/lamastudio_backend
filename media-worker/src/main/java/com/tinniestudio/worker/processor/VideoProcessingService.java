@@ -60,7 +60,14 @@ public class VideoProcessingService {
 
         if (processingJobRepo.existsByJobIdAndStatus(jobId, "DONE")
                 || processingJobRepo.existsByJobIdAndStatus(jobId, "FAILED")) {
-            log.info("Job {} already terminal, skipping", jobId);
+            // Diagnostic detail (status/attempt/updatedAt) added to pin down the concurrent-delivery
+            // race described in docs/superpowers/specs/2026-10-27-media-worker-reliability-design.md
+            // §3 — the plain "already terminal, skipping" message alone doesn't say which write set
+            // it or when, which has made this un-traceable from logs alone so far.
+            processingJobRepo.findByJobId(jobId).ifPresentOrElse(
+                j -> log.info("Job {} already terminal (status={}, attempt={}, updatedAt={}), skipping",
+                    jobId, j.getStatus(), j.getAttempt(), j.getUpdatedAt()),
+                () -> log.info("Job {} already terminal, skipping", jobId));
             return;
         }
 
