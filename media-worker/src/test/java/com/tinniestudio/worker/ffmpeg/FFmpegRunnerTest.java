@@ -42,6 +42,7 @@ class FFmpegRunnerTest {
 
             assertThat(cmd).contains("/usr/bin/ffmpeg");
             assertThat(cmd).contains("-i", "/tmp/input.mp4");
+            assertThat(cmd).contains("-preset", "veryfast");
             assertThat(cmd).contains("-b:v", "5000k");
             assertThat(cmd).contains("-b:a", "192k");
             assertThat(cmd).contains("-hls_time", "6");
