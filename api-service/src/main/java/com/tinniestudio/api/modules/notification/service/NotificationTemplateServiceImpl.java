@@ -21,8 +21,9 @@ public class NotificationTemplateServiceImpl implements NotificationTemplateServ
     @Override
     @Transactional
     public NotificationTemplateResponse create(CreateNotificationTemplateRequest req) {
-        if (templateRepo.existsByEventType(req.getEventType())) {
-            throw new BadRequestException("Template for event type already exists: " + req.getEventType());
+        if (templateRepo.existsByEventTypeAndChannel(req.getEventType(), req.getChannel())) {
+            throw new BadRequestException(
+                "Template for event type " + req.getEventType() + " on channel " + req.getChannel() + " already exists");
         }
         NotificationTemplate t = new NotificationTemplate();
         t.setEventType(req.getEventType());
