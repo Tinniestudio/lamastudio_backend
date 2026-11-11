@@ -130,11 +130,23 @@ either `/account/billing-gate` or, via `resolveWatchCTA` (`src/utils/content.ts`
 static `/subscription-billing` marketing page — with no in-place recovery UI, and no
 distinction between a genuinely-new user and an existing user whose access lapsed.
 
-Per decision during brainstorming, this fix applies to all three "existing user whose
-access lapsed" states: `PAST_DUE`, `EXPIRED`, and `CANCELLED`. It explicitly does not
-change `NEEDS_SETUP` handling — those users are brand-new and already can't reach the
-catalogue at all (`AuthGuard.tsx` redirects any non-`/account/*` route when
-`blockReason === 'NEEDS_SETUP'`), which is correct and out of scope here.
+Per decision during brainstorming, this fix was meant to apply to all three
+"existing user whose access lapsed" states: `PAST_DUE`, `EXPIRED`, and `CANCELLED`.
+**Correction found during plan-writing**: `CANCELLED` is not actually a possible
+`blockReason` value — `PlaybackServiceImpl.checkAccess()` returns
+`AccessCheckResponse.denied(status.getBlockReason())`, and `blockReason` is only ever
+`NEEDS_SETUP`, `PAST_DUE`, `EXPIRED`, or `null`. A cancelled-but-not-yet-expired
+subscription still has `hasAccess=true`/`blockReason=null` today (access continues
+until the paid period naturally ends, per the Oct 18 design) — it only becomes
+blocked once that period lapses, at which point `blockReason` is `EXPIRED`, already
+covered. So the modal's actual trigger set is `PAST_DUE`/`EXPIRED` only.
+`CANCELLED` surfaces elsewhere, as a separate `resolveWatchCTA()` CTA-label quirk
+(a cancelled-but-still-active user sees a "Resubscribe" CTA instead of "Watch Now")
+— confirmed out of scope for this plan per decision during plan-writing. It
+explicitly does not change `NEEDS_SETUP` handling either — those users are brand-new
+and already can't reach the catalogue at all (`AuthGuard.tsx` redirects any
+non-`/account/*` route when `blockReason === 'NEEDS_SETUP'`), which is correct and
+out of scope here.
 
 ### Fix
 
@@ -142,7 +154,7 @@ catalogue at all (`AuthGuard.tsx` redirects any non-`/account/*` route when
 (content-detail page's primary CTA, catalogue `MovieCard`/`ContentCard` CTAs) already
 has access to the current `useSubscription()` status in memory. Before navigating to
 `/watch/[slug]`, check `hasAccess`/`blockReason`: if `blockReason` is one of
-`PAST_DUE`/`EXPIRED`/`CANCELLED`, open `PaymentHoldModal` in place instead of
+`PAST_DUE`/`EXPIRED`, open `PaymentHoldModal` in place instead of
 navigating — no extra network call, no page transition.
 
 **Fallback path — server-side safety net.** `watch/[slug]/page.tsx` keeps its existing
@@ -152,8 +164,7 @@ these three states its redirect target changes from `/account/billing-gate` /
 query flag, which the detail page reads on load to open the same modal. `NEEDS_SETUP`
 keeps its current redirect to `/account/billing-gate` unchanged.
 
-`resolveWatchCTA` (`src/utils/content.ts`) is updated so its `PAST_DUE`/`EXPIRED`/
-`CANCELLED` branches trigger the modal-open handler instead of returning a direct
+`resolveWatchCTA` (`src/utils/content.ts`) is updated so its `PAST_DUE`/`EXPIRED` branches trigger the modal-open handler instead of returning a direct
 link to `/subscription-billing`.
 
 **`PaymentHoldModal` component** — new component built on the existing `AlertDialog`
@@ -171,7 +182,7 @@ the "turn off auto-renew?" confirmation. Content per CLAUDE.md's suggested copy:
 - **Dismiss/close** → closes the modal, returns to the current page; does not grant
   playback access.
 
-Copy is shared across all three trigger states (`PAST_DUE`/`EXPIRED`/`CANCELLED`) —
+Copy is shared across both trigger states (`PAST_DUE`/`EXPIRED`) —
 no per-state copy variants, per decision during brainstorming.
 
 ## Data flow summary
@@ -240,7 +251,7 @@ walkthrough, per existing project convention):
   without changing the plan.
 - Card-form load-error walkthrough: simulate a Stripe.js load failure (e.g. block the
   Stripe script in devtools) → confirm "Try Again" appears and recovers on retry.
-- Payment-hold walkthrough, for each of `PAST_DUE`/`EXPIRED`/`CANCELLED`: confirm
+- Payment-hold walkthrough, for each of `PAST_DUE`/`EXPIRED`: confirm
   catalogue browsing and trailer playback are unaffected; confirm clicking "Play" on a
   full movie opens the modal in place (no navigation); confirm Retry Payment and
   Update Payment Info both work; confirm dismiss does not grant access; confirm a
