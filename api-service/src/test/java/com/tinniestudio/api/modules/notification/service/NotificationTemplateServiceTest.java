@@ -34,11 +34,11 @@ class NotificationTemplateServiceTest {
 
         when(templateRepo.existsByEventTypeAndChannel(NotificationEventType.CONTENT_PROCESSED, NotificationChannel.IN_APP))
             .thenReturn(false);
-        when(templateRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(templateRepo.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var result = service.create(req);
         assertThat(result.eventType()).isEqualTo("CONTENT_PROCESSED");
-        verify(templateRepo).save(any(NotificationTemplate.class));
+        verify(templateRepo).saveAndFlush(any(NotificationTemplate.class));
     }
 
     @Test
@@ -64,11 +64,30 @@ class NotificationTemplateServiceTest {
 
         when(templateRepo.existsByEventTypeAndChannel(NotificationEventType.CONTENT_PROCESSED, NotificationChannel.EMAIL))
             .thenReturn(false);
-        when(templateRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(templateRepo.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var result = service.create(req);
         assertThat(result.eventType()).isEqualTo("CONTENT_PROCESSED");
-        verify(templateRepo).save(any(NotificationTemplate.class));
+        verify(templateRepo).saveAndFlush(any(NotificationTemplate.class));
+    }
+
+    @Test
+    void create_throwsBadRequest_whenConcurrentInsertRacesPastTheExistsCheck() {
+        // TOCTOU: another request could insert the same (event_type, channel) pair between
+        // existsByEventTypeAndChannel returning false and this save committing. saveAndFlush
+        // surfaces that as the real DB constraint violation instead of a stale silent success.
+        var req = new CreateNotificationTemplateRequest();
+        req.setEventType(NotificationEventType.CONTENT_PROCESSED);
+        req.setTitleTemplate("T"); req.setBodyTemplate("B");
+        req.setChannel(NotificationChannel.IN_APP);
+
+        when(templateRepo.existsByEventTypeAndChannel(NotificationEventType.CONTENT_PROCESSED, NotificationChannel.IN_APP))
+            .thenReturn(false);
+        when(templateRepo.saveAndFlush(any()))
+            .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
+
+        assertThatThrownBy(() -> service.create(req))
+            .isInstanceOf(com.tinniestudio.api.shared.exception.BadRequestException.class);
     }
 
     @Test

@@ -6,6 +6,7 @@ import com.tinniestudio.api.shared.entity.NotificationTemplate;
 import com.tinniestudio.api.shared.exception.BadRequestException;
 import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +31,16 @@ public class NotificationTemplateServiceImpl implements NotificationTemplateServ
         t.setTitleTemplate(req.getTitleTemplate());
         t.setBodyTemplate(req.getBodyTemplate());
         t.setChannel(req.getChannel());
-        return NotificationTemplateResponse.from(templateRepo.save(t));
+        try {
+            // saveAndFlush, not save: see ContentService.create for why plain save() doesn't
+            // reliably surface the V61 (event_type, channel) constraint violation inside this
+            // try/catch — a UUID-generated id defers the INSERT to commit time otherwise. Closes
+            // the TOCTOU between the existsByEventTypeAndChannel check above and this write.
+            return NotificationTemplateResponse.from(templateRepo.saveAndFlush(t));
+        } catch (DataIntegrityViolationException e) {
+            throw new BadRequestException(
+                "Template for event type " + req.getEventType() + " on channel " + req.getChannel() + " already exists");
+        }
     }
 
     @Override
