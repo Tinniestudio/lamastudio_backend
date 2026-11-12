@@ -45,7 +45,7 @@ class SessionServiceImplTest {
     }
 
     @Test
-    @DisplayName("createSession no longer evicts — just creates, even past the old limit")
+    @DisplayName("createSession never evicts — the old eviction path is gone entirely")
     void createSession_doesNotEvictAnyoneRegardlessOfCount() {
         UUID userId = UUID.randomUUID();
         when(passwordEncoder.encode(any())).thenReturn("hashed");
@@ -62,6 +62,7 @@ class SessionServiceImplTest {
 
         verify(userSessionRepository, never()).findFirstByUserIdAndRevokedFalseOrderByCreatedAtAsc(any());
         verify(userSessionRepository, never()).save(argThat(UserSession::isRevoked));
+        verify(cacheService).set(any(), any(), any());
     }
 
     @Test

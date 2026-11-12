@@ -50,6 +50,8 @@ public interface SessionService {
      *     device is signed out," is already true);
      * (3) the caller's OWN current session (currentSessionId) cannot be revoked this way — use
      *     logout instead, which also clears cookies.
+     * Note: when a session is BOTH already-revoked AND the caller's current session, rule (2)
+     * takes precedence over rule (3) — this is an idempotent no-op, not a 400.
      */
     void selfRevokeSession(UUID userId, UUID sessionId, UUID currentSessionId);
 }

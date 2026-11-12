@@ -179,6 +179,8 @@ public class SessionServiceImpl implements SessionService {
         UserSession session = userSessionRepository.findByUserIdAndId(userId, sessionId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
 
+        // Checked before the current-session guard below: idempotency wins — if it's already
+        // gone, there's nothing left to "protect" by rejecting.
         if (session.isRevoked()) {
             return;
         }
