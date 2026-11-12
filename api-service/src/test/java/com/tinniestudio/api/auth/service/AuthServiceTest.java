@@ -277,6 +277,150 @@ class AuthServiceTest {
         verify(jwtTokenProvider, never()).generateDeviceLimitResolutionToken(any());
     }
 
+    @Test
+    @DisplayName("resolveDeviceLimit: revokes the selected active session and creates a new one")
+    void resolveDeviceLimit_success_revokesSelectedSessionAndCreatesNew() {
+        UUID userId = UUID.randomUUID();
+        UUID sessionIdToRevoke = UUID.randomUUID();
+        UUID newSessionId = UUID.randomUUID();
+        User user = new User();
+        user.setId(userId);
+        user.setEmail("jane@example.com");
+
+        com.tinniestudio.api.modules.auth.dto.ResolveDeviceLimitRequest request =
+                new com.tinniestudio.api.modules.auth.dto.ResolveDeviceLimitRequest();
+        request.setResolutionToken("resolution-token");
+        request.setSessionIdToRevoke(sessionIdToRevoke.toString());
+
+        io.jsonwebtoken.Claims claims = mock(io.jsonwebtoken.Claims.class);
+        when(claims.getSubject()).thenReturn(userId.toString());
+        when(claims.getId()).thenReturn("jti-123");
+
+        when(jwtTokenProvider.validateDeviceLimitResolutionToken("resolution-token")).thenReturn(true);
+        when(jwtTokenProvider.parseDeviceLimitResolutionToken("resolution-token")).thenReturn(claims);
+        when(sessionService.getActiveSessions(userId)).thenReturn(java.util.List.of(
+                com.tinniestudio.api.modules.auth.user.dto.SessionDto.builder()
+                        .sessionId(sessionIdToRevoke)
+                        .deviceName("Chrome on Windows")
+                        .build()));
+        when(cacheService.setIfAbsent(eq("tinnie:lock:device-limit-resolution:jti-123"), eq("used"), any()))
+                .thenReturn(true);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(sessionService.createSession(eq(userId), any(), any())).thenReturn(newSessionId);
+        when(authProfileService.getProfile(eq(userId), eq(newSessionId), any()))
+                .thenReturn(AuthProfileResponse.builder()
+                        .email("jane@example.com")
+                        .roles(Set.of(RoleName.ROLE_USER.name()))
+                        .provider("LOCAL").emailVerified(true).build());
+
+        AuthProfileResponse result = authService.resolveDeviceLimit(
+                request, new MockHttpServletRequest(), new MockHttpServletResponse());
+
+        assertThat(result.getEmail()).isEqualTo("jane@example.com");
+        verify(sessionService).selfRevokeSession(userId, sessionIdToRevoke, null);
+        verify(sessionService).createSession(eq(userId), any(), any());
+    }
+
+    @Test
+    @DisplayName("resolveDeviceLimit: rejects an invalid or expired resolution token")
+    void resolveDeviceLimit_invalidToken_throwsInvalidTokenException() {
+        com.tinniestudio.api.modules.auth.dto.ResolveDeviceLimitRequest request =
+                new com.tinniestudio.api.modules.auth.dto.ResolveDeviceLimitRequest();
+        request.setResolutionToken("bad-token");
+        request.setSessionIdToRevoke(UUID.randomUUID().toString());
+
+        when(jwtTokenProvider.validateDeviceLimitResolutionToken("bad-token")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.resolveDeviceLimit(
+                request, new MockHttpServletRequest(), new MockHttpServletResponse()))
+                .isInstanceOf(com.tinniestudio.api.modules.auth.exception.InvalidTokenException.class);
+
+        verify(sessionService, never()).createSession(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("resolveDeviceLimit: rejects a resolution token that has already been used")
+    void resolveDeviceLimit_tokenAlreadyUsed_throwsInvalidTokenException() {
+        UUID userId = UUID.randomUUID();
+        UUID sessionIdToRevoke = UUID.randomUUID();
+
+        com.tinniestudio.api.modules.auth.dto.ResolveDeviceLimitRequest request =
+                new com.tinniestudio.api.modules.auth.dto.ResolveDeviceLimitRequest();
+        request.setResolutionToken("resolution-token");
+        request.setSessionIdToRevoke(sessionIdToRevoke.toString());
+
+        io.jsonwebtoken.Claims claims = mock(io.jsonwebtoken.Claims.class);
+        when(claims.getSubject()).thenReturn(userId.toString());
+        when(claims.getId()).thenReturn("jti-123");
+
+        when(jwtTokenProvider.validateDeviceLimitResolutionToken("resolution-token")).thenReturn(true);
+        when(jwtTokenProvider.parseDeviceLimitResolutionToken("resolution-token")).thenReturn(claims);
+        when(sessionService.getActiveSessions(userId)).thenReturn(java.util.List.of(
+                com.tinniestudio.api.modules.auth.user.dto.SessionDto.builder()
+                        .sessionId(sessionIdToRevoke)
+                        .deviceName("Chrome on Windows")
+                        .build()));
+        when(cacheService.setIfAbsent(eq("tinnie:lock:device-limit-resolution:jti-123"), eq("used"), any()))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> authService.resolveDeviceLimit(
+                request, new MockHttpServletRequest(), new MockHttpServletResponse()))
+                .isInstanceOf(com.tinniestudio.api.modules.auth.exception.InvalidTokenException.class);
+
+        verify(sessionService, never()).createSession(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("resolveDeviceLimit: rejects a sessionIdToRevoke that isn't an active session (regression: must not silently skip the revoke and still create a new session)")
+    void resolveDeviceLimit_sessionNotActive_throwsBadRequestAndDoesNotCreateSession() {
+        UUID userId = UUID.randomUUID();
+        UUID staleSessionId = UUID.randomUUID();
+
+        com.tinniestudio.api.modules.auth.dto.ResolveDeviceLimitRequest request =
+                new com.tinniestudio.api.modules.auth.dto.ResolveDeviceLimitRequest();
+        request.setResolutionToken("resolution-token");
+        request.setSessionIdToRevoke(staleSessionId.toString());
+
+        io.jsonwebtoken.Claims claims = mock(io.jsonwebtoken.Claims.class);
+        when(claims.getSubject()).thenReturn(userId.toString());
+
+        when(jwtTokenProvider.validateDeviceLimitResolutionToken("resolution-token")).thenReturn(true);
+        when(jwtTokenProvider.parseDeviceLimitResolutionToken("resolution-token")).thenReturn(claims);
+        // staleSessionId is NOT in the active list — e.g. already revoked, or never existed.
+        when(sessionService.getActiveSessions(userId)).thenReturn(java.util.List.of());
+
+        assertThatThrownBy(() -> authService.resolveDeviceLimit(
+                request, new MockHttpServletRequest(), new MockHttpServletResponse()))
+                .isInstanceOf(com.tinniestudio.api.shared.exception.BadRequestException.class);
+
+        verify(sessionService, never()).selfRevokeSession(any(), any(), any());
+        verify(sessionService, never()).createSession(any(), any(), any());
+        verify(cacheService, never()).setIfAbsent(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("resolveDeviceLimit: rejects a malformed sessionIdToRevoke")
+    void resolveDeviceLimit_malformedSessionId_throwsBadRequest() {
+        UUID userId = UUID.randomUUID();
+
+        com.tinniestudio.api.modules.auth.dto.ResolveDeviceLimitRequest request =
+                new com.tinniestudio.api.modules.auth.dto.ResolveDeviceLimitRequest();
+        request.setResolutionToken("resolution-token");
+        request.setSessionIdToRevoke("not-a-uuid");
+
+        io.jsonwebtoken.Claims claims = mock(io.jsonwebtoken.Claims.class);
+        when(claims.getSubject()).thenReturn(userId.toString());
+
+        when(jwtTokenProvider.validateDeviceLimitResolutionToken("resolution-token")).thenReturn(true);
+        when(jwtTokenProvider.parseDeviceLimitResolutionToken("resolution-token")).thenReturn(claims);
+
+        assertThatThrownBy(() -> authService.resolveDeviceLimit(
+                request, new MockHttpServletRequest(), new MockHttpServletResponse()))
+                .isInstanceOf(com.tinniestudio.api.shared.exception.BadRequestException.class);
+
+        verify(sessionService, never()).createSession(any(), any(), any());
+    }
+
     private User buildActiveUser() {
         User user = new User();
         user.setId(UUID.randomUUID());

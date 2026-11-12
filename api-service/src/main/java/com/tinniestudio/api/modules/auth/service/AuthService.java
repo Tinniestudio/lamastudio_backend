@@ -179,7 +179,7 @@ public class AuthService {
     // ── Resolve device limit ──────────────────────────────────────────────────
     @Transactional
     public AuthProfileResponse resolveDeviceLimit(
-            com.tinniestudio.api.modules.auth.dto.ResolveDeviceLimitRequest request,
+            ResolveDeviceLimitRequest request,
             HttpServletRequest httpRequest,
             HttpServletResponse response
     ) {
@@ -194,6 +194,27 @@ public class AuthService {
         Claims claims = jwtTokenProvider.parseDeviceLimitResolutionToken(resolutionToken);
         UUID userId = UUID.fromString(claims.getSubject());
 
+        UUID sessionIdToRevoke;
+        try {
+            sessionIdToRevoke = UUID.fromString(sessionIdToRevokeStr);
+        } catch (IllegalArgumentException ex) {
+            throw new BadRequestException("sessionIdToRevoke must be a valid session id");
+        }
+
+        // Resolve and validate the target BEFORE touching the single-use lock below, for two
+        // reasons: (1) selfRevokeSession() is idempotent — it silently no-ops on an
+        // already-revoked/nonexistent session rather than erroring, so without this check a
+        // stale or garbage sessionIdToRevoke would still fall through to createSession() and
+        // hand out a brand-new session with no slot actually freed, permanently exceeding the
+        // device cap; (2) a bad sessionIdToRevoke must fail BEFORE consuming the one-time
+        // resolution token, or a legitimate retry with the same token would be rejected as
+        // "already used" and force the user to restart the whole login flow.
+        String evictedDeviceName = sessionService.getActiveSessions(userId).stream()
+                .filter(d -> d.getSessionId().equals(sessionIdToRevoke))
+                .map(SessionDto::getDeviceName)
+                .findFirst()
+                .orElseThrow(() -> new BadRequestException("Selected device is no longer active"));
+
         String usedKey = "tinnie:lock:device-limit-resolution:" + claims.getId();
         if (!cacheService.setIfAbsent(usedKey, "used", Duration.ofMinutes(5))) {
             throw new InvalidTokenException("Resolution token has already been used");
@@ -202,21 +223,18 @@ public class AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        UUID sessionIdToRevoke = UUID.fromString(sessionIdToRevokeStr);
-        String evictedDeviceName = sessionService.getActiveSessions(userId).stream()
-                .filter(d -> d.getSessionId().equals(sessionIdToRevoke))
-                .map(SessionDto::getDeviceName)
-                .findFirst()
-                .orElse("a device");
-
         sessionService.selfRevokeSession(userId, sessionIdToRevoke, null);
-        publishDeviceLoggedOutNotification(userId, evictedDeviceName);
 
         String rawRefreshToken = generateSecureToken();
         UUID newSessionId = sessionService.createSession(userId, rawRefreshToken, httpRequest);
         issueTokenCookies(user, newSessionId, response);
 
-        log.info("User {} resolved device limit by signing out session {}", userId, sessionIdToRevoke);
+        // Published last, after every DB write has succeeded — same ordering rationale as the
+        // ContentService/EpisodeService broadcast helpers: this is an irrevocable side effect, so
+        // it must not fire before a later statement in this transaction could still roll back.
+        publishDeviceLoggedOutNotification(userId, evictedDeviceName);
+
+        log.info("User {} resolved device limit by signing out session {}", user.getEmail(), sessionIdToRevoke);
         return authProfileService.getProfile(userId, newSessionId, "Login successful");
     }
 
