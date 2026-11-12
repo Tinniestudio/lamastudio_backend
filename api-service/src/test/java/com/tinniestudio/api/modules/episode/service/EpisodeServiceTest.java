@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.GrantedAuthority;
@@ -37,6 +38,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,6 +47,7 @@ class EpisodeServiceTest {
 
     @Mock private EpisodeRepository episodeRepository;
     @Mock private SeasonRepository seasonRepository;
+    @Mock private RabbitTemplate rabbitTemplate;
 
     @InjectMocks private EpisodeService episodeService;
 
@@ -451,6 +454,49 @@ class EpisodeServiceTest {
             EpisodeResponse result = episodeService.create(seasonId, req, adminPrincipal());
 
             assertThat(result.episodeNumber()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("publishes EPISODE_PUBLISHED when the parent content is already PUBLISHED")
+        void publishesEpisodePublishedWhenParentAlreadyPublished() {
+            content.setStatus(ContentStatus.PUBLISHED);
+            CreateEpisodeRequest req = new CreateEpisodeRequest(null, "New Episode", null, null, 2400, null);
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
+            when(episodeRepository.findMaxEpisodeNumberBySeasonId(seasonId)).thenReturn(Optional.of(2));
+            when(episodeRepository.saveAndFlush(any(Episode.class))).thenAnswer(inv -> {
+                Episode ep = inv.getArgument(0);
+                ep.setId(UUID.randomUUID());
+                return ep;
+            });
+
+            episodeService.create(seasonId, req, ownerPrincipal());
+
+            @SuppressWarnings("unchecked")
+            org.mockito.ArgumentCaptor<java.util.Map<String, Object>> captor =
+                org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
+            verify(rabbitTemplate).convertAndSend(
+                eq(com.tinniestudio.api.shared.queue.RabbitConfig.QUEUE_NOTIFICATIONS), captor.capture());
+            assertThat(captor.getValue()).containsEntry("type", "EPISODE_PUBLISHED");
+            assertThat(captor.getValue()).containsEntry("referenceId", content.getId().toString());
+            assertThat(captor.getValue()).containsEntry("contentTitle", content.getTitle());
+        }
+
+        @Test
+        @DisplayName("does not publish EPISODE_PUBLISHED when the parent content is not yet PUBLISHED")
+        void doesNotPublishWhenParentNotYetPublished() {
+            // content defaults to DRAFT in setUp() — unchanged here.
+            CreateEpisodeRequest req = new CreateEpisodeRequest(null, "New Episode", null, null, 2400, null);
+            when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
+            when(episodeRepository.findMaxEpisodeNumberBySeasonId(seasonId)).thenReturn(Optional.of(2));
+            when(episodeRepository.saveAndFlush(any(Episode.class))).thenAnswer(inv -> {
+                Episode ep = inv.getArgument(0);
+                ep.setId(UUID.randomUUID());
+                return ep;
+            });
+
+            episodeService.create(seasonId, req, ownerPrincipal());
+
+            verifyNoInteractions(rabbitTemplate);
         }
     }
 
