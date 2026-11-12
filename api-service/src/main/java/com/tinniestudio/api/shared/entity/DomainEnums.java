@@ -218,7 +218,9 @@ public final class DomainEnums {
         APPLICATION_APPROVED,
         APPLICATION_REJECTED,
         ACCOUNT_SUSPENDED,
-        ACCOUNT_BANNED
+        ACCOUNT_BANNED,
+        CONTENT_PUBLISHED,
+        EPISODE_PUBLISHED
     }
 
     public enum NotificationChannel {
