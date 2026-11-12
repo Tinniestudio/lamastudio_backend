@@ -254,8 +254,10 @@ public class ContentService {
     }
 
     /**
-     * Best-effort, same pattern as recordView's analytics publish in this same class: a queue
-     * publish failure must never fail the admin's publish action itself.
+     * Best-effort: a queue publish failure must never fail the admin's publish action itself,
+     * same non-critical-failure handling as recordView's analytics publish in this class — though
+     * unlike that method (readOnly), this is a real write, so this is also an irrevocable side
+     * effect that happens after the save, not before.
      */
     private void publishContentPublishedBroadcast(Content content) {
         try {

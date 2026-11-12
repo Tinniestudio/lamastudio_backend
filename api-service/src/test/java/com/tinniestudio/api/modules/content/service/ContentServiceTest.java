@@ -504,6 +504,7 @@ class ContentServiceTest {
             ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
             verify(rabbitTemplate).convertAndSend(eq(RabbitConfig.QUEUE_NOTIFICATIONS), captor.capture());
             assertThat(captor.getValue()).containsEntry("type", "CONTENT_PUBLISHED");
+            assertThat(captor.getValue()).containsEntry("contentTitle", "Test Movie");
             assertThat(captor.getValue()).containsEntry("referenceType", "CONTENT");
             assertThat(captor.getValue()).containsEntry("referenceId", contentId.toString());
         }
