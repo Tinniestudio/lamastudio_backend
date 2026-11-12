@@ -26,6 +26,13 @@ public interface UserSessionRepository extends JpaRepository<UserSession, UUID> 
     Optional<UserSession> findByUserIdAndIdAndRevokedFalse(UUID userId, UUID sessionId);
 
     /**
+     * Unlike findByUserIdAndIdAndRevokedFalse, this does NOT filter on revoked state — needed by
+     * selfRevokeSession to distinguish "wrong owner" (empty here too) from "right owner, already
+     * revoked" (present here, revoked=true), which the revoked-filtered query can't tell apart.
+     */
+    Optional<UserSession> findByUserIdAndId(UUID userId, UUID sessionId);
+
+    /**
      * Lean existence check used on every authenticated request (JwtAuthenticationFilter) to
      * confirm the session tied to an access token hasn't been revoked. Deliberately a boolean
      * projection rather than fetching the whole entity.

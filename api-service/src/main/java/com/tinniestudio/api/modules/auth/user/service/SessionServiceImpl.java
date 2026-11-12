@@ -12,10 +12,12 @@ import com.tinniestudio.api.shared.util.DeviceNameParser;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -46,19 +48,6 @@ public class SessionServiceImpl implements SessionService {
     @Override
     @Transactional
     public UUID createSession(UUID userId, String rawRefreshToken, HttpServletRequest request) {
-        int maxDevices = resolveMaxDevices(userId);
-        long activeSessions = userSessionRepository.countByUserIdAndRevokedFalse(userId);
-
-        if (activeSessions >= maxDevices) {
-            userSessionRepository.findFirstByUserIdAndRevokedFalseOrderByCreatedAtAsc(userId)
-                    .ifPresent(oldest -> {
-                        oldest.revoke(null);
-                        userSessionRepository.save(oldest);
-                        cacheService.delete(sessionKey(userId, oldest.getId()));
-                        log.debug("Evicted oldest session {} for user {}", oldest.getId(), userId);
-                    });
-        }
-
         String userAgent = request != null ? request.getHeader("User-Agent") : null;
         String ipAddress = resolveClientIp(request);
         String fingerprint = buildFingerprint(userAgent, ipAddress);
@@ -168,6 +157,40 @@ public class SessionServiceImpl implements SessionService {
                         .current(false)
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    // ── Device limit ─────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countActiveSessions(UUID userId) {
+        return userSessionRepository.countByUserIdAndRevokedFalse(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public int resolveMaxDevicesForUser(UUID userId) {
+        return resolveMaxDevices(userId);
+    }
+
+    @Override
+    @Transactional
+    public void selfRevokeSession(UUID userId, UUID sessionId, UUID currentSessionId) {
+        UserSession session = userSessionRepository.findByUserIdAndId(userId, sessionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+
+        if (session.isRevoked()) {
+            return;
+        }
+        if (session.getId().equals(currentSessionId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Cannot revoke your current session this way — use logout instead");
+        }
+
+        session.revoke(null);
+        userSessionRepository.save(session);
+        cacheService.delete(sessionKey(userId, sessionId));
+        log.info("User {} self-revoked session {}", userId, sessionId);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
