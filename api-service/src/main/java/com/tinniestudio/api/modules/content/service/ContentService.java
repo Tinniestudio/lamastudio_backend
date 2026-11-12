@@ -246,7 +246,28 @@ public class ContentService {
             content.setPublishedAt(Instant.now());
         }
         content.setRejectionReason(targetStatus == ContentStatus.REJECTED ? rejectionReason : null);
-        return ContentResponse.from(contentRepository.save(content));
+        ContentResponse response = ContentResponse.from(contentRepository.save(content));
+        if (targetStatus == ContentStatus.PUBLISHED) {
+            publishContentPublishedBroadcast(content);
+        }
+        return response;
+    }
+
+    /**
+     * Best-effort, same pattern as recordView's analytics publish in this same class: a queue
+     * publish failure must never fail the admin's publish action itself.
+     */
+    private void publishContentPublishedBroadcast(Content content) {
+        try {
+            rabbitTemplate.convertAndSend(RabbitConfig.QUEUE_NOTIFICATIONS, Map.of(
+                "type", "CONTENT_PUBLISHED",
+                "contentTitle", content.getTitle(),
+                "referenceType", "CONTENT",
+                "referenceId", content.getId().toString()
+            ));
+        } catch (Exception e) {
+            log.warn("CONTENT_PUBLISHED broadcast publish failed (non-critical): {}", e.getMessage());
+        }
     }
 
     @Transactional
