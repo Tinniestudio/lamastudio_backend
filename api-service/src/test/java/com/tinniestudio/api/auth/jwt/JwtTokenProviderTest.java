@@ -88,6 +88,33 @@ class JwtTokenProviderTest {
         assertThat(verifier.validateAccessToken(token)).isFalse();
     }
 
+    @Test
+    @DisplayName("generateDeviceLimitResolutionToken embeds the purpose claim and validates")
+    void generateAndValidateDeviceLimitResolutionToken() {
+        AppProperties props = buildProps(900_000L, 604_800_000L);
+        JwtTokenProvider provider = new JwtTokenProvider(props);
+        UUID userId = UUID.randomUUID();
+
+        String token = provider.generateDeviceLimitResolutionToken(userId);
+
+        assertThat(provider.validateDeviceLimitResolutionToken(token)).isTrue();
+        Claims claims = provider.parseDeviceLimitResolutionToken(token);
+        assertThat(claims.getSubject()).isEqualTo(userId.toString());
+        assertThat(claims.get("purpose", String.class)).isEqualTo("device_limit_resolution");
+    }
+
+    @Test
+    @DisplayName("validateDeviceLimitResolutionToken rejects a normal access token (wrong purpose)")
+    void accessToken_isNotAValidResolutionToken() {
+        AppProperties props = buildProps(900_000L, 604_800_000L);
+        JwtTokenProvider provider = new JwtTokenProvider(props);
+        User user = buildUser();
+
+        String accessToken = provider.generateAccessToken(user, UUID.randomUUID());
+
+        assertThat(provider.validateDeviceLimitResolutionToken(accessToken)).isFalse();
+    }
+
     private User buildUser() {
         User user = new User();
         user.setId(UUID.randomUUID());
