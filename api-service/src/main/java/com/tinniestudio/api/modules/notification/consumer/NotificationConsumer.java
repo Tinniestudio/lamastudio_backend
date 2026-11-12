@@ -4,6 +4,8 @@ import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.notification.service.NotificationService;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
 import com.tinniestudio.api.modules.upload.service.VideoActivationService;
+import com.tinniestudio.api.modules.user.repository.UserRepository;
+import com.tinniestudio.api.shared.cache.CacheService;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.VideoAsset;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
@@ -13,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -21,18 +25,31 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class NotificationConsumer {
 
+    // Not released after processing (unlike a mutual-exclusion job lock) — this is a dedup/seen
+    // marker, not a concurrency lock. A given (eventType, referenceId) is only ever meant to be
+    // broadcast once, ever, so the lock should simply outlive any realistic redelivery window
+    // rather than being deleted in a finally block.
+    private static final Duration BROADCAST_DEDUP_TTL = Duration.ofHours(24);
+
     private final NotificationService notificationService;
     private final VideoAssetRepository videoAssetRepo;
     private final ContentRepository contentRepo;
     private final VideoActivationService videoActivationService;
+    private final UserRepository userRepository;
+    private final CacheService cacheService;
 
     @RabbitListener(queues = RabbitConfig.QUEUE_NOTIFICATIONS)
     public void handleNotificationEvent(Map<String, Object> message) {
         String type = (String) message.get("type");
-        if (!"CONTENT_PROCESSED".equals(type)) {
-            log.debug("Ignoring notification event type: {}", type);
-            return;
+        switch (type) {
+            case "CONTENT_PROCESSED" -> handleContentProcessed(message);
+            case "CONTENT_PUBLISHED" -> handleBroadcast(message, NotificationEventType.CONTENT_PUBLISHED);
+            case "EPISODE_PUBLISHED" -> handleBroadcast(message, NotificationEventType.EPISODE_PUBLISHED);
+            default -> log.debug("Ignoring notification event type: {}", type);
         }
+    }
+
+    private void handleContentProcessed(Map<String, Object> message) {
         try {
             UUID assetId = UUID.fromString((String) message.get("videoAssetId"));
             UUID contentId = UUID.fromString((String) message.get("contentId"));
@@ -93,6 +110,33 @@ public class NotificationConsumer {
             );
         } catch (Exception e) {
             log.error("Error processing CONTENT_PROCESSED notification: {}", e.getMessage(), e);
+        }
+    }
+
+    private void handleBroadcast(Map<String, Object> message, NotificationEventType eventType) {
+        try {
+            String contentTitle = (String) message.get("contentTitle");
+            String referenceType = (String) message.get("referenceType");
+            UUID referenceId = UUID.fromString((String) message.get("referenceId"));
+
+            String lockKey = "tinnie:lock:notif-broadcast:" + eventType + ":" + referenceId;
+            if (!cacheService.setIfAbsent(lockKey, "sent", BROADCAST_DEDUP_TTL)) {
+                log.debug("Broadcast for {} {} already processed, skipping redelivery", eventType, referenceId);
+                return;
+            }
+
+            List<UUID> userIds = userRepository.findAllActiveUserIds();
+            Map<String, String> placeholders = Map.of("title", contentTitle);
+            for (UUID userId : userIds) {
+                try {
+                    notificationService.sendNotification(userId, eventType, referenceType, referenceId, placeholders);
+                } catch (Exception e) {
+                    log.warn("Broadcast notification failed for user {} event {}: {}", userId, eventType, e.getMessage());
+                }
+            }
+            log.info("Broadcast {} for {} {} sent to {} users", eventType, referenceType, referenceId, userIds.size());
+        } catch (Exception e) {
+            log.error("Error processing {} broadcast: {}", eventType, e.getMessage(), e);
         }
     }
 }
