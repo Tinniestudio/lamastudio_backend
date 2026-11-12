@@ -2,6 +2,9 @@ package com.tinniestudio.api.modules.notification.service;
 
 import com.tinniestudio.api.modules.notification.dto.*;
 import com.tinniestudio.api.modules.notification.repository.*;
+import com.tinniestudio.api.modules.user.repository.UserRepository;
+import com.tinniestudio.api.shared.email.EmailRequest;
+import com.tinniestudio.api.shared.email.ResendEmailService;
 import com.tinniestudio.api.shared.entity.*;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
 import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
@@ -14,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -25,39 +29,73 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationRepository notificationRepo;
     private final NotificationTemplateRepository templateRepo;
     private final NotificationPreferenceRepository preferenceRepo;
+    private final UserRepository userRepository;
+    private final ResendEmailService resendEmailService;
 
     @Override
     @Transactional
     public void sendNotification(UUID userId, NotificationEventType eventType,
                                   String referenceType, UUID referenceId) {
-        Optional<NotificationTemplate> templateOpt =
-            templateRepo.findByEventTypeAndIsActiveTrue(eventType);
-        if (templateOpt.isEmpty()) {
+        sendNotification(userId, eventType, referenceType, referenceId, Map.of());
+    }
+
+    @Override
+    @Transactional
+    public void sendNotification(UUID userId, NotificationEventType eventType,
+                                  String referenceType, UUID referenceId,
+                                  Map<String, String> placeholders) {
+        List<NotificationTemplate> templates = templateRepo.findAllByEventTypeAndIsActiveTrue(eventType);
+        if (templates.isEmpty()) {
             log.debug("No active template for event type: {}. Skipping.", eventType);
             return;
         }
-        NotificationTemplate template = templateOpt.get();
 
-        boolean suppressed = preferenceRepo
-            .findByUserIdAndChannelAndEventType(userId, template.getChannel(), eventType)
-            .map(pref -> !pref.getIsEnabled())
-            .orElse(false);
-        if (suppressed) {
-            log.debug("User {} has disabled event type {} on channel {}. Skipping.",
-                userId, eventType, template.getChannel());
-            return;
+        for (NotificationTemplate template : templates) {
+            boolean suppressed = preferenceRepo
+                .findByUserIdAndChannelAndEventType(userId, template.getChannel(), eventType)
+                .map(pref -> !pref.getIsEnabled())
+                .orElse(false);
+            if (suppressed) {
+                log.debug("User {} has disabled event type {} on channel {}. Skipping.",
+                    userId, eventType, template.getChannel());
+                continue;
+            }
+
+            String title = applyPlaceholders(template.getTitleTemplate(), placeholders);
+            String body = applyPlaceholders(template.getBodyTemplate(), placeholders);
+
+            if (template.getChannel() == NotificationChannel.EMAIL) {
+                // A real email send, not an in-app row — an EMAIL-channel template is a distinct
+                // message with its own copy, not something that should also silently appear in
+                // the in-app bell list the way the old (never-actually-sending) code did.
+                sendEmailNotification(userId, title, body);
+            } else {
+                Notification n = new Notification();
+                n.setUserId(userId);
+                n.setEventType(eventType);
+                n.setTitle(title);
+                n.setBody(body);
+                n.setChannel(template.getChannel());
+                n.setReferenceType(referenceType);
+                n.setReferenceId(referenceId);
+                n.setSentAt(Instant.now());
+                notificationRepo.save(n);
+            }
         }
+    }
 
-        Notification n = new Notification();
-        n.setUserId(userId);
-        n.setEventType(eventType);
-        n.setTitle(template.getTitleTemplate());
-        n.setBody(template.getBodyTemplate());
-        n.setChannel(template.getChannel());
-        n.setReferenceType(referenceType);
-        n.setReferenceId(referenceId);
-        n.setSentAt(Instant.now());
-        notificationRepo.save(n);
+    private String applyPlaceholders(String text, Map<String, String> placeholders) {
+        String result = text;
+        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
+            result = result.replace("{" + entry.getKey() + "}", entry.getValue());
+        }
+        return result;
+    }
+
+    private void sendEmailNotification(UUID userId, String subject, String body) {
+        userRepository.findById(userId).ifPresent(user ->
+            resendEmailService.sendEmail(new EmailRequest(user.getEmail(), subject, body))
+        );
     }
 
     @Override

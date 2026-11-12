@@ -11,6 +11,8 @@ import java.util.UUID;
 public interface NotificationService {
     void sendNotification(UUID userId, NotificationEventType eventType,
                           String referenceType, UUID referenceId);
+    void sendNotification(UUID userId, NotificationEventType eventType,
+                          String referenceType, UUID referenceId, java.util.Map<String, String> placeholders);
     Page<NotificationResponse> listForUser(UUID userId, Pageable pageable);
     void markRead(UUID userId, UUID notificationId);
     void markAllRead(UUID userId);
