@@ -111,7 +111,7 @@ public class SeasonService {
             // surface the constraint violation inside this try/catch.
             Season saved = seasonRepository.saveAndFlush(season);
             if (content.getStatus() == ContentStatus.PUBLISHED) {
-                publishEpisodePublishedBroadcast(content);
+                publishEpisodePublishedBroadcast(content, saved);
             }
             return SeasonResponse.from(saved);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
@@ -125,14 +125,21 @@ public class SeasonService {
      * Fires only when the parent is already PUBLISHED — a season/episode added to a title that
      * isn't published yet is covered by the whole-title CONTENT_PUBLISHED broadcast once that
      * title itself publishes, not here.
+     *
+     * {@code dedupId} is the newly created season's own id, not the parent content's — the
+     * consumer's idempotency lock is keyed on this, not on {@code referenceId} (which stays the
+     * content id, for the notification's deep-link target). Using the content id for both would
+     * collapse multiple seasons/episodes added to the same already-live show within the lock's
+     * TTL into a single delivered notification, silently dropping the rest as "duplicates."
      */
-    private void publishEpisodePublishedBroadcast(Content content) {
+    private void publishEpisodePublishedBroadcast(Content content, Season season) {
         try {
             rabbitTemplate.convertAndSend(RabbitConfig.QUEUE_NOTIFICATIONS, Map.of(
                 "type", "EPISODE_PUBLISHED",
                 "contentTitle", content.getTitle(),
                 "referenceType", "CONTENT",
-                "referenceId", content.getId().toString()
+                "referenceId", content.getId().toString(),
+                "dedupId", season.getId().toString()
             ));
         } catch (Exception e) {
             log.warn("EPISODE_PUBLISHED broadcast publish failed (non-critical): {}", e.getMessage());

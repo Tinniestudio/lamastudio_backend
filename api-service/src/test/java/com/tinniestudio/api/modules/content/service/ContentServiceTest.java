@@ -507,6 +507,7 @@ class ContentServiceTest {
             assertThat(captor.getValue()).containsEntry("contentTitle", "Test Movie");
             assertThat(captor.getValue()).containsEntry("referenceType", "CONTENT");
             assertThat(captor.getValue()).containsEntry("referenceId", contentId.toString());
+            assertThat(captor.getValue()).containsEntry("dedupId", contentId.toString());
         }
 
         @Test

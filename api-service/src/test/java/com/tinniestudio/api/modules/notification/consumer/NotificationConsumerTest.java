@@ -12,6 +12,7 @@ import com.tinniestudio.api.shared.entity.DomainEnums.*;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -233,6 +234,52 @@ class NotificationConsumerTest {
 
         verify(notificationService).sendNotification(userId, NotificationEventType.EPISODE_PUBLISHED,
             "CONTENT", contentId, Map.of("title", "Breaking Bad"));
+    }
+
+    @Test
+    @DisplayName("locks on dedupId, not referenceId -- two episodes on the same show don't collide")
+    void handleEpisodePublished_locksOnDedupIdNotReferenceId() {
+        // Regression test: EPISODE_PUBLISHED's referenceId is the PARENT SHOW's id (shared by
+        // every episode added to it, since the notification deep-links to the show, not the
+        // episode). If the idempotency lock were keyed on referenceId, a second episode added to
+        // the same already-live show within the lock's TTL would collide with the first
+        // episode's still-live lock and be silently dropped as a "duplicate" -- even though it's
+        // a genuinely new episode nobody has been told about. dedupId (the episode's own id)
+        // must be what the lock actually keys on.
+        UUID contentId = UUID.randomUUID();
+        UUID episode1Id = UUID.randomUUID();
+        UUID episode2Id = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        when(cacheService.setIfAbsent(any(), any(), any())).thenReturn(true);
+        when(userRepository.findAllActiveUserIds()).thenReturn(List.of(userId));
+
+        consumer.handleNotificationEvent(Map.of(
+            "type", "EPISODE_PUBLISHED",
+            "contentTitle", "Breaking Bad",
+            "referenceType", "CONTENT",
+            "referenceId", contentId.toString(),
+            "dedupId", episode1Id.toString()
+        ));
+        consumer.handleNotificationEvent(Map.of(
+            "type", "EPISODE_PUBLISHED",
+            "contentTitle", "Breaking Bad",
+            "referenceType", "CONTENT",
+            "referenceId", contentId.toString(),
+            "dedupId", episode2Id.toString()
+        ));
+
+        ArgumentCaptor<String> lockKeyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(cacheService, times(2)).setIfAbsent(lockKeyCaptor.capture(), any(), any());
+        List<String> lockKeys = lockKeyCaptor.getAllValues();
+        assertThat(lockKeys.get(0)).isNotEqualTo(lockKeys.get(1));
+        assertThat(lockKeys.get(0)).contains(episode1Id.toString());
+        assertThat(lockKeys.get(1)).contains(episode2Id.toString());
+        // Both episodes' lock attempts succeeded (mocked true), so the fan-out ran twice --
+        // the second episode was not treated as a duplicate of the first.
+        verify(userRepository, times(2)).findAllActiveUserIds();
+        verify(notificationService, times(2)).sendNotification(eq(userId), eq(NotificationEventType.EPISODE_PUBLISHED),
+            eq("CONTENT"), eq(contentId), any());
     }
 
     @Test

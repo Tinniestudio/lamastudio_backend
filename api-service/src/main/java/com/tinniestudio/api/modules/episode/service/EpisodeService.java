@@ -109,7 +109,7 @@ public class EpisodeService {
             // surface the constraint violation inside this try/catch.
             Episode saved = episodeRepository.saveAndFlush(episode);
             if (season.getContent().getStatus() == ContentStatus.PUBLISHED) {
-                publishEpisodePublishedBroadcast(season.getContent());
+                publishEpisodePublishedBroadcast(season.getContent(), saved);
             }
             return EpisodeResponse.from(saved);
         } catch (DataIntegrityViolationException e) {
@@ -123,14 +123,21 @@ public class EpisodeService {
      * Fires only when the parent is already PUBLISHED — a season/episode added to a title that
      * isn't published yet is covered by the whole-title CONTENT_PUBLISHED broadcast once that
      * title itself publishes, not here.
+     *
+     * {@code dedupId} is the newly created episode's own id, not the parent content's — the
+     * consumer's idempotency lock is keyed on this, not on {@code referenceId} (which stays the
+     * content id, for the notification's deep-link target). Using the content id for both would
+     * collapse multiple episodes added to the same already-live show within the lock's TTL into
+     * a single delivered notification, silently dropping the rest as "duplicates."
      */
-    private void publishEpisodePublishedBroadcast(Content content) {
+    private void publishEpisodePublishedBroadcast(Content content, Episode episode) {
         try {
             rabbitTemplate.convertAndSend(RabbitConfig.QUEUE_NOTIFICATIONS, Map.of(
                 "type", "EPISODE_PUBLISHED",
                 "contentTitle", content.getTitle(),
                 "referenceType", "CONTENT",
-                "referenceId", content.getId().toString()
+                "referenceId", content.getId().toString(),
+                "dedupId", episode.getId().toString()
             ));
         } catch (Exception e) {
             log.warn("EPISODE_PUBLISHED broadcast publish failed (non-critical): {}", e.getMessage());

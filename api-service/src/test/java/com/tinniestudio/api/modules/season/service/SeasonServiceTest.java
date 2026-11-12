@@ -442,15 +442,16 @@ class SeasonServiceTest {
         }
 
         @Test
-        @DisplayName("publishes EPISODE_PUBLISHED when the parent content is already PUBLISHED")
+        @DisplayName("publishes EPISODE_PUBLISHED when the parent content is already PUBLISHED, deduped on the season's own id")
         void publishesEpisodePublishedWhenParentAlreadyPublished() {
             seriesContent.setStatus(ContentStatus.PUBLISHED);
+            UUID newSeasonId = UUID.randomUUID();
             CreateSeasonRequest req = new CreateSeasonRequest(1, "Season One", null, null, null, null);
             when(contentRepository.findById(contentId)).thenReturn(Optional.of(seriesContent));
             when(seasonRepository.existsByContentIdAndSeasonNumber(contentId, 1)).thenReturn(false);
             when(seasonRepository.saveAndFlush(any(Season.class))).thenAnswer(inv -> {
                 Season s = inv.getArgument(0);
-                s.setId(UUID.randomUUID());
+                s.setId(newSeasonId);
                 s.setEpisodes(new ArrayList<>());
                 return s;
             });
@@ -465,6 +466,10 @@ class SeasonServiceTest {
             assertThat(captor.getValue()).containsEntry("type", "EPISODE_PUBLISHED");
             assertThat(captor.getValue()).containsEntry("referenceId", contentId.toString());
             assertThat(captor.getValue()).containsEntry("contentTitle", seriesContent.getTitle());
+            // dedupId is the new season's own id, not the parent content's — distinct from
+            // referenceId above — so a second season added to this same show doesn't collide
+            // with this one's idempotency lock in the consumer.
+            assertThat(captor.getValue()).containsEntry("dedupId", newSeasonId.toString());
         }
 
         @Test

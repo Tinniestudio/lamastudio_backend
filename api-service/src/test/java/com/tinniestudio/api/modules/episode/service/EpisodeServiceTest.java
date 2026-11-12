@@ -457,15 +457,16 @@ class EpisodeServiceTest {
         }
 
         @Test
-        @DisplayName("publishes EPISODE_PUBLISHED when the parent content is already PUBLISHED")
+        @DisplayName("publishes EPISODE_PUBLISHED when the parent content is already PUBLISHED, deduped on the episode's own id")
         void publishesEpisodePublishedWhenParentAlreadyPublished() {
             content.setStatus(ContentStatus.PUBLISHED);
+            UUID newEpisodeId = UUID.randomUUID();
             CreateEpisodeRequest req = new CreateEpisodeRequest(null, "New Episode", null, null, 2400, null);
             when(seasonRepository.findById(seasonId)).thenReturn(Optional.of(season));
             when(episodeRepository.findMaxEpisodeNumberBySeasonId(seasonId)).thenReturn(Optional.of(2));
             when(episodeRepository.saveAndFlush(any(Episode.class))).thenAnswer(inv -> {
                 Episode ep = inv.getArgument(0);
-                ep.setId(UUID.randomUUID());
+                ep.setId(newEpisodeId);
                 return ep;
             });
 
@@ -479,6 +480,10 @@ class EpisodeServiceTest {
             assertThat(captor.getValue()).containsEntry("type", "EPISODE_PUBLISHED");
             assertThat(captor.getValue()).containsEntry("referenceId", content.getId().toString());
             assertThat(captor.getValue()).containsEntry("contentTitle", content.getTitle());
+            // dedupId is the new episode's own id, not the parent content's — distinct from
+            // referenceId above — so a second episode added to this same show doesn't collide
+            // with this one's idempotency lock in the consumer.
+            assertThat(captor.getValue()).containsEntry("dedupId", newEpisodeId.toString());
         }
 
         @Test
