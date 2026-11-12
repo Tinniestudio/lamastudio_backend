@@ -220,7 +220,8 @@ public final class DomainEnums {
         ACCOUNT_SUSPENDED,
         ACCOUNT_BANNED,
         CONTENT_PUBLISHED,
-        EPISODE_PUBLISHED
+        EPISODE_PUBLISHED,
+        DEVICE_LOGGED_OUT
     }
 
     public enum NotificationChannel {

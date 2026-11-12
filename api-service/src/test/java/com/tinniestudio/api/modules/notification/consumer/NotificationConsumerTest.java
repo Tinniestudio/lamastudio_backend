@@ -321,4 +321,46 @@ class NotificationConsumerTest {
         verify(notificationService).sendNotification(user2, NotificationEventType.CONTENT_PUBLISHED,
             "CONTENT", contentId, Map.of("title", "The Last Horizon"));
     }
+
+    @Test
+    @DisplayName("DEVICE_LOGGED_OUT dispatches straight to the target user, no broadcast fan-out, no dedup lock")
+    void deviceLoggedOut_sendsDirectlyToTargetUser() {
+        UUID userId = UUID.randomUUID();
+        Map<String, Object> message = Map.of(
+                "type", "DEVICE_LOGGED_OUT",
+                "userId", userId.toString(),
+                "deviceName", "Chrome on Windows"
+        );
+
+        consumer.handleNotificationEvent(message);
+
+        verify(notificationService).sendNotification(
+                eq(userId),
+                eq(NotificationEventType.DEVICE_LOGGED_OUT),
+                eq("ACCOUNT_SECURITY"),
+                eq(userId),
+                eq(Map.of("deviceName", "Chrome on Windows"))
+        );
+        verify(cacheService, never()).setIfAbsent(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("DEVICE_LOGGED_OUT falls back to a generic device name when none is provided")
+    void deviceLoggedOut_missingDeviceName_fallsBackToGeneric() {
+        UUID userId = UUID.randomUUID();
+        Map<String, Object> message = Map.of(
+                "type", "DEVICE_LOGGED_OUT",
+                "userId", userId.toString()
+        );
+
+        consumer.handleNotificationEvent(message);
+
+        verify(notificationService).sendNotification(
+                eq(userId),
+                eq(NotificationEventType.DEVICE_LOGGED_OUT),
+                eq("ACCOUNT_SECURITY"),
+                eq(userId),
+                eq(Map.of("deviceName", "a device"))
+        );
+    }
 }
