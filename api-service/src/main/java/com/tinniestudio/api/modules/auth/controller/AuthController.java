@@ -83,6 +83,8 @@ public class AuthController {
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Login completed",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = AuthProfileResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Malformed session id, or the selected device is no longer active",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(responseCode = "401", description = "Resolution token invalid, expired, or already used",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class)))
     })

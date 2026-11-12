@@ -194,4 +194,13 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.email").value("jane@example.com"));
     }
+
+    @Test
+    @DisplayName("POST /auth/login/resolve-device-limit rejects a blank payload with 400")
+    void resolveDeviceLimit_validation() throws Exception {
+    mockMvc.perform(postWithContext("/auth/login/resolve-device-limit")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
 }
