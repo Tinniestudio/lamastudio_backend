@@ -5,6 +5,7 @@ import com.tinniestudio.api.modules.auth.controller.AuthController;
 import com.tinniestudio.api.modules.auth.dto.*;
 import com.tinniestudio.api.modules.auth.exception.BadCredentialsException;
 import com.tinniestudio.api.modules.auth.service.AuthService;
+import com.tinniestudio.api.modules.auth.user.dto.AuthProfileResponse;
 import com.tinniestudio.api.modules.auth.user.service.AuthProfileService;
 import com.tinniestudio.api.modules.user.repository.UserRepository;
 import com.tinniestudio.api.modules.user.service.UserDetailsServiceImpl;
@@ -172,5 +173,25 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("POST /auth/login/resolve-device-limit delegates to authService and returns 200")
+    void resolveDeviceLimit_returnsOk() throws Exception {
+        ResolveDeviceLimitRequest request = new ResolveDeviceLimitRequest();
+        request.setResolutionToken("resolution-token");
+        request.setSessionIdToRevoke(UUID.randomUUID().toString());
+
+        when(authService.resolveDeviceLimit(any(), any(), any()))
+                .thenReturn(AuthProfileResponse.builder()
+                        .email("jane@example.com")
+                        .roles(Set.of("ROLE_USER"))
+                        .provider("LOCAL").emailVerified(true).build());
+
+        mockMvc.perform(postWithContext("/auth/login/resolve-device-limit")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.email").value("jane@example.com"));
     }
 }

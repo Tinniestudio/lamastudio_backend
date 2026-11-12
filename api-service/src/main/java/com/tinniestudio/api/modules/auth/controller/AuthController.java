@@ -79,6 +79,23 @@ public class AuthController {
         return ResponseEntity.ok(authService.login(request, httpRequest, response));
     }
 
+    @Operation(summary = "Resolve a device-limit conflict from login", description = "Revokes the selected device's session and completes login for the new device. The resolution token is single-use and expires after 5 minutes.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Login completed",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = AuthProfileResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Resolution token invalid, expired, or already used",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @RateLimit(maxRequests = 10, windowMinutes = 15, keyStrategy = "IP_ONLY")
+    @PostMapping("/login/resolve-device-limit")
+    @SecurityRequirements({})
+    public ResponseEntity<AuthProfileResponse> resolveDeviceLimit(
+            @Valid @RequestBody ResolveDeviceLimitRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse response) {
+        return ResponseEntity.ok(authService.resolveDeviceLimit(request, httpRequest, response));
+    }
+
     @Operation(summary = "Refresh access token", description = "Issues a new access_token and refresh_token pair using the refresh_token cookie. Call this when a 401 is received.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Tokens refreshed",
