@@ -152,10 +152,18 @@ class AuthIntegrationTest {
     private void register(String email, String password) throws Exception {
         RegisterRequest request = buildRegisterRequest(email);
         request.setPassword(password);
-        mockMvc.perform(postWithContext("/auth/register")
+        MvcResult result = mockMvc.perform(postWithContext("/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        // Registration auto-authenticates and creates a session, consuming one device slot.
+        // This helper's callers test the LOGIN endpoint next, on a fresh explicit login — log the
+        // registration session out immediately so it doesn't compete for a slot against that
+        // login on a single-device test plan (a real registering user never leaves this throwaway
+        // session alive the way this test setup incidentally would).
+        mockMvc.perform(postWithContext("/auth/logout").cookie(result.getResponse().getCookies()));
     }
 
     private RegisterRequest buildRegisterRequest(String email) {

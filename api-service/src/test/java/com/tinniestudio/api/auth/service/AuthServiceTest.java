@@ -64,6 +64,8 @@ class AuthServiceTest {
     @Mock private UserSubscriptionRepository userSubscriptionRepository;
     @Mock private SubscriptionPlanRepository subscriptionPlanRepository;
     @Mock private AuthProfileService authProfileService;
+    @Mock private org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate;
+    @Mock private com.tinniestudio.api.shared.cache.CacheService cacheService;
 
     private AppProperties appProperties;
     private AuthService authService;
@@ -83,7 +85,9 @@ class AuthServiceTest {
                 sessionService,
                 userSubscriptionRepository,
                 subscriptionPlanRepository,
-                authProfileService
+                authProfileService,
+                cacheService,
+                rabbitTemplate
         );
     }
 
@@ -154,6 +158,8 @@ class AuthServiceTest {
         when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                 .thenReturn(mock(Authentication.class));
+        when(sessionService.resolveMaxDevicesForUser(user.getId())).thenReturn(3);
+        when(sessionService.countActiveSessions(user.getId())).thenReturn(0L);
         when(sessionService.createSession(any(), any(), any())).thenReturn(sessionId);
         when(jwtTokenProvider.generateAccessToken(any(User.class), any(UUID.class))).thenReturn("access");
         when(jwtTokenProvider.generateRefreshToken(any(User.class), any(UUID.class))).thenReturn("refresh");
@@ -202,6 +208,73 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.login(request, new MockHttpServletRequest(), new MockHttpServletResponse()))
                 .isInstanceOf(BadCredentialsException.class);
+    }
+
+    @Test
+    @DisplayName("login: throws DeviceLimitReachedException when already at the device cap, and does NOT create a session")
+    void login_atDeviceLimit_throwsWithoutCreatingSession() {
+        com.tinniestudio.api.modules.auth.dto.LoginRequest request = new com.tinniestudio.api.modules.auth.dto.LoginRequest();
+        request.setEmail("jane@example.com");
+        request.setPassword("Password1!");
+
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        user.setEmail("jane@example.com");
+        user.setProvider(AuthProvider.LOCAL);
+        user.setAccountStatus(AccountStatus.ACTIVE);
+
+        Authentication authentication = mock(Authentication.class);
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenReturn(authentication);
+        when(userRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(user));
+        when(sessionService.resolveMaxDevicesForUser(user.getId())).thenReturn(1);
+        when(sessionService.countActiveSessions(user.getId())).thenReturn(1L);
+        when(jwtTokenProvider.generateDeviceLimitResolutionToken(user.getId())).thenReturn("resolution-token");
+        when(sessionService.getActiveSessions(user.getId())).thenReturn(java.util.List.of());
+
+        HttpServletRequest httpRequest = new MockHttpServletRequest();
+        HttpServletResponse response = new MockHttpServletResponse();
+
+        assertThatThrownBy(() -> authService.login(request, httpRequest, response))
+                .isInstanceOf(com.tinniestudio.api.modules.auth.exception.DeviceLimitReachedException.class);
+
+        verify(sessionService, never()).createSession(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("login: under the device cap creates a session as before")
+    void login_underDeviceLimit_createsSessionNormally() {
+        com.tinniestudio.api.modules.auth.dto.LoginRequest request = new com.tinniestudio.api.modules.auth.dto.LoginRequest();
+        request.setEmail("jane@example.com");
+        request.setPassword("Password1!");
+
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        user.setEmail("jane@example.com");
+        user.setProvider(AuthProvider.LOCAL);
+        user.setAccountStatus(AccountStatus.ACTIVE);
+        UUID sessionId = UUID.randomUUID();
+
+        Authentication authentication = mock(Authentication.class);
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenReturn(authentication);
+        when(userRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(user));
+        when(sessionService.resolveMaxDevicesForUser(user.getId())).thenReturn(3);
+        when(sessionService.countActiveSessions(user.getId())).thenReturn(1L);
+        when(sessionService.createSession(eq(user.getId()), any(), any())).thenReturn(sessionId);
+        when(authProfileService.getProfile(eq(user.getId()), eq(sessionId), any()))
+                .thenReturn(AuthProfileResponse.builder()
+                        .email("jane@example.com")
+                        .roles(Set.of(RoleName.ROLE_USER.name()))
+                        .provider("LOCAL").emailVerified(true).build());
+
+        HttpServletRequest httpRequest = new MockHttpServletRequest();
+        HttpServletResponse response = new MockHttpServletResponse();
+
+        AuthProfileResponse result = authService.login(request, httpRequest, response);
+
+        assertThat(result.getEmail()).isEqualTo("jane@example.com");
+        verify(jwtTokenProvider, never()).generateDeviceLimitResolutionToken(any());
     }
 
     private User buildActiveUser() {
