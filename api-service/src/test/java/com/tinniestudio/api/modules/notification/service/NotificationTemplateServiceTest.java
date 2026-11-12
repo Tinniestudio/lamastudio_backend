@@ -98,6 +98,93 @@ class NotificationTemplateServiceTest {
     }
 
     @Test
+    void update_allows_whenChannelUnchanged() {
+        UUID id = UUID.randomUUID();
+        NotificationTemplate existing = new NotificationTemplate();
+        existing.setEventType(NotificationEventType.CONTENT_PROCESSED);
+        existing.setChannel(NotificationChannel.IN_APP);
+        existing.setTitleTemplate("Old title");
+        existing.setBodyTemplate("Old body");
+
+        var req = new UpdateNotificationTemplateRequest();
+        req.setTitleTemplate("New title");
+        req.setChannel(NotificationChannel.IN_APP);
+
+        when(templateRepo.findById(id)).thenReturn(Optional.of(existing));
+        when(templateRepo.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.update(id, req);
+
+        assertThat(result.titleTemplate()).isEqualTo("New title");
+        verify(templateRepo, never()).existsByEventTypeAndChannel(any(), any());
+    }
+
+    @Test
+    void update_throwsBadRequest_whenChangingChannelToOneThatAlreadyExists() {
+        UUID id = UUID.randomUUID();
+        NotificationTemplate existing = new NotificationTemplate();
+        existing.setEventType(NotificationEventType.CONTENT_PROCESSED);
+        existing.setChannel(NotificationChannel.IN_APP);
+        existing.setTitleTemplate("T");
+        existing.setBodyTemplate("B");
+
+        var req = new UpdateNotificationTemplateRequest();
+        req.setChannel(NotificationChannel.EMAIL);
+
+        when(templateRepo.findById(id)).thenReturn(Optional.of(existing));
+        when(templateRepo.existsByEventTypeAndChannel(NotificationEventType.CONTENT_PROCESSED, NotificationChannel.EMAIL))
+            .thenReturn(true);
+
+        assertThatThrownBy(() -> service.update(id, req))
+            .isInstanceOf(com.tinniestudio.api.shared.exception.BadRequestException.class);
+        verify(templateRepo, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_allows_whenChangingChannelToFreeOne() {
+        UUID id = UUID.randomUUID();
+        NotificationTemplate existing = new NotificationTemplate();
+        existing.setEventType(NotificationEventType.CONTENT_PROCESSED);
+        existing.setChannel(NotificationChannel.IN_APP);
+        existing.setTitleTemplate("T");
+        existing.setBodyTemplate("B");
+
+        var req = new UpdateNotificationTemplateRequest();
+        req.setChannel(NotificationChannel.EMAIL);
+
+        when(templateRepo.findById(id)).thenReturn(Optional.of(existing));
+        when(templateRepo.existsByEventTypeAndChannel(NotificationEventType.CONTENT_PROCESSED, NotificationChannel.EMAIL))
+            .thenReturn(false);
+        when(templateRepo.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.update(id, req);
+
+        assertThat(result.channel()).isEqualTo("EMAIL");
+    }
+
+    @Test
+    void update_throwsBadRequest_whenConcurrentChannelChangeRacesPastExistsCheck() {
+        UUID id = UUID.randomUUID();
+        NotificationTemplate existing = new NotificationTemplate();
+        existing.setEventType(NotificationEventType.CONTENT_PROCESSED);
+        existing.setChannel(NotificationChannel.IN_APP);
+        existing.setTitleTemplate("T");
+        existing.setBodyTemplate("B");
+
+        var req = new UpdateNotificationTemplateRequest();
+        req.setChannel(NotificationChannel.EMAIL);
+
+        when(templateRepo.findById(id)).thenReturn(Optional.of(existing));
+        when(templateRepo.existsByEventTypeAndChannel(NotificationEventType.CONTENT_PROCESSED, NotificationChannel.EMAIL))
+            .thenReturn(false);
+        when(templateRepo.saveAndFlush(any()))
+            .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
+
+        assertThatThrownBy(() -> service.update(id, req))
+            .isInstanceOf(com.tinniestudio.api.shared.exception.BadRequestException.class);
+    }
+
+    @Test
     void list_returnsAll() {
         when(templateRepo.findAll()).thenReturn(List.of());
         assertThat(service.list()).isEmpty();
