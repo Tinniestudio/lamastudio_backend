@@ -51,35 +51,44 @@ public class NotificationServiceImpl implements NotificationService {
         }
 
         for (NotificationTemplate template : templates) {
-            boolean suppressed = preferenceRepo
-                .findByUserIdAndChannelAndEventType(userId, template.getChannel(), eventType)
-                .map(pref -> !pref.getIsEnabled())
-                .orElse(false);
-            if (suppressed) {
-                log.debug("User {} has disabled event type {} on channel {}. Skipping.",
-                    userId, eventType, template.getChannel());
-                continue;
-            }
+            try {
+                boolean suppressed = preferenceRepo
+                    .findByUserIdAndChannelAndEventType(userId, template.getChannel(), eventType)
+                    .map(pref -> !pref.getIsEnabled())
+                    .orElse(false);
+                if (suppressed) {
+                    log.debug("User {} has disabled event type {} on channel {}. Skipping.",
+                        userId, eventType, template.getChannel());
+                    continue;
+                }
 
-            String title = applyPlaceholders(template.getTitleTemplate(), placeholders);
-            String body = applyPlaceholders(template.getBodyTemplate(), placeholders);
+                String title = applyPlaceholders(template.getTitleTemplate(), placeholders);
+                String body = applyPlaceholders(template.getBodyTemplate(), placeholders);
 
-            if (template.getChannel() == NotificationChannel.EMAIL) {
-                // A real email send, not an in-app row — an EMAIL-channel template is a distinct
-                // message with its own copy, not something that should also silently appear in
-                // the in-app bell list the way the old (never-actually-sending) code did.
-                sendEmailNotification(userId, title, body);
-            } else {
-                Notification n = new Notification();
-                n.setUserId(userId);
-                n.setEventType(eventType);
-                n.setTitle(title);
-                n.setBody(body);
-                n.setChannel(template.getChannel());
-                n.setReferenceType(referenceType);
-                n.setReferenceId(referenceId);
-                n.setSentAt(Instant.now());
-                notificationRepo.save(n);
+                if (template.getChannel() == NotificationChannel.EMAIL) {
+                    // A real email send, not an in-app row — an EMAIL-channel template is a distinct
+                    // message with its own copy, not something that should also silently appear in
+                    // the in-app bell list the way the old (never-actually-sending) code did.
+                    sendEmailNotification(userId, title, body);
+                } else {
+                    Notification n = new Notification();
+                    n.setUserId(userId);
+                    n.setEventType(eventType);
+                    n.setTitle(title);
+                    n.setBody(body);
+                    n.setChannel(template.getChannel());
+                    n.setReferenceType(referenceType);
+                    n.setReferenceId(referenceId);
+                    n.setSentAt(Instant.now());
+                    notificationRepo.save(n);
+                }
+            } catch (Exception ex) {
+                // Per-template isolation: templates are returned in no guaranteed order, and
+                // channels are delivered independently (e.g. a real, un-undoable email send
+                // alongside a DB write). A failure delivering one channel's template must not
+                // abort or roll back delivery of another channel's template for this same event.
+                log.error("Failed to deliver notification for user {} eventType {} channel {}: {}",
+                    userId, eventType, template.getChannel(), ex.getMessage(), ex);
             }
         }
     }
@@ -93,9 +102,12 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     private void sendEmailNotification(UUID userId, String subject, String body) {
-        userRepository.findById(userId).ifPresent(user ->
-            resendEmailService.sendEmail(new EmailRequest(user.getEmail(), subject, body))
-        );
+        Optional<User> user = userRepository.findById(userId);
+        if (user.isEmpty()) {
+            log.debug("User {} not found; skipping email notification.", userId);
+            return;
+        }
+        resendEmailService.sendEmail(new EmailRequest(user.get().getEmail(), subject, body));
     }
 
     @Override

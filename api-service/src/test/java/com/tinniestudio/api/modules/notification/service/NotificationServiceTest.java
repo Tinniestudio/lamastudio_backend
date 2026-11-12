@@ -155,6 +155,37 @@ class NotificationServiceTest {
     }
 
     @Test
+    void sendNotification_skipsEmail_whenUserNotFound() {
+        UUID userId = UUID.randomUUID();
+        when(templateRepo.findAllByEventTypeAndIsActiveTrue(NotificationEventType.CONTENT_PROCESSED))
+            .thenReturn(List.of(emailTemplate()));
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
+
+        service.sendNotification(userId, NotificationEventType.CONTENT_PROCESSED, "CONTENT", UUID.randomUUID());
+
+        verifyNoInteractions(resendEmailService);
+        verify(notificationRepo, never()).save(any());
+    }
+
+    @Test
+    void sendNotification_isolatesTemplateFailure_soOtherChannelStillDelivers() {
+        UUID userId = UUID.randomUUID();
+        User user = new User();
+        user.setId(userId);
+        user.setEmail("viewer@example.com");
+
+        when(templateRepo.findAllByEventTypeAndIsActiveTrue(NotificationEventType.CONTENT_PROCESSED))
+            .thenReturn(List.of(inAppTemplate(), emailTemplate()));
+        when(notificationRepo.save(any())).thenThrow(new RuntimeException("db write failed"));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        service.sendNotification(userId, NotificationEventType.CONTENT_PROCESSED, "CONTENT", UUID.randomUUID());
+
+        verify(notificationRepo).save(any());
+        verify(resendEmailService).sendEmail(any());
+    }
+
+    @Test
     void sendNotification_deliversBothChannels_whenBothTemplatesActiveAndBothEnabled() {
         UUID userId = UUID.randomUUID();
         User user = new User();
