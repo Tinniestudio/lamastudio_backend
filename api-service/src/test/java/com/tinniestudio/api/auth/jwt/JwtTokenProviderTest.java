@@ -115,6 +115,17 @@ class JwtTokenProviderTest {
         assertThat(provider.validateDeviceLimitResolutionToken(accessToken)).isFalse();
     }
 
+    @Test
+    @DisplayName("validateAccessToken rejects a device-limit resolution token (purpose-claim confusion)")
+    void resolutionToken_isNotAValidAccessToken() {
+        AppProperties props = buildProps(900_000L, 604_800_000L);
+        JwtTokenProvider provider = new JwtTokenProvider(props);
+
+        String resolutionToken = provider.generateDeviceLimitResolutionToken(UUID.randomUUID());
+
+        assertThat(provider.validateAccessToken(resolutionToken)).isFalse();
+    }
+
     private User buildUser() {
         User user = new User();
         user.setId(UUID.randomUUID());

@@ -56,7 +56,19 @@ public class JwtTokenProvider extends AbstractJwtTokenProvider {
     }
 
     public boolean validateAccessToken(String token) {
-        return validateToken(token, getAccessTokenKey(), "user access");
+        if (!validateToken(token, getAccessTokenKey(), "user access")) {
+            return false;
+        }
+        try {
+            // A real access token never carries a "purpose" claim — only single-purpose tokens
+            // like the device-limit resolution token do. Without this check, a resolution token
+            // (signed with this same key) would pass as a fully valid access token and
+            // authenticate the bearer with no session-revocation check at all, since it also
+            // carries no session id for JwtAuthenticationFilter to validate against.
+            return parseAccessToken(token).get(CLAIM_PURPOSE) == null;
+        } catch (Exception ex) {
+            return false;
+        }
     }
 
     // ── Refresh Token ─────────────────────────────────────────────────────────
