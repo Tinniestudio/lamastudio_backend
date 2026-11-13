@@ -58,7 +58,7 @@ public class UserProfileServiceImpl implements UserProfileService {
 
     @Override
     @Transactional(readOnly = true)
-    public UserProfileResponse getProfile(UUID userId) {
+    public UserProfileResponse getProfile(UUID userId, UUID currentSessionId) {
         User user = loadUser(userId);
         UserSubscription sub = userSubscriptionRepository
                 .findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE)
@@ -67,7 +67,7 @@ public class UserProfileServiceImpl implements UserProfileService {
         boolean canWatch = capabilityService.canWatch(userId);
         UserProfile profile = userProfileRepository.findByUserId(userId)
             .orElseGet(() -> createEmptyProfile(user));
-        return UserProfileResponse.from(user, profile, sub, sessions, canWatch);
+        return UserProfileResponse.from(user, profile, sub, sessions, currentSessionId, canWatch);
     }
 
     @Override
@@ -93,7 +93,12 @@ public class UserProfileServiceImpl implements UserProfileService {
 
         userRepository.save(user);
         userProfileRepository.save(profile);
-        return UserProfileResponse.from(user, profile, null, null, capabilityService.canWatch(userId));
+
+        UserSubscription sub = userSubscriptionRepository
+                .findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE)
+                .orElse(null);
+        List<SessionDto> sessions = sessionService.getActiveSessions(userId);
+        return UserProfileResponse.from(user, profile, sub, sessions, null, capabilityService.canWatch(userId));
     }
 
     @Override

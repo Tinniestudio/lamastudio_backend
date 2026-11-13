@@ -27,8 +27,9 @@ public class UserProfileController {
     @Operation(summary = "Get current user's full profile")
     @GetMapping("/me")
     public ResponseEntity<UserProfileResponse> getProfile(
-            @AuthenticationPrincipal UserDetails principal) {
-        return ResponseEntity.ok(userProfileService.getProfile(CurrentUser.id(principal)));
+            @AuthenticationPrincipal UserDetails principal,
+            HttpServletRequest httpRequest) {
+        return ResponseEntity.ok(userProfileService.getProfile(CurrentUser.id(principal), sessionId(httpRequest)));
     }
 
     @Operation(summary = "Partially update current user's profile")

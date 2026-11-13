@@ -82,7 +82,7 @@ class UserProfileServiceTest {
             when(sessionService.getActiveSessions(userId)).thenReturn(List.of());
             when(capabilityService.canWatch(userId)).thenReturn(false);
 
-            UserProfileResponse response = service.getProfile(userId);
+            UserProfileResponse response = service.getProfile(userId, null);
 
             assertThat(response.getEmail()).isEqualTo("test@example.com");
             assertThat(response.getBio()).isEqualTo("A movie lover");
@@ -99,7 +99,7 @@ class UserProfileServiceTest {
             when(sessionService.getActiveSessions(userId)).thenReturn(List.of());
             when(capabilityService.canWatch(userId)).thenReturn(false);
 
-            UserProfileResponse response = service.getProfile(userId);
+            UserProfileResponse response = service.getProfile(userId, null);
 
             assertThat(response.getBio()).isNull();
             assertThat(response.isNotificationEmail()).isTrue();
@@ -109,8 +109,43 @@ class UserProfileServiceTest {
         @DisplayName("unknown userId throws ResourceNotFoundException")
         void unknownUser_throws() {
             when(userRepository.findById(userId)).thenReturn(Optional.empty());
-            assertThatThrownBy(() -> service.getProfile(userId))
+            assertThatThrownBy(() -> service.getProfile(userId, null))
                 .isInstanceOf(ResourceNotFoundException.class);
+        }
+
+        @Test
+        @DisplayName("devices is populated with max/active/sessions and marks the caller's current session")
+        void populatesDevicesAndMarksCurrentSession() {
+            UUID currentSessionId = UUID.randomUUID();
+            UUID otherSessionId = UUID.randomUUID();
+
+            com.tinniestudio.api.shared.entity.UserSubscription sub =
+                    new com.tinniestudio.api.shared.entity.UserSubscription();
+            sub.setMaxDevices(3);
+
+            com.tinniestudio.api.modules.auth.user.dto.SessionDto currentDevice =
+                    com.tinniestudio.api.modules.auth.user.dto.SessionDto.builder()
+                            .sessionId(currentSessionId).deviceName("Chrome on Windows").build();
+            com.tinniestudio.api.modules.auth.user.dto.SessionDto otherDevice =
+                    com.tinniestudio.api.modules.auth.user.dto.SessionDto.builder()
+                            .sessionId(otherSessionId).deviceName("Safari on iOS").build();
+
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.empty());
+            when(userSubscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+                    .thenReturn(Optional.of(sub));
+            when(sessionService.getActiveSessions(userId)).thenReturn(List.of(currentDevice, otherDevice));
+            when(capabilityService.canWatch(userId)).thenReturn(true);
+
+            UserProfileResponse response = service.getProfile(userId, currentSessionId);
+
+            assertThat(response.getDevices().getMax()).isEqualTo(3);
+            assertThat(response.getDevices().getActive()).isEqualTo(2);
+            assertThat(response.getDevices().getSessions()).hasSize(2);
+            assertThat(response.getDevices().getSessions().stream()
+                    .filter(com.tinniestudio.api.modules.auth.user.dto.SessionDto::isCurrent)
+                    .map(com.tinniestudio.api.modules.auth.user.dto.SessionDto::getSessionId))
+                    .containsExactly(currentSessionId);
         }
     }
 
