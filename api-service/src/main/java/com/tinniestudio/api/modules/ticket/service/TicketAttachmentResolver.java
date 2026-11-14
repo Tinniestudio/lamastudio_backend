@@ -53,7 +53,7 @@ public class TicketAttachmentResolver {
      * @param ownerId the id whose own {@code tickets/{ownerId}/} prefix {@code storageKey} must
      * fall under. For the user-facing path this is the caller's own id; for the admin-facing
      * path (no separate admin upload flow exists) this is the ticket's owning user id — see
-     * {@code AdminTicketServiceImpl.replyToTicket} in Task 7 Step 7.
+     * {@code AdminTicketServiceImpl.replyToTicket}.
      * @return the final CDN URL if {@code storageKey} is non-blank and the upload really landed
      * in storage, or {@code null} if no key was provided (no attachment on this message).
      * @throws BadRequestException if the key is outside {@code ownerId}'s own prefix, contains a
