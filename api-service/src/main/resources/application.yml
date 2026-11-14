@@ -88,6 +88,9 @@ app:
     base-url: ${RESEND_BASE_URL:https://api.resend.com}
     from-email: ${RESEND_FROM_EMAIL:no-reply@yourdomain.com}
 
+  support:
+    alert-recipient-email: ${SUPPORT_ALERT_RECIPIENT_EMAIL:}
+
   cors:
     allowed-origins:
       - ${FRONTEND_URL:http://localhost:3000}

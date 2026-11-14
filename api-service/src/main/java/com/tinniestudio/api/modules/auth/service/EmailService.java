@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.web.util.HtmlUtils;
 
 @Slf4j
 @Service
@@ -100,6 +101,25 @@ public class EmailService {
             + "<p>Your <strong>" + planName + "</strong> subscription expires on <strong>" + endDate + "</strong>.</p>"
             + "<p>Renew now to keep uninterrupted access.</p>";
         resendEmailService.sendEmail(new EmailRequest(to, "Your subscription expires soon", html));
+    }
+
+    @Async
+    public void sendNewTicketAlert(String ticketNumber, String subject, String submitterEmail) {
+        String recipient = appProperties.getSupport().getAlertRecipientEmail();
+        if (!StringUtils.hasText(recipient)) {
+            log.warn("No support alert recipient configured (app.support.alert-recipient-email) — " +
+                    "skipping new ticket alert for {}", ticketNumber);
+            return;
+        }
+        // subject is free-text typed by any user, and this email lands in an internal support
+        // inbox — unlike every other interpolated value in this file (which is either the
+        // recipient's own data or server-controlled), this is genuine cross-user input reaching
+        // a trusted recipient, so it must be HTML-escaped before interpolation.
+        String html = "<p>A new support ticket was submitted.</p>"
+                + "<p><strong>Ticket:</strong> " + HtmlUtils.htmlEscape(ticketNumber) + "</p>"
+                + "<p><strong>Subject:</strong> " + HtmlUtils.htmlEscape(subject) + "</p>"
+                + "<p><strong>From:</strong> " + HtmlUtils.htmlEscape(submitterEmail) + "</p>";
+        resendEmailService.sendEmail(new EmailRequest(recipient, "New support ticket: " + ticketNumber, html));
     }
 
     private String resolveName(String name) {

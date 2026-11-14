@@ -50,6 +50,7 @@ public class NotificationConsumer {
             case "CONTENT_PUBLISHED" -> handleBroadcast(message, NotificationEventType.CONTENT_PUBLISHED);
             case "EPISODE_PUBLISHED" -> handleBroadcast(message, NotificationEventType.EPISODE_PUBLISHED);
             case "DEVICE_LOGGED_OUT" -> handleDeviceLoggedOut(message);
+            case "TICKET_REPLIED" -> handleTicketReplied(message);
             // A message with no "type" key (type == null here) must not reach a plain switch on a
             // String — that throws NullPointerException, and with no DLX configured on this queue
             // and AcknowledgeMode.AUTO, an uncaught exception here means an immediate tight-loop
@@ -139,6 +140,26 @@ public class NotificationConsumer {
             );
         } catch (Exception e) {
             log.error("Error processing DEVICE_LOGGED_OUT notification: {}", e.getMessage(), e);
+        }
+    }
+
+    // Single-target, same style as handleDeviceLoggedOut — the ticket reply itself is the only
+    // event that can ever fire this for a given (ticketId, replyAt) occurrence, so no dedup lock
+    // is needed.
+    private void handleTicketReplied(Map<String, Object> message) {
+        try {
+            UUID userId = UUID.fromString((String) message.get("userId"));
+            UUID ticketId = UUID.fromString((String) message.get("ticketId"));
+            String subject = (String) message.get("subject");
+            notificationService.sendNotification(
+                    userId,
+                    NotificationEventType.TICKET_REPLIED,
+                    "TICKET",
+                    ticketId,
+                    Map.of("subject", subject)
+            );
+        } catch (Exception e) {
+            log.error("Error processing TICKET_REPLIED notification: {}", e.getMessage(), e);
         }
     }
 

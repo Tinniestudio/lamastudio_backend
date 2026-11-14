@@ -221,7 +221,8 @@ public final class DomainEnums {
         ACCOUNT_BANNED,
         CONTENT_PUBLISHED,
         EPISODE_PUBLISHED,
-        DEVICE_LOGGED_OUT
+        DEVICE_LOGGED_OUT,
+        TICKET_REPLIED
     }
 
     public enum NotificationChannel {

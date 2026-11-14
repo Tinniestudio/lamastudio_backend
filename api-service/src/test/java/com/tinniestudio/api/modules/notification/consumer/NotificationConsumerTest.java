@@ -8,6 +8,7 @@ import com.tinniestudio.api.modules.user.repository.UserRepository;
 import com.tinniestudio.api.shared.cache.CacheService;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.VideoAsset;
+import com.tinniestudio.api.shared.entity.DomainEnums;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -362,5 +363,29 @@ class NotificationConsumerTest {
                 eq(userId),
                 eq(Map.of("deviceName", "a device"))
         );
+    }
+
+    @Test
+    @DisplayName("TICKET_REPLIED dispatches straight to the ticket's owner, no broadcast fan-out, no dedup lock")
+    void ticketReplied_sendsDirectlyToTargetUser() {
+        UUID userId = UUID.randomUUID();
+        UUID ticketId = UUID.randomUUID();
+        Map<String, Object> message = Map.of(
+                "type", "TICKET_REPLIED",
+                "userId", userId.toString(),
+                "ticketId", ticketId.toString(),
+                "subject", "Can't play episode 3"
+        );
+
+        consumer.handleNotificationEvent(message);
+
+        verify(notificationService).sendNotification(
+                eq(userId),
+                eq(DomainEnums.NotificationEventType.TICKET_REPLIED),
+                eq("TICKET"),
+                eq(ticketId),
+                eq(Map.of("subject", "Can't play episode 3"))
+        );
+        verify(cacheService, never()).setIfAbsent(any(), any(), any());
     }
 }
