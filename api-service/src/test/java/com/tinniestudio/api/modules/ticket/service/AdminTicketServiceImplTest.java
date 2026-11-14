@@ -74,6 +74,60 @@ class AdminTicketServiceImplTest {
     }
 
     @Test
+    @DisplayName("getTicket on a known ticket returns its full thread with the submitter's email")
+    void getTicket_knownId_returnsDetailWithSubmitterEmail() {
+        UUID userId = UUID.randomUUID();
+        SupportTicket ticket = savedTicket(userId, TicketStatus.OPEN);
+        User user = new User();
+        user.setId(userId);
+        user.setEmail("jane@example.com");
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        when(messageRepository.findByTicketIdOrderByCreatedAtAsc(ticket.getId())).thenReturn(List.of());
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        TicketDetailResponse response = service.getTicket(ticket.getId());
+
+        assertThat(response.ticketNumber()).isEqualTo("TKT-ABC123");
+        assertThat(response.submitterEmail()).isEqualTo("jane@example.com");
+    }
+
+    @Test
+    @DisplayName("listTickets with no status filter delegates to findAllByOrderByCreatedAtDesc and batches submitter emails")
+    void listTickets_noFilter_returnsPageWithSubmitterEmails() {
+        UUID userId = UUID.randomUUID();
+        SupportTicket ticket = savedTicket(userId, TicketStatus.OPEN);
+        User user = new User();
+        user.setId(userId);
+        user.setEmail("jane@example.com");
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 10);
+        when(ticketRepository.findAllByOrderByCreatedAtDesc(pageable))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(ticket)));
+        when(userRepository.findAllById(List.of(userId))).thenReturn(List.of(user));
+
+        var page = service.listTickets(null, pageable);
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().get(0).submitterEmail()).isEqualTo("jane@example.com");
+        verify(ticketRepository, never()).findByStatusOrderByCreatedAtDesc(any(), any());
+    }
+
+    @Test
+    @DisplayName("listTickets with a status filter delegates to findByStatusOrderByCreatedAtDesc")
+    void listTickets_withStatusFilter_delegatesToFilteredQuery() {
+        UUID userId = UUID.randomUUID();
+        SupportTicket ticket = savedTicket(userId, TicketStatus.RESOLVED);
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 10);
+        when(ticketRepository.findByStatusOrderByCreatedAtDesc(TicketStatus.RESOLVED, pageable))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(ticket)));
+        when(userRepository.findAllById(List.of(userId))).thenReturn(List.of());
+
+        var page = service.listTickets(TicketStatus.RESOLVED, pageable);
+
+        assertThat(page.getContent()).hasSize(1);
+        verify(ticketRepository, never()).findAllByOrderByCreatedAtDesc(any());
+    }
+
+    @Test
     @DisplayName("replyToTicket on an OPEN ticket transitions it to IN_PROGRESS and publishes TICKET_REPLIED")
     void replyToTicket_openTicket_transitionsAndPublishesNotification() {
         UUID userId = UUID.randomUUID();
@@ -195,6 +249,21 @@ class AdminTicketServiceImplTest {
         TicketResponse response = service.updateStatus(ticket.getId(), request);
 
         assertThat(response.status()).isEqualTo("RESOLVED");
+    }
+
+    @Test
+    @DisplayName("updateStatus on an unknown id throws ResourceNotFoundException")
+    void updateStatus_unknownId_throwsNotFound() {
+        UUID ticketId = UUID.randomUUID();
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.empty());
+
+        UpdateTicketStatusRequest request = new UpdateTicketStatusRequest();
+        request.setStatus(TicketStatus.RESOLVED);
+
+        assertThatThrownBy(() -> service.updateStatus(ticketId, request))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(ticketRepository, never()).save(any());
     }
 
     @Test

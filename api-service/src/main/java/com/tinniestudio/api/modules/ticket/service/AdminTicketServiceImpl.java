@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -49,7 +50,12 @@ public class AdminTicketServiceImpl implements AdminTicketService {
         Page<SupportTicket> tickets = status != null
                 ? ticketRepository.findByStatusOrderByCreatedAtDesc(status, pageable)
                 : ticketRepository.findAllByOrderByCreatedAtDesc(pageable);
-        return tickets.map(t -> TicketResponse.from(t, submitterEmail(t.getUserId())));
+        // Batched into one query instead of submitterEmail()'s per-row findById — this path
+        // renders a whole page of tickets at once, so a per-row lookup would mean N extra
+        // queries per page load; the single-ticket paths below (getTicket/replyToTicket/
+        // updateStatus) don't have that fan-out, so they keep using submitterEmail(UUID).
+        Map<UUID, String> emailsByUserId = submitterEmails(tickets.getContent());
+        return tickets.map(t -> TicketResponse.from(t, emailsByUserId.get(t.getUserId())));
     }
 
     @Override
@@ -115,6 +121,12 @@ public class AdminTicketServiceImpl implements AdminTicketService {
 
     private String submitterEmail(UUID userId) {
         return userRepository.findById(userId).map(User::getEmail).orElse(null);
+    }
+
+    private Map<UUID, String> submitterEmails(List<SupportTicket> tickets) {
+        List<UUID> userIds = tickets.stream().map(SupportTicket::getUserId).distinct().toList();
+        return userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, User::getEmail));
     }
 
     // Mirrors TicketServiceImpl's resolveAttachmentUrl: without this ownership-scoping check, an
