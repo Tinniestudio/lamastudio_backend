@@ -15,7 +15,6 @@ import com.tinniestudio.api.shared.entity.User;
 import com.tinniestudio.api.shared.exception.BadRequestException;
 import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
 import com.tinniestudio.api.shared.queue.RabbitConfig;
-import com.tinniestudio.api.shared.storage.StorageService;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,14 +43,14 @@ class AdminTicketServiceImplTest {
     @Mock private TicketMessageRepository messageRepository;
     @Mock private UserRepository userRepository;
     @Mock private RabbitTemplate rabbitTemplate;
-    @Mock private StorageService storageService;
+    @Mock private TicketAttachmentResolver attachmentResolver;
 
     private AdminTicketServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new AdminTicketServiceImpl(
-                ticketRepository, messageRepository, userRepository, rabbitTemplate, storageService);
+                ticketRepository, messageRepository, userRepository, rabbitTemplate, attachmentResolver);
     }
 
     private SupportTicket savedTicket(UUID userId, TicketStatus status) {
@@ -191,48 +190,6 @@ class AdminTicketServiceImplTest {
 
         verify(messageRepository, never()).save(any());
         verify(rabbitTemplate, never()).convertAndSend(anyString(), any(Map.class));
-    }
-
-    @Test
-    @DisplayName("replyToTicket rejects an attachment key outside the ticket owner's own tickets/{userId}/ prefix")
-    void replyToTicket_attachmentKeyNotUnderTicketOwner_rejected() {
-        UUID userId = UUID.randomUUID();
-        UUID adminId = UUID.randomUUID();
-        SupportTicket ticket = savedTicket(userId, TicketStatus.OPEN);
-        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
-
-        ReplyTicketRequest request = new ReplyTicketRequest();
-        request.setBody("Here's a doc.");
-        request.setAttachmentStorageKey("tickets/" + UUID.randomUUID() + "/receipt.png");
-
-        assertThatThrownBy(() -> service.replyToTicket(adminId, ticket.getId(), request))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Invalid attachment");
-
-        verify(messageRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("replyToTicket accepts an attachment key under the ticket owner's own prefix")
-    void replyToTicket_attachmentKeyUnderTicketOwner_accepted() {
-        UUID userId = UUID.randomUUID();
-        UUID adminId = UUID.randomUUID();
-        SupportTicket ticket = savedTicket(userId, TicketStatus.OPEN);
-        String ownKey = "tickets/" + userId + "/receipt.png";
-        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
-        when(ticketRepository.save(any(SupportTicket.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(messageRepository.findByTicketIdOrderByCreatedAtAsc(ticket.getId())).thenReturn(List.of());
-        when(storageService.objectExists(ownKey)).thenReturn(true);
-
-        ReplyTicketRequest request = new ReplyTicketRequest();
-        request.setBody("Here's a doc.");
-        request.setAttachmentStorageKey(ownKey);
-
-        service.replyToTicket(adminId, ticket.getId(), request);
-
-        ArgumentCaptor<TicketMessage> messageCaptor = ArgumentCaptor.forClass(TicketMessage.class);
-        verify(messageRepository).save(messageCaptor.capture());
-        assertThat(messageCaptor.getValue().getAttachmentUrl()).isEqualTo(ownKey);
     }
 
     @Test

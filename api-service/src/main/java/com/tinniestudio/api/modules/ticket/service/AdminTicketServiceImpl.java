@@ -15,7 +15,6 @@ import com.tinniestudio.api.shared.entity.User;
 import com.tinniestudio.api.shared.exception.BadRequestException;
 import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
 import com.tinniestudio.api.shared.queue.RabbitConfig;
-import com.tinniestudio.api.shared.storage.StorageService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,7 +41,7 @@ public class AdminTicketServiceImpl implements AdminTicketService {
     private final TicketMessageRepository messageRepository;
     private final UserRepository userRepository;
     private final RabbitTemplate rabbitTemplate;
-    private final StorageService storageService;
+    private final TicketAttachmentResolver attachmentResolver;
 
     @Override
     @Transactional(readOnly = true)
@@ -88,7 +87,7 @@ public class AdminTicketServiceImpl implements AdminTicketService {
         message.setSenderType(TicketSenderType.ADMIN);
         message.setSenderId(adminId);
         message.setBody(request.getBody());
-        message.setAttachmentUrl(resolveAttachmentUrl(ticket.getUserId(), request.getAttachmentStorageKey()));
+        message.setAttachmentUrl(attachmentResolver.resolveAttachmentUrl(ticket.getUserId(), request.getAttachmentStorageKey()));
         messageRepository.save(message);
 
         publishTicketRepliedNotification(ticket);
@@ -127,28 +126,6 @@ public class AdminTicketServiceImpl implements AdminTicketService {
         List<UUID> userIds = tickets.stream().map(SupportTicket::getUserId).distinct().toList();
         return userRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(User::getId, User::getEmail));
-    }
-
-    // Mirrors TicketServiceImpl's resolveAttachmentUrl: without this ownership-scoping check, an
-    // admin reply could reference ANY existing storage key (e.g. another user's avatar) and have
-    // it falsely accepted as this ticket's attachment. There's no separate admin upload flow yet
-    // (admin-web's reply UI never calls a presign endpoint), so the only identity a key can
-    // legitimately be scoped under here is the ticket's own owner — an admin can reference an
-    // attachment the end user already uploaded, not an arbitrary other object. Task 7 replaces
-    // this with the shared TicketAttachmentResolver, which takes the same ownerId/storageKey
-    // shape, so this is a stopgap, not a design this will need to be rewritten around.
-    private String resolveAttachmentUrl(UUID ownerId, String storageKey) {
-        if (storageKey == null || storageKey.isBlank()) {
-            return null;
-        }
-        String requiredPrefix = "tickets/" + ownerId + "/";
-        if (storageKey.contains("..") || !storageKey.startsWith(requiredPrefix)) {
-            throw new BadRequestException("Invalid attachment reference.");
-        }
-        if (!storageService.objectExists(storageKey)) {
-            throw new BadRequestException("Upload not found in storage. Please upload the file before submitting.");
-        }
-        return storageKey;
     }
 
     // Best-effort, same non-critical-failure handling as every other broadcast/publish helper in

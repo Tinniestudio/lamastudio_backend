@@ -2,6 +2,8 @@ package com.tinniestudio.api.modules.ticket.controller;
 
 import com.tinniestudio.api.modules.ticket.dto.CreateTicketRequest;
 import com.tinniestudio.api.modules.ticket.dto.ReplyTicketRequest;
+import com.tinniestudio.api.modules.ticket.dto.TicketAttachmentUploadRequest;
+import com.tinniestudio.api.modules.ticket.dto.TicketAttachmentUploadResponse;
 import com.tinniestudio.api.modules.ticket.dto.TicketDetailResponse;
 import com.tinniestudio.api.modules.ticket.dto.TicketResponse;
 import com.tinniestudio.api.modules.ticket.service.TicketService;
@@ -66,5 +68,14 @@ public class TicketController {
             @Valid @RequestBody ReplyTicketRequest request) {
         UUID userId = CurrentUser.id(principal);
         return ResponseEntity.ok(ticketService.replyToTicket(userId, ticketId, request));
+    }
+
+    @Operation(summary = "Get a presigned URL to upload a ticket/message attachment")
+    @PostMapping("/attachments/presign")
+    public ResponseEntity<TicketAttachmentUploadResponse> presignAttachment(
+            @AuthenticationPrincipal UserDetails principal,
+            @Valid @RequestBody TicketAttachmentUploadRequest request) {
+        UUID userId = CurrentUser.id(principal);
+        return ResponseEntity.ok(ticketService.initiateAttachmentUpload(userId, request));
     }
 }

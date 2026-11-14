@@ -2,6 +2,8 @@ package com.tinniestudio.api.modules.ticket.service;
 
 import com.tinniestudio.api.modules.ticket.dto.CreateTicketRequest;
 import com.tinniestudio.api.modules.ticket.dto.ReplyTicketRequest;
+import com.tinniestudio.api.modules.ticket.dto.TicketAttachmentUploadRequest;
+import com.tinniestudio.api.modules.ticket.dto.TicketAttachmentUploadResponse;
 import com.tinniestudio.api.modules.ticket.dto.TicketDetailResponse;
 import com.tinniestudio.api.modules.ticket.dto.TicketResponse;
 import com.tinniestudio.api.modules.ticket.repository.SupportTicketRepository;
@@ -16,7 +18,6 @@ import com.tinniestudio.api.shared.entity.TicketMessage;
 import com.tinniestudio.api.shared.entity.User;
 import com.tinniestudio.api.shared.exception.BadRequestException;
 import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
-import com.tinniestudio.api.shared.storage.StorageService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,9 +37,9 @@ public class TicketServiceImpl implements TicketService {
     private final SupportTicketRepository ticketRepository;
     private final TicketMessageRepository messageRepository;
     private final TicketNumberGenerator ticketNumberGenerator;
-    private final StorageService storageService;
     private final EmailService emailService;
     private final UserRepository userRepository;
+    private final TicketAttachmentResolver attachmentResolver;
 
     @Override
     @Transactional
@@ -46,7 +47,7 @@ public class TicketServiceImpl implements TicketService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        String attachmentUrl = resolveAttachmentUrl(userId, request.getAttachmentStorageKey());
+        String attachmentUrl = attachmentResolver.resolveAttachmentUrl(userId, request.getAttachmentStorageKey());
 
         SupportTicket ticket = new SupportTicket();
         ticket.setUserId(userId);
@@ -102,7 +103,7 @@ public class TicketServiceImpl implements TicketService {
             ticketRepository.save(ticket);
         }
 
-        String attachmentUrl = resolveAttachmentUrl(userId, request.getAttachmentStorageKey());
+        String attachmentUrl = attachmentResolver.resolveAttachmentUrl(userId, request.getAttachmentStorageKey());
 
         TicketMessage message = new TicketMessage();
         message.setTicketId(ticketId);
@@ -116,31 +117,15 @@ public class TicketServiceImpl implements TicketService {
         return TicketDetailResponse.from(ticket, messages);
     }
 
+    @Override
+    public TicketAttachmentUploadResponse initiateAttachmentUpload(UUID userId, TicketAttachmentUploadRequest request) {
+        return attachmentResolver.initiateUpload(request, userId);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private SupportTicket findOwnTicket(UUID userId, UUID ticketId) {
         return ticketRepository.findByIdAndUserId(ticketId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket not found"));
-    }
-
-    private String resolveAttachmentUrl(UUID userId, String storageKey) {
-        if (storageKey == null || storageKey.isBlank()) {
-            return null;
-        }
-        // Without this ownership-scoping check, any authenticated user could pass ANY storage
-        // key that happens to exist in the bucket (e.g. another user's avatar) and have it
-        // falsely accepted as their own ticket attachment — objectExists() alone only proves
-        // *something* is there, not that this caller is the one who put it there. The
-        // "tickets/{userId}/" prefix matches exactly what the attachment presign flow issues
-        // (see TicketAttachmentResolver), so a key outside that prefix was never legitimately
-        // handed to this user.
-        String requiredPrefix = "tickets/" + userId + "/";
-        if (storageKey.contains("..") || !storageKey.startsWith(requiredPrefix)) {
-            throw new BadRequestException("Invalid attachment reference.");
-        }
-        if (!storageService.objectExists(storageKey)) {
-            throw new BadRequestException("Upload not found in storage. Please upload the file before submitting.");
-        }
-        return storageKey;
     }
 }
