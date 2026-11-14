@@ -150,7 +150,11 @@ public class NotificationConsumer {
         try {
             UUID userId = UUID.fromString((String) message.get("userId"));
             UUID ticketId = UUID.fromString((String) message.get("ticketId"));
-            String subject = (String) message.get("subject");
+            // getOrDefault, not a bare get: Map.of() below throws NullPointerException on a null
+            // value, which this method's catch would swallow as a generic error — silently
+            // dropping the user's reply notification with no retry, same failure mode
+            // handleDeviceLoggedOut's deviceName fallback exists to avoid.
+            String subject = (String) message.getOrDefault("subject", "your ticket");
             notificationService.sendNotification(
                     userId,
                     NotificationEventType.TICKET_REPLIED,

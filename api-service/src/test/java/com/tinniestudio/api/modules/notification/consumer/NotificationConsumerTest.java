@@ -388,4 +388,26 @@ class NotificationConsumerTest {
         );
         verify(cacheService, never()).setIfAbsent(any(), any(), any());
     }
+
+    @Test
+    @DisplayName("TICKET_REPLIED falls back to a generic subject when the message is missing one")
+    void ticketReplied_missingSubject_fallsBackToGeneric() {
+        UUID userId = UUID.randomUUID();
+        UUID ticketId = UUID.randomUUID();
+        Map<String, Object> message = Map.of(
+                "type", "TICKET_REPLIED",
+                "userId", userId.toString(),
+                "ticketId", ticketId.toString()
+        );
+
+        consumer.handleNotificationEvent(message);
+
+        verify(notificationService).sendNotification(
+                eq(userId),
+                eq(DomainEnums.NotificationEventType.TICKET_REPLIED),
+                eq("TICKET"),
+                eq(ticketId),
+                eq(Map.of("subject", "your ticket"))
+        );
+    }
 }
