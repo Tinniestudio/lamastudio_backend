@@ -59,7 +59,7 @@ class SupportTicketRepositoryTest {
         SupportTicket ticket = new SupportTicket();
         ticket.setUserId(userId);
         ticket.setSubject("Can't play episode 3");
-        ticket.setTicketNumber("TKT-ABC123");
+        ticket.setTicketNumber(uniqueTicketNumber());
         ticket = ticketRepository.saveAndFlush(ticket);
 
         assertThat(ticket.getStatus()).isEqualTo(TicketStatus.OPEN);
@@ -86,29 +86,32 @@ class SupportTicketRepositoryTest {
 
     @Test
     void existsByTicketNumber_trueOnlyAfterSave() {
-        assertThat(ticketRepository.existsByTicketNumber("TKT-ZZZZZZ")).isFalse();
+        String ticketNumber = uniqueTicketNumber();
+        assertThat(ticketRepository.existsByTicketNumber(ticketNumber)).isFalse();
 
         SupportTicket ticket = new SupportTicket();
         ticket.setUserId(UUID.randomUUID());
         ticket.setSubject("Billing question");
-        ticket.setTicketNumber("TKT-ZZZZZZ");
+        ticket.setTicketNumber(ticketNumber);
         ticketRepository.save(ticket);
 
-        assertThat(ticketRepository.existsByTicketNumber("TKT-ZZZZZZ")).isTrue();
+        assertThat(ticketRepository.existsByTicketNumber(ticketNumber)).isTrue();
     }
 
     @Test
     void findByStatus_onlyReturnsMatchingStatus() {
+        String openTicketNumber = uniqueTicketNumber();
+
         SupportTicket open = new SupportTicket();
         open.setUserId(UUID.randomUUID());
         open.setSubject("Open one");
-        open.setTicketNumber("TKT-OPEN01");
+        open.setTicketNumber(openTicketNumber);
         ticketRepository.save(open);
 
         SupportTicket resolved = new SupportTicket();
         resolved.setUserId(UUID.randomUUID());
         resolved.setSubject("Resolved one");
-        resolved.setTicketNumber("TKT-RSLV01");
+        resolved.setTicketNumber(uniqueTicketNumber());
         resolved.setStatus(TicketStatus.RESOLVED);
         ticketRepository.save(resolved);
 
@@ -116,6 +119,13 @@ class SupportTicketRepositoryTest {
             .findByStatusOrderByCreatedAtDesc(TicketStatus.OPEN, PageRequest.of(0, 10))
             .getContent();
 
-        assertThat(openTickets).extracting(SupportTicket::getTicketNumber).containsExactly("TKT-OPEN01");
+        assertThat(openTickets).extracting(SupportTicket::getTicketNumber).containsExactly(openTicketNumber);
+    }
+
+    // ticket_number is VARCHAR(20) and unique — suffix with nanoTime (truncated to fit the
+    // column) rather than a fixed literal, matching this test family's own established
+    // convention (PartnerApplicationRepositoryTest.newUser(), CouponRepositoryTest.seedCoupon()).
+    private String uniqueTicketNumber() {
+        return "TKT-" + (System.nanoTime() % 1_000_000L);
     }
 }
