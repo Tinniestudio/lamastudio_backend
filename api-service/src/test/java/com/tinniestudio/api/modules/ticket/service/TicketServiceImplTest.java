@@ -185,4 +185,69 @@ class TicketServiceImplTest {
         assertThat(response.status()).isEqualTo("OPEN");
         verify(ticketRepository, never()).save(any());
     }
+
+    @Test
+    @DisplayName("createTicket rejects an attachment storage key outside the caller's own tickets/{userId}/ prefix")
+    void createTicket_attachmentKeyBelongsToAnotherUser_rejected() {
+        UUID userId = UUID.randomUUID();
+        CreateTicketRequest request = new CreateTicketRequest();
+        request.setSubject("Billing question");
+        request.setBody("Why was I charged twice?");
+        request.setAttachmentStorageKey("tickets/" + UUID.randomUUID() + "/receipt.png");
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(new User()));
+
+        assertThatThrownBy(() -> service.createTicket(userId, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Invalid attachment");
+
+        verify(ticketRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("createTicket rejects a path-traversal attempt in the attachment storage key")
+    void createTicket_attachmentKeyWithTraversal_rejected() {
+        UUID userId = UUID.randomUUID();
+        CreateTicketRequest request = new CreateTicketRequest();
+        request.setSubject("Billing question");
+        request.setBody("Why was I charged twice?");
+        request.setAttachmentStorageKey("tickets/" + userId + "/../../avatars/someone-else/photo.jpg");
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(new User()));
+
+        assertThatThrownBy(() -> service.createTicket(userId, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Invalid attachment");
+
+        verify(ticketRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("createTicket accepts an attachment storage key under the caller's own tickets/{userId}/ prefix")
+    void createTicket_attachmentKeyOwnedByCaller_accepted() {
+        UUID userId = UUID.randomUUID();
+        String ownKey = "tickets/" + userId + "/receipt.png";
+        CreateTicketRequest request = new CreateTicketRequest();
+        request.setSubject("Billing question");
+        request.setBody("Why was I charged twice?");
+        request.setAttachmentStorageKey(ownKey);
+
+        User user = new User();
+        user.setId(userId);
+        user.setEmail("jane@example.com");
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(storageService.objectExists(ownKey)).thenReturn(true);
+        when(ticketNumberGenerator.generate()).thenReturn("TKT-ABC123");
+        when(ticketRepository.save(any(SupportTicket.class))).thenAnswer(inv -> {
+            SupportTicket t = inv.getArgument(0);
+            org.springframework.test.util.ReflectionTestUtils.setField(t, "id", UUID.randomUUID());
+            return t;
+        });
+
+        service.createTicket(userId, request);
+
+        ArgumentCaptor<TicketMessage> messageCaptor = ArgumentCaptor.forClass(TicketMessage.class);
+        verify(messageRepository).save(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().getAttachmentUrl()).isEqualTo(ownKey);
+    }
 }
