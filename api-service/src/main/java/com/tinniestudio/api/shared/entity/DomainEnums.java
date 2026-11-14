@@ -228,4 +228,12 @@ public final class DomainEnums {
         IN_APP, EMAIL
     }
 
+    public enum TicketStatus {
+        OPEN, IN_PROGRESS, RESOLVED, CLOSED
+    }
+
+    public enum TicketSenderType {
+        USER, ADMIN
+    }
+
 }
