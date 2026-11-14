@@ -124,6 +124,41 @@ class TicketServiceImplTest {
     }
 
     @Test
+    @DisplayName("listMyTickets delegates to the repository with the caller's own userId and pageable")
+    void listMyTickets_delegatesToRepository() {
+        UUID userId = UUID.randomUUID();
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 10);
+        SupportTicket ticket = savedTicket(userId, TicketStatus.OPEN);
+        when(ticketRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(ticket)));
+
+        var page = service.listMyTickets(userId, pageable);
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().get(0).ticketNumber()).isEqualTo("TKT-ABC123");
+    }
+
+    @Test
+    @DisplayName("createTicket rejects an attachment whose key is well-formed but was never actually uploaded")
+    void createTicket_attachmentKeyNeverUploaded_rejected() {
+        UUID userId = UUID.randomUUID();
+        String ownKey = "tickets/" + userId + "/receipt.png";
+        CreateTicketRequest request = new CreateTicketRequest();
+        request.setSubject("Billing question");
+        request.setBody("Why was I charged twice?");
+        request.setAttachmentStorageKey(ownKey);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(new User()));
+        when(storageService.objectExists(ownKey)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createTicket(userId, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Upload not found");
+
+        verify(ticketRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("getMyTicket throws ResourceNotFoundException for a ticket that isn't the caller's own")
     void getMyTicket_wrongOwner_throwsNotFound() {
         UUID userId = UUID.randomUUID();

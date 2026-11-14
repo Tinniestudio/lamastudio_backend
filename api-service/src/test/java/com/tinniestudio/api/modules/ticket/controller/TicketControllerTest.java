@@ -2,10 +2,13 @@ package com.tinniestudio.api.modules.ticket.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tinniestudio.api.modules.ticket.dto.CreateTicketRequest;
+import com.tinniestudio.api.modules.ticket.dto.ReplyTicketRequest;
+import com.tinniestudio.api.modules.ticket.dto.TicketDetailResponse;
 import com.tinniestudio.api.modules.ticket.dto.TicketResponse;
 import com.tinniestudio.api.modules.ticket.service.TicketService;
 import com.tinniestudio.api.modules.user.repository.UserRepository;
 import com.tinniestudio.api.modules.user.service.UserDetailsServiceImpl;
+import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
 import com.tinniestudio.api.shared.security.jwt.JwtAuthenticationFilter;
 import com.tinniestudio.api.shared.security.jwt.JwtTokenProvider;
 
@@ -19,10 +22,12 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -49,6 +54,12 @@ class TicketControllerTest {
         return new TicketResponse(
                 UUID.fromString(USER_ID), "TKT-ABC123", "Can't play episode 3", "OPEN",
                 UUID.fromString(USER_ID), null, Instant.now(), Instant.now());
+    }
+
+    private TicketDetailResponse sampleDetailResponse() {
+        return new TicketDetailResponse(
+                UUID.fromString(USER_ID), "TKT-ABC123", "Can't play episode 3", "OPEN",
+                UUID.fromString(USER_ID), null, Instant.now(), Instant.now(), List.of());
     }
 
     @Test
@@ -91,5 +102,63 @@ class TicketControllerTest {
         mockMvc.perform(get(CONTEXT_PATH + "/tickets").contextPath(CONTEXT_PATH))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());
+    }
+
+    @Test
+    @WithMockUser(username = USER_ID)
+    void getOne_returns200WithTicketDetail() throws Exception {
+        UUID ticketId = UUID.randomUUID();
+        when(ticketService.getMyTicket(eq(UUID.fromString(USER_ID)), eq(ticketId)))
+                .thenReturn(sampleDetailResponse());
+
+        mockMvc.perform(get(CONTEXT_PATH + "/tickets/" + ticketId).contextPath(CONTEXT_PATH))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ticketNumber").value("TKT-ABC123"));
+    }
+
+    @Test
+    @WithMockUser(username = USER_ID)
+    void getOne_notOwnTicket_returns404() throws Exception {
+        UUID ticketId = UUID.randomUUID();
+        when(ticketService.getMyTicket(eq(UUID.fromString(USER_ID)), eq(ticketId)))
+                .thenThrow(new ResourceNotFoundException("Ticket not found"));
+
+        mockMvc.perform(get(CONTEXT_PATH + "/tickets/" + ticketId).contextPath(CONTEXT_PATH))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @WithMockUser(username = USER_ID)
+    void reply_returns200WithUpdatedThread() throws Exception {
+        UUID ticketId = UUID.randomUUID();
+        when(ticketService.replyToTicket(eq(UUID.fromString(USER_ID)), eq(ticketId), any()))
+                .thenReturn(sampleDetailResponse());
+
+        ReplyTicketRequest request = new ReplyTicketRequest();
+        request.setBody("Any update?");
+
+        mockMvc.perform(post(CONTEXT_PATH + "/tickets/" + ticketId + "/messages")
+                        .contextPath(CONTEXT_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ticketNumber").value("TKT-ABC123"));
+    }
+
+    @Test
+    @WithMockUser(username = USER_ID)
+    void reply_notOwnTicket_returns404() throws Exception {
+        UUID ticketId = UUID.randomUUID();
+        doThrow(new ResourceNotFoundException("Ticket not found"))
+                .when(ticketService).replyToTicket(eq(UUID.fromString(USER_ID)), eq(ticketId), any());
+
+        ReplyTicketRequest request = new ReplyTicketRequest();
+        request.setBody("Any update?");
+
+        mockMvc.perform(post(CONTEXT_PATH + "/tickets/" + ticketId + "/messages")
+                        .contextPath(CONTEXT_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound());
     }
 }

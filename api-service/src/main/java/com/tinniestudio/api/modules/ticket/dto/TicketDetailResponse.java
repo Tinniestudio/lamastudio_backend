@@ -22,6 +22,8 @@ public record TicketDetailResponse(
         return from(t, messages, null);
     }
 
+    // submitterEmail overload: no caller yet, reserved for the admin-facing detail endpoint
+    // (Task 6) — see the matching note on TicketResponse.from.
     public static TicketDetailResponse from(SupportTicket t, List<TicketMessage> messages, String submitterEmail) {
         return new TicketDetailResponse(
                 t.getId(), t.getTicketNumber(), t.getSubject(), t.getStatus().name(),
