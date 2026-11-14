@@ -1,0 +1,156 @@
+package com.tinniestudio.api.modules.ticket.service;
+
+import com.tinniestudio.api.modules.ticket.dto.ReplyTicketRequest;
+import com.tinniestudio.api.modules.ticket.dto.TicketDetailResponse;
+import com.tinniestudio.api.modules.ticket.dto.TicketResponse;
+import com.tinniestudio.api.modules.ticket.dto.UpdateTicketStatusRequest;
+import com.tinniestudio.api.modules.ticket.repository.SupportTicketRepository;
+import com.tinniestudio.api.modules.ticket.repository.TicketMessageRepository;
+import com.tinniestudio.api.modules.user.repository.UserRepository;
+import com.tinniestudio.api.shared.entity.DomainEnums.TicketSenderType;
+import com.tinniestudio.api.shared.entity.DomainEnums.TicketStatus;
+import com.tinniestudio.api.shared.entity.SupportTicket;
+import com.tinniestudio.api.shared.entity.TicketMessage;
+import com.tinniestudio.api.shared.entity.User;
+import com.tinniestudio.api.shared.exception.BadRequestException;
+import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
+import com.tinniestudio.api.shared.queue.RabbitConfig;
+import com.tinniestudio.api.shared.storage.StorageService;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AdminTicketServiceImpl implements AdminTicketService {
+
+    private static final Set<TicketStatus> MANUAL_STATUS_TARGETS = Set.of(TicketStatus.RESOLVED, TicketStatus.CLOSED);
+
+    private final SupportTicketRepository ticketRepository;
+    private final TicketMessageRepository messageRepository;
+    private final UserRepository userRepository;
+    private final RabbitTemplate rabbitTemplate;
+    private final StorageService storageService;
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<TicketResponse> listTickets(TicketStatus status, Pageable pageable) {
+        Page<SupportTicket> tickets = status != null
+                ? ticketRepository.findByStatusOrderByCreatedAtDesc(status, pageable)
+                : ticketRepository.findAllByOrderByCreatedAtDesc(pageable);
+        return tickets.map(t -> TicketResponse.from(t, submitterEmail(t.getUserId())));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TicketDetailResponse getTicket(UUID ticketId) {
+        SupportTicket ticket = findTicket(ticketId);
+        List<TicketMessage> messages = messageRepository.findByTicketIdOrderByCreatedAtAsc(ticketId);
+        return TicketDetailResponse.from(ticket, messages, submitterEmail(ticket.getUserId()));
+    }
+
+    @Override
+    @Transactional
+    public TicketDetailResponse replyToTicket(UUID adminId, UUID ticketId, ReplyTicketRequest request) {
+        SupportTicket ticket = findTicket(ticketId);
+
+        // Closed tickets reject new replies from either side — admins re-open explicitly via
+        // updateStatus() before continuing a conversation, same rule as the user-facing endpoint
+        // for consistency (the spec only specifies this for user replies, but there's no
+        // "half-closed" state — a closed ticket should behave uniformly for both senders).
+        if (ticket.getStatus() == TicketStatus.CLOSED) {
+            throw new BadRequestException("This ticket is closed.");
+        }
+        if (ticket.getStatus() == TicketStatus.OPEN) {
+            ticket.setStatus(TicketStatus.IN_PROGRESS);
+            ticketRepository.save(ticket);
+        }
+
+        TicketMessage message = new TicketMessage();
+        message.setTicketId(ticketId);
+        message.setSenderType(TicketSenderType.ADMIN);
+        message.setSenderId(adminId);
+        message.setBody(request.getBody());
+        message.setAttachmentUrl(resolveAttachmentUrl(ticket.getUserId(), request.getAttachmentStorageKey()));
+        messageRepository.save(message);
+
+        publishTicketRepliedNotification(ticket);
+
+        List<TicketMessage> messages = messageRepository.findByTicketIdOrderByCreatedAtAsc(ticketId);
+        return TicketDetailResponse.from(ticket, messages, submitterEmail(ticket.getUserId()));
+    }
+
+    @Override
+    @Transactional
+    public TicketResponse updateStatus(UUID ticketId, UpdateTicketStatusRequest request) {
+        SupportTicket ticket = findTicket(ticketId);
+
+        if (!MANUAL_STATUS_TARGETS.contains(request.getStatus())) {
+            throw new BadRequestException(
+                    "Status can only be manually set to RESOLVED or CLOSED — OPEN/IN_PROGRESS are system-managed.");
+        }
+
+        ticket.setStatus(request.getStatus());
+        ticketRepository.save(ticket);
+        return TicketResponse.from(ticket, submitterEmail(ticket.getUserId()));
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private SupportTicket findTicket(UUID ticketId) {
+        return ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket not found"));
+    }
+
+    private String submitterEmail(UUID userId) {
+        return userRepository.findById(userId).map(User::getEmail).orElse(null);
+    }
+
+    // Mirrors TicketServiceImpl's resolveAttachmentUrl: without this ownership-scoping check, an
+    // admin reply could reference ANY existing storage key (e.g. another user's avatar) and have
+    // it falsely accepted as this ticket's attachment. There's no separate admin upload flow yet
+    // (admin-web's reply UI never calls a presign endpoint), so the only identity a key can
+    // legitimately be scoped under here is the ticket's own owner — an admin can reference an
+    // attachment the end user already uploaded, not an arbitrary other object. Task 7 replaces
+    // this with the shared TicketAttachmentResolver, which takes the same ownerId/storageKey
+    // shape, so this is a stopgap, not a design this will need to be rewritten around.
+    private String resolveAttachmentUrl(UUID ownerId, String storageKey) {
+        if (storageKey == null || storageKey.isBlank()) {
+            return null;
+        }
+        String requiredPrefix = "tickets/" + ownerId + "/";
+        if (storageKey.contains("..") || !storageKey.startsWith(requiredPrefix)) {
+            throw new BadRequestException("Invalid attachment reference.");
+        }
+        if (!storageService.objectExists(storageKey)) {
+            throw new BadRequestException("Upload not found in storage. Please upload the file before submitting.");
+        }
+        return storageKey;
+    }
+
+    // Best-effort, same non-critical-failure handling as every other broadcast/publish helper in
+    // this codebase — a failed notification publish must never block the admin's reply itself.
+    private void publishTicketRepliedNotification(SupportTicket ticket) {
+        try {
+            rabbitTemplate.convertAndSend(RabbitConfig.QUEUE_NOTIFICATIONS, Map.of(
+                    "type", "TICKET_REPLIED",
+                    "userId", ticket.getUserId().toString(),
+                    "ticketId", ticket.getId().toString(),
+                    "subject", ticket.getSubject()
+            ));
+        } catch (Exception e) {
+            log.warn("TICKET_REPLIED notification publish failed (non-critical): {}", e.getMessage());
+        }
+    }
+}
