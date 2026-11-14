@@ -157,6 +157,32 @@ class AdminTicketServiceImplTest {
     }
 
     @Test
+    @DisplayName("replyToTicket resolves the attachment against the ticket OWNER's id, not the replying admin's id")
+    void replyToTicket_resolvesAttachmentAgainstTicketOwnerNotAdmin() {
+        UUID userId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        SupportTicket ticket = savedTicket(userId, TicketStatus.OPEN);
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(SupportTicket.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(messageRepository.findByTicketIdOrderByCreatedAtAsc(ticket.getId())).thenReturn(List.of());
+        when(attachmentResolver.resolveAttachmentUrl(userId, "tickets/" + userId + "/receipt.png"))
+                .thenReturn("https://cdn.test/tickets/" + userId + "/receipt.png");
+
+        ReplyTicketRequest request = new ReplyTicketRequest();
+        request.setBody("Here's a doc.");
+        request.setAttachmentStorageKey("tickets/" + userId + "/receipt.png");
+
+        service.replyToTicket(adminId, ticket.getId(), request);
+
+        // The only call that matters here is with userId (the ticket owner) — asserting this
+        // directly is what would have caught the AdminTicketServiceImpl.java:90 call site being
+        // accidentally changed to pass adminId instead, which is the exact IDOR this attachment
+        // resolver's ownerId parameter exists to prevent.
+        verify(attachmentResolver).resolveAttachmentUrl(userId, "tickets/" + userId + "/receipt.png");
+        verify(attachmentResolver, never()).resolveAttachmentUrl(eq(adminId), any());
+    }
+
+    @Test
     @DisplayName("replyToTicket on an IN_PROGRESS ticket leaves status unchanged")
     void replyToTicket_inProgressTicket_statusUnchanged() {
         UUID userId = UUID.randomUUID();

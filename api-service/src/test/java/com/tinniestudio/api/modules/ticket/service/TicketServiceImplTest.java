@@ -2,6 +2,8 @@ package com.tinniestudio.api.modules.ticket.service;
 
 import com.tinniestudio.api.modules.ticket.dto.CreateTicketRequest;
 import com.tinniestudio.api.modules.ticket.dto.ReplyTicketRequest;
+import com.tinniestudio.api.modules.ticket.dto.TicketAttachmentUploadRequest;
+import com.tinniestudio.api.modules.ticket.dto.TicketAttachmentUploadResponse;
 import com.tinniestudio.api.modules.ticket.dto.TicketDetailResponse;
 import com.tinniestudio.api.modules.ticket.dto.TicketResponse;
 import com.tinniestudio.api.modules.ticket.repository.SupportTicketRepository;
@@ -120,6 +122,75 @@ class TicketServiceImplTest {
         TicketResponse response = service.createTicket(userId, request);
 
         assertThat(response.ticketNumber()).isEqualTo("TKT-XYZ999");
+    }
+
+    @Test
+    @DisplayName("createTicket resolves the attachment against the CALLER's own id, not some other id")
+    void createTicket_resolvesAttachmentAgainstCallersOwnId() {
+        UUID userId = UUID.randomUUID();
+        String key = "tickets/" + userId + "/receipt.png";
+        CreateTicketRequest request = new CreateTicketRequest();
+        request.setSubject("Billing question");
+        request.setBody("Why was I charged twice?");
+        request.setAttachmentStorageKey(key);
+
+        User user = new User();
+        user.setId(userId);
+        user.setEmail("jane@example.com");
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(attachmentResolver.resolveAttachmentUrl(userId, key)).thenReturn("https://cdn.test/" + key);
+        when(ticketNumberGenerator.generate()).thenReturn("TKT-ABC123");
+        when(ticketRepository.save(any(SupportTicket.class))).thenAnswer(inv -> {
+            SupportTicket t = inv.getArgument(0);
+            org.springframework.test.util.ReflectionTestUtils.setField(t, "id", UUID.randomUUID());
+            return t;
+        });
+
+        service.createTicket(userId, request);
+
+        // Asserting the exact argument is what would catch this call site being accidentally
+        // changed to pass some other id — the IDOR this resolver's ownerId parameter exists
+        // to prevent.
+        verify(attachmentResolver).resolveAttachmentUrl(userId, key);
+        ArgumentCaptor<TicketMessage> messageCaptor = ArgumentCaptor.forClass(TicketMessage.class);
+        verify(messageRepository).save(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().getAttachmentUrl()).isEqualTo("https://cdn.test/" + key);
+    }
+
+    @Test
+    @DisplayName("replyToTicket resolves the attachment against the CALLER's own id, not some other id")
+    void replyToTicket_resolvesAttachmentAgainstCallersOwnId() {
+        UUID userId = UUID.randomUUID();
+        String key = "tickets/" + userId + "/receipt.png";
+        SupportTicket ticket = savedTicket(userId, TicketStatus.OPEN);
+        when(ticketRepository.findByIdAndUserId(ticket.getId(), userId)).thenReturn(Optional.of(ticket));
+        when(messageRepository.findByTicketIdOrderByCreatedAtAsc(ticket.getId())).thenReturn(List.of());
+        when(attachmentResolver.resolveAttachmentUrl(userId, key)).thenReturn("https://cdn.test/" + key);
+
+        ReplyTicketRequest request = new ReplyTicketRequest();
+        request.setBody("Here's a doc.");
+        request.setAttachmentStorageKey(key);
+
+        service.replyToTicket(userId, ticket.getId(), request);
+
+        verify(attachmentResolver).resolveAttachmentUrl(userId, key);
+    }
+
+    @Test
+    @DisplayName("initiateAttachmentUpload delegates to the resolver with the caller's own userId")
+    void initiateAttachmentUpload_delegatesToResolver() {
+        UUID userId = UUID.randomUUID();
+        TicketAttachmentUploadRequest request = new TicketAttachmentUploadRequest();
+        request.setMimeType("image/png");
+        request.setFileSizeBytes(1024L);
+        TicketAttachmentUploadResponse expected = new TicketAttachmentUploadResponse(
+                "https://upload.test/x", "tickets/" + userId + "/x.png", java.time.Instant.now());
+        when(attachmentResolver.initiateUpload(request, userId)).thenReturn(expected);
+
+        TicketAttachmentUploadResponse response = service.initiateAttachmentUpload(userId, request);
+
+        assertThat(response).isEqualTo(expected);
+        verify(attachmentResolver).initiateUpload(request, userId);
     }
 
     @Test

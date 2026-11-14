@@ -3,6 +3,8 @@ package com.tinniestudio.api.modules.ticket.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tinniestudio.api.modules.ticket.dto.CreateTicketRequest;
 import com.tinniestudio.api.modules.ticket.dto.ReplyTicketRequest;
+import com.tinniestudio.api.modules.ticket.dto.TicketAttachmentUploadRequest;
+import com.tinniestudio.api.modules.ticket.dto.TicketAttachmentUploadResponse;
 import com.tinniestudio.api.modules.ticket.dto.TicketDetailResponse;
 import com.tinniestudio.api.modules.ticket.dto.TicketResponse;
 import com.tinniestudio.api.modules.ticket.service.TicketService;
@@ -160,5 +162,25 @@ class TicketControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @WithMockUser(username = USER_ID)
+    void presignAttachment_returns200WithUploadUrl() throws Exception {
+        TicketAttachmentUploadResponse presigned = new TicketAttachmentUploadResponse(
+                "https://upload.test/x", "tickets/" + USER_ID + "/x.png", Instant.now().plusSeconds(900));
+        when(ticketService.initiateAttachmentUpload(eq(UUID.fromString(USER_ID)), any()))
+                .thenReturn(presigned);
+
+        TicketAttachmentUploadRequest request = new TicketAttachmentUploadRequest();
+        request.setMimeType("image/png");
+        request.setFileSizeBytes(1024L);
+
+        mockMvc.perform(post(CONTEXT_PATH + "/tickets/attachments/presign")
+                        .contextPath(CONTEXT_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.uploadUrl").value("https://upload.test/x"));
     }
 }
