@@ -43,11 +43,11 @@ public class AdminUserDetailsServiceImpl implements UserDetailsService {
             throw new AccountNotActiveException("Admin account is " + admin.getAccountStatus().name().toLowerCase());
         }
 
-        // AdminRoleName only has SUPER_ADMIN/MODERATOR — neither ever grants "ROLE_ADMIN" on its
-        // own, yet nearly every admin controller across the codebase requires exactly
-        // hasRole('ADMIN') as the base admin check (SUPER_ADMIN/MODERATOR are only checked for a
-        // handful of finer-grained, more sensitive endpoints). Every Admin entity is an admin, so
-        // grant ROLE_ADMIN unconditionally alongside their specific role(s).
+        // No individual AdminRoleName value grants "ROLE_ADMIN" on its own, yet nearly every
+        // admin controller across the codebase requires exactly hasRole('ADMIN') as the base
+        // admin check (specific role values are only checked for a handful of finer-grained,
+        // more sensitive endpoints). Every Admin entity is an admin, so grant ROLE_ADMIN
+        // unconditionally alongside their specific role(s).
         Set<GrantedAuthority> authorities = new HashSet<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
         admin.getRoles().forEach(role -> authorities.add(new SimpleGrantedAuthority("ROLE_" + role.name())));

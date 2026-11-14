@@ -18,10 +18,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 /**
- * Regression test: AdminRoleName only defines SUPER_ADMIN/MODERATOR, but nearly every admin
- * controller checks hasRole('ADMIN') as the base gate. Without a blanket ROLE_ADMIN grant, no
- * admin account of any role could ever pass that check — the entire admin business API was
- * unreachable regardless of which role an admin held.
+ * Regression test: no individual AdminRoleName value grants ROLE_ADMIN on its own, but nearly
+ * every admin controller checks hasRole('ADMIN') as the base gate. Without a blanket ROLE_ADMIN
+ * grant, no admin account of any role could ever pass that check — the entire admin business
+ * API was unreachable regardless of which role an admin held.
  */
 @ExtendWith(MockitoExtension.class)
 class AdminUserDetailsServiceImplTest {
