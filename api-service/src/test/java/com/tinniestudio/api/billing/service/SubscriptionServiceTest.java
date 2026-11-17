@@ -385,6 +385,7 @@ class SubscriptionServiceTest {
 
             UserProfile profile = new UserProfile();
             profile.setPaymentSetup(false);
+            profile.setCardSetupRequired(false);
 
             when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
                 .thenReturn(Optional.of(sub));
@@ -395,6 +396,37 @@ class SubscriptionServiceTest {
 
             assertThat(result.isHasAccess()).isTrue();
             assertThat(result.getBlockReason()).isNull();
+        }
+
+        @Test
+        @DisplayName("new (non-grandfathered) FREE-plan subscriber with no card is blocked with NEEDS_SETUP")
+        void getSubscriptionStatus_newFreePlanNoCard_blocksWithNeedsSetup() {
+            SubscriptionPlan freePlan = new SubscriptionPlan();
+            freePlan.setId(UUID.randomUUID());
+            freePlan.setName("FREE");
+
+            UserSubscription sub = new UserSubscription();
+            sub.setId(UUID.randomUUID());
+            sub.setUserId(userId);
+            sub.setPlan(freePlan);
+            sub.setStatus(SubscriptionStatus.ACTIVE);
+            sub.setContentWatchesUsed(0);
+            sub.setStripeCustomerId(null);
+            sub.setEndDate(null);
+
+            UserProfile profile = new UserProfile();
+            profile.setPaymentSetup(false);
+            profile.setCardSetupRequired(true);
+
+            when(subscriptionRepository.findByUserIdAndStatus(userId, SubscriptionStatus.ACTIVE))
+                .thenReturn(Optional.of(sub));
+            when(userProfileRepository.findById(userId)).thenReturn(Optional.of(profile));
+            when(paymentRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());
+
+            SubscriptionStatusResponse result = service.getSubscriptionStatus(userId);
+
+            assertThat(result.isHasAccess()).isFalse();
+            assertThat(result.getBlockReason()).isEqualTo("NEEDS_SETUP");
         }
 
         @Test

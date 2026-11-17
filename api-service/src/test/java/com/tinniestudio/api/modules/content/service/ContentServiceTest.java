@@ -14,6 +14,7 @@ import com.tinniestudio.api.shared.entity.DomainEnums;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.MaturityRating;
 import com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind;
+import com.tinniestudio.api.shared.queue.RabbitConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -39,6 +40,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -487,8 +489,8 @@ class ContentServiceTest {
         }
 
         @Test
-        @DisplayName("PROCESSING to PUBLISHED sets publishedAt")
-        void processingToPublishedSetsPublishedAt() {
+        @DisplayName("PROCESSING to PUBLISHED sets publishedAt and publishes a CONTENT_PUBLISHED broadcast")
+        void processingToPublishedSetsPublishedAtAndPublishesBroadcast() {
             content.setStatus(ContentStatus.PROCESSING);
             when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
             when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -497,6 +499,27 @@ class ContentServiceTest {
 
             assertThat(result.status()).isEqualTo("PUBLISHED");
             assertThat(result.publishedAt()).isNotNull();
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+            verify(rabbitTemplate).convertAndSend(eq(RabbitConfig.QUEUE_NOTIFICATIONS), captor.capture());
+            assertThat(captor.getValue()).containsEntry("type", "CONTENT_PUBLISHED");
+            assertThat(captor.getValue()).containsEntry("contentTitle", "Test Movie");
+            assertThat(captor.getValue()).containsEntry("referenceType", "CONTENT");
+            assertThat(captor.getValue()).containsEntry("referenceId", contentId.toString());
+            assertThat(captor.getValue()).containsEntry("dedupId", contentId.toString());
+        }
+
+        @Test
+        @DisplayName("DRAFT to REVIEW does not publish a CONTENT_PUBLISHED broadcast")
+        void draftToReviewDoesNotPublishBroadcast() {
+            content.setStatus(ContentStatus.DRAFT);
+            when(contentRepository.findById(contentId)).thenReturn(Optional.of(content));
+            when(contentRepository.save(any(Content.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            contentService.transitionStatus(contentId, ContentStatus.REVIEW, null);
+
+            verify(rabbitTemplate, never()).convertAndSend(eq(RabbitConfig.QUEUE_NOTIFICATIONS), any(Map.class));
         }
 
         @Test

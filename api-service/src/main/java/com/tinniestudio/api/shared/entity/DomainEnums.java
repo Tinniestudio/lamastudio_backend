@@ -218,11 +218,23 @@ public final class DomainEnums {
         APPLICATION_APPROVED,
         APPLICATION_REJECTED,
         ACCOUNT_SUSPENDED,
-        ACCOUNT_BANNED
+        ACCOUNT_BANNED,
+        CONTENT_PUBLISHED,
+        EPISODE_PUBLISHED,
+        DEVICE_LOGGED_OUT,
+        TICKET_REPLIED
     }
 
     public enum NotificationChannel {
         IN_APP, EMAIL
+    }
+
+    public enum TicketStatus {
+        OPEN, IN_PROGRESS, RESOLVED, CLOSED
+    }
+
+    public enum TicketSenderType {
+        USER, ADMIN
     }
 
 }

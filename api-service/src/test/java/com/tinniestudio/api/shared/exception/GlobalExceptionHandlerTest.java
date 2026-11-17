@@ -52,4 +52,28 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
     }
+
+    @Test
+    void deviceLimitReached_returns409WithMaxDevicesResolutionTokenAndDevices() {
+        com.tinniestudio.api.modules.auth.user.dto.SessionDto device =
+                com.tinniestudio.api.modules.auth.user.dto.SessionDto.builder()
+                        .sessionId(java.util.UUID.randomUUID())
+                        .deviceName("Chrome on Windows")
+                        .build();
+        com.tinniestudio.api.modules.auth.exception.DeviceLimitReachedException ex =
+                new com.tinniestudio.api.modules.auth.exception.DeviceLimitReachedException(
+                        "Device limit reached", 3, "resolution-token-value", java.util.List.of(device));
+
+        ResponseEntity<Object> response = handler.handleDeviceLimitReached(ex, request());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> body = (java.util.Map<String, Object>) response.getBody();
+        assertThat(body.get("maxDevices")).isEqualTo(3);
+        assertThat(body.get("resolutionToken")).isEqualTo("resolution-token-value");
+        assertThat(body.get("devices")).isEqualTo(java.util.List.of(device));
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, String> error = (java.util.Map<String, String>) body.get("error");
+        assertThat(error.get("code")).isEqualTo("DEVICE_LIMIT_REACHED");
+    }
 }

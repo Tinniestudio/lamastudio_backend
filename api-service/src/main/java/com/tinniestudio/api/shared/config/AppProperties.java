@@ -25,6 +25,7 @@ public class AppProperties {
     private PasswordReset passwordReset = new PasswordReset();
     private Cors cors = new Cors();
     private Resend resend = new Resend();
+    private Support support = new Support();
     private String adminBootstrapToken;
     private int freeTierContentLimit = 2;
     private Cdn cdn = new Cdn();
@@ -116,6 +117,12 @@ public class AppProperties {
         private String apiKey;
         private String baseUrl;
         private String fromEmail;
+    }
+
+    @Getter
+    @Setter
+    public static class Support {
+        private String alertRecipientEmail;
     }
 
     @Getter

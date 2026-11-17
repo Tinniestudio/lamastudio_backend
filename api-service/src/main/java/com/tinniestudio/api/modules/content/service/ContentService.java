@@ -246,7 +246,38 @@ public class ContentService {
             content.setPublishedAt(Instant.now());
         }
         content.setRejectionReason(targetStatus == ContentStatus.REJECTED ? rejectionReason : null);
-        return ContentResponse.from(contentRepository.save(content));
+        ContentResponse response = ContentResponse.from(contentRepository.save(content));
+        if (targetStatus == ContentStatus.PUBLISHED) {
+            publishContentPublishedBroadcast(content);
+        }
+        return response;
+    }
+
+    /**
+     * Best-effort: a queue publish failure must never fail the admin's publish action itself,
+     * same non-critical-failure handling as recordView's analytics publish in this class — though
+     * unlike that method (readOnly), this is a real write, so this is also an irrevocable side
+     * effect that happens after the save, not before.
+     *
+     * {@code dedupId} equals {@code referenceId} here — a content can only ever transition to
+     * PUBLISHED once (enforced by validateTransition's state machine), so the consumer's
+     * idempotency lock keying on the content id is correct for this event type. Contrast with
+     * EPISODE_PUBLISHED (SeasonService/EpisodeService), where dedupId must be the season's/
+     * episode's own id instead, since multiple of those can be added to the same already-live
+     * show.
+     */
+    private void publishContentPublishedBroadcast(Content content) {
+        try {
+            rabbitTemplate.convertAndSend(RabbitConfig.QUEUE_NOTIFICATIONS, Map.of(
+                "type", "CONTENT_PUBLISHED",
+                "contentTitle", content.getTitle(),
+                "referenceType", "CONTENT",
+                "referenceId", content.getId().toString(),
+                "dedupId", content.getId().toString()
+            ));
+        } catch (Exception e) {
+            log.warn("CONTENT_PUBLISHED broadcast publish failed (non-critical): {}", e.getMessage());
+        }
     }
 
     @Transactional

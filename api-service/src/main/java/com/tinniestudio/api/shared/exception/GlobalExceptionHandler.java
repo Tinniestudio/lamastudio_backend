@@ -22,6 +22,7 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 import org.springframework.web.server.ResponseStatusException;
 
 import com.tinniestudio.api.modules.auth.exception.BadCredentialsException;
+import com.tinniestudio.api.modules.auth.exception.DeviceLimitReachedException;
 import com.tinniestudio.api.modules.auth.exception.EmailAlreadyExistsException;
 import com.tinniestudio.api.modules.auth.exception.InvalidEmailStateException;
 import com.tinniestudio.api.modules.auth.exception.InvalidTokenException;
@@ -168,6 +169,19 @@ public class GlobalExceptionHandler {
     ) {
         Map<String, Object> body = buildStandardError("INVALID_CREDENTIALS", ex.getMessage(), HttpStatus.UNAUTHORIZED.value(), request.getServletPath());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+    }
+
+    @ExceptionHandler(DeviceLimitReachedException.class)
+    public ResponseEntity<Object> handleDeviceLimitReached(
+            DeviceLimitReachedException ex,
+            HttpServletRequest request
+    ) {
+        Map<String, Object> body = buildStandardError("DEVICE_LIMIT_REACHED", ex.getMessage(),
+                HttpStatus.CONFLICT.value(), request.getServletPath());
+        body.put("maxDevices", ex.getMaxDevices());
+        body.put("resolutionToken", ex.getResolutionToken());
+        body.put("devices", ex.getDevices());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
     @ExceptionHandler(BadRequestException.class)

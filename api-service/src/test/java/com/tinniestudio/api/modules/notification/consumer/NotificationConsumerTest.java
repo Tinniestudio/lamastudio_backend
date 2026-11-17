@@ -4,16 +4,21 @@ import com.tinniestudio.api.modules.content.repository.ContentRepository;
 import com.tinniestudio.api.modules.notification.service.NotificationService;
 import com.tinniestudio.api.modules.upload.repository.VideoAssetRepository;
 import com.tinniestudio.api.modules.upload.service.VideoActivationService;
+import com.tinniestudio.api.modules.user.repository.UserRepository;
+import com.tinniestudio.api.shared.cache.CacheService;
 import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.VideoAsset;
+import com.tinniestudio.api.shared.entity.DomainEnums;
 import com.tinniestudio.api.shared.entity.DomainEnums.*;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,6 +34,8 @@ class NotificationConsumerTest {
     @Mock VideoAssetRepository videoAssetRepo;
     @Mock ContentRepository contentRepo;
     @Mock VideoActivationService videoActivationService;
+    @Mock UserRepository userRepository;
+    @Mock CacheService cacheService;
     @InjectMocks NotificationConsumer consumer;
 
     @Test
@@ -185,5 +192,222 @@ class NotificationConsumerTest {
         verify(videoActivationService, never()).activateAndRetireSiblings(any());
         assertThat(asset.getProcessingStatus()).isEqualTo(ProcessingStatus.FAILED);
         verify(videoAssetRepo).save(asset);
+    }
+
+    @Test
+    @DisplayName("fans a CONTENT_PUBLISHED broadcast out to every active user")
+    void handleContentPublished_fansOutToAllUsers() {
+        UUID contentId = UUID.randomUUID();
+        UUID user1 = UUID.randomUUID();
+        UUID user2 = UUID.randomUUID();
+
+        when(cacheService.setIfAbsent(any(), any(), any())).thenReturn(true);
+        when(userRepository.findAllActiveUserIds()).thenReturn(List.of(user1, user2));
+
+        consumer.handleNotificationEvent(Map.of(
+            "type", "CONTENT_PUBLISHED",
+            "contentTitle", "The Last Horizon",
+            "referenceType", "CONTENT",
+            "referenceId", contentId.toString()
+        ));
+
+        verify(notificationService).sendNotification(user1, NotificationEventType.CONTENT_PUBLISHED,
+            "CONTENT", contentId, Map.of("title", "The Last Horizon"));
+        verify(notificationService).sendNotification(user2, NotificationEventType.CONTENT_PUBLISHED,
+            "CONTENT", contentId, Map.of("title", "The Last Horizon"));
+    }
+
+    @Test
+    @DisplayName("fans an EPISODE_PUBLISHED broadcast out the same way as CONTENT_PUBLISHED")
+    void handleEpisodePublished_fansOutToAllUsers() {
+        UUID contentId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        when(cacheService.setIfAbsent(any(), any(), any())).thenReturn(true);
+        when(userRepository.findAllActiveUserIds()).thenReturn(List.of(userId));
+
+        consumer.handleNotificationEvent(Map.of(
+            "type", "EPISODE_PUBLISHED",
+            "contentTitle", "Breaking Bad",
+            "referenceType", "CONTENT",
+            "referenceId", contentId.toString()
+        ));
+
+        verify(notificationService).sendNotification(userId, NotificationEventType.EPISODE_PUBLISHED,
+            "CONTENT", contentId, Map.of("title", "Breaking Bad"));
+    }
+
+    @Test
+    @DisplayName("locks on dedupId, not referenceId -- two episodes on the same show don't collide")
+    void handleEpisodePublished_locksOnDedupIdNotReferenceId() {
+        // Regression test: EPISODE_PUBLISHED's referenceId is the PARENT SHOW's id (shared by
+        // every episode added to it, since the notification deep-links to the show, not the
+        // episode). If the idempotency lock were keyed on referenceId, a second episode added to
+        // the same already-live show within the lock's TTL would collide with the first
+        // episode's still-live lock and be silently dropped as a "duplicate" -- even though it's
+        // a genuinely new episode nobody has been told about. dedupId (the episode's own id)
+        // must be what the lock actually keys on.
+        UUID contentId = UUID.randomUUID();
+        UUID episode1Id = UUID.randomUUID();
+        UUID episode2Id = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        when(cacheService.setIfAbsent(any(), any(), any())).thenReturn(true);
+        when(userRepository.findAllActiveUserIds()).thenReturn(List.of(userId));
+
+        consumer.handleNotificationEvent(Map.of(
+            "type", "EPISODE_PUBLISHED",
+            "contentTitle", "Breaking Bad",
+            "referenceType", "CONTENT",
+            "referenceId", contentId.toString(),
+            "dedupId", episode1Id.toString()
+        ));
+        consumer.handleNotificationEvent(Map.of(
+            "type", "EPISODE_PUBLISHED",
+            "contentTitle", "Breaking Bad",
+            "referenceType", "CONTENT",
+            "referenceId", contentId.toString(),
+            "dedupId", episode2Id.toString()
+        ));
+
+        ArgumentCaptor<String> lockKeyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(cacheService, times(2)).setIfAbsent(lockKeyCaptor.capture(), any(), any());
+        List<String> lockKeys = lockKeyCaptor.getAllValues();
+        assertThat(lockKeys.get(0)).isNotEqualTo(lockKeys.get(1));
+        assertThat(lockKeys.get(0)).contains(episode1Id.toString());
+        assertThat(lockKeys.get(1)).contains(episode2Id.toString());
+        // Both episodes' lock attempts succeeded (mocked true), so the fan-out ran twice --
+        // the second episode was not treated as a duplicate of the first.
+        verify(userRepository, times(2)).findAllActiveUserIds();
+        verify(notificationService, times(2)).sendNotification(eq(userId), eq(NotificationEventType.EPISODE_PUBLISHED),
+            eq("CONTENT"), eq(contentId), any());
+    }
+
+    @Test
+    @DisplayName("redelivery of the same broadcast is a no-op (idempotency lock)")
+    void handleContentPublished_redelivery_isNoOp() {
+        UUID contentId = UUID.randomUUID();
+
+        when(cacheService.setIfAbsent(any(), any(), any())).thenReturn(false);
+
+        consumer.handleNotificationEvent(Map.of(
+            "type", "CONTENT_PUBLISHED",
+            "contentTitle", "The Last Horizon",
+            "referenceType", "CONTENT",
+            "referenceId", contentId.toString()
+        ));
+
+        verifyNoInteractions(userRepository, notificationService);
+    }
+
+    @Test
+    @DisplayName("one failing user does not stop the rest of the broadcast fan-out")
+    void handleContentPublished_oneUserFailureDoesNotAbortBroadcast() {
+        UUID contentId = UUID.randomUUID();
+        UUID user1 = UUID.randomUUID();
+        UUID user2 = UUID.randomUUID();
+
+        when(cacheService.setIfAbsent(any(), any(), any())).thenReturn(true);
+        when(userRepository.findAllActiveUserIds()).thenReturn(List.of(user1, user2));
+        doThrow(new RuntimeException("boom")).when(notificationService)
+            .sendNotification(eq(user1), any(), any(), any(), any());
+
+        consumer.handleNotificationEvent(Map.of(
+            "type", "CONTENT_PUBLISHED",
+            "contentTitle", "The Last Horizon",
+            "referenceType", "CONTENT",
+            "referenceId", contentId.toString()
+        ));
+
+        verify(notificationService).sendNotification(user2, NotificationEventType.CONTENT_PUBLISHED,
+            "CONTENT", contentId, Map.of("title", "The Last Horizon"));
+    }
+
+    @Test
+    @DisplayName("DEVICE_LOGGED_OUT dispatches straight to the target user, no broadcast fan-out, no dedup lock")
+    void deviceLoggedOut_sendsDirectlyToTargetUser() {
+        UUID userId = UUID.randomUUID();
+        Map<String, Object> message = Map.of(
+                "type", "DEVICE_LOGGED_OUT",
+                "userId", userId.toString(),
+                "deviceName", "Chrome on Windows"
+        );
+
+        consumer.handleNotificationEvent(message);
+
+        verify(notificationService).sendNotification(
+                eq(userId),
+                eq(NotificationEventType.DEVICE_LOGGED_OUT),
+                eq("ACCOUNT_SECURITY"),
+                eq(userId),
+                eq(Map.of("deviceName", "Chrome on Windows"))
+        );
+        verify(cacheService, never()).setIfAbsent(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("DEVICE_LOGGED_OUT falls back to a generic device name when none is provided")
+    void deviceLoggedOut_missingDeviceName_fallsBackToGeneric() {
+        UUID userId = UUID.randomUUID();
+        Map<String, Object> message = Map.of(
+                "type", "DEVICE_LOGGED_OUT",
+                "userId", userId.toString()
+        );
+
+        consumer.handleNotificationEvent(message);
+
+        verify(notificationService).sendNotification(
+                eq(userId),
+                eq(NotificationEventType.DEVICE_LOGGED_OUT),
+                eq("ACCOUNT_SECURITY"),
+                eq(userId),
+                eq(Map.of("deviceName", "a device"))
+        );
+    }
+
+    @Test
+    @DisplayName("TICKET_REPLIED dispatches straight to the ticket's owner, no broadcast fan-out, no dedup lock")
+    void ticketReplied_sendsDirectlyToTargetUser() {
+        UUID userId = UUID.randomUUID();
+        UUID ticketId = UUID.randomUUID();
+        Map<String, Object> message = Map.of(
+                "type", "TICKET_REPLIED",
+                "userId", userId.toString(),
+                "ticketId", ticketId.toString(),
+                "subject", "Can't play episode 3"
+        );
+
+        consumer.handleNotificationEvent(message);
+
+        verify(notificationService).sendNotification(
+                eq(userId),
+                eq(DomainEnums.NotificationEventType.TICKET_REPLIED),
+                eq("TICKET"),
+                eq(ticketId),
+                eq(Map.of("subject", "Can't play episode 3"))
+        );
+        verify(cacheService, never()).setIfAbsent(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("TICKET_REPLIED falls back to a generic subject when the message is missing one")
+    void ticketReplied_missingSubject_fallsBackToGeneric() {
+        UUID userId = UUID.randomUUID();
+        UUID ticketId = UUID.randomUUID();
+        Map<String, Object> message = Map.of(
+                "type", "TICKET_REPLIED",
+                "userId", userId.toString(),
+                "ticketId", ticketId.toString()
+        );
+
+        consumer.handleNotificationEvent(message);
+
+        verify(notificationService).sendNotification(
+                eq(userId),
+                eq(DomainEnums.NotificationEventType.TICKET_REPLIED),
+                eq("TICKET"),
+                eq(ticketId),
+                eq(Map.of("subject", "your ticket"))
+        );
     }
 }

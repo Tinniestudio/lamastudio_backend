@@ -12,6 +12,7 @@ import com.tinniestudio.api.shared.entity.DomainEnums.AuthProvider;
 import com.tinniestudio.api.shared.entity.User;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,6 +34,17 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      * not silently treated as "no such user".
      */
     boolean existsByEmailAndDeletedAtIsNull(String email);
+
+    /**
+     * Every non-deleted user's id, for fan-out broadcasts (e.g. new-content notifications) —
+     * a lightweight projection, not full User entities, since a broadcast audience can be the
+     * entire user base. Deliberately does not additionally filter on accountStatus: a
+     * suspended/banned account still has notification preferences that should be honored the
+     * same as any other account, and this spec's own audience rule is "every user who hasn't
+     * opted out," not "every user in good standing."
+     */
+    @Query("SELECT u.id FROM User u WHERE u.deletedAt IS NULL")
+    List<UUID> findAllActiveUserIds();
 
     @Query("SELECT u FROM User u WHERE u.emailVerificationToken = :token AND u.deletedAt IS NULL")
     Optional<User> findByEmailVerificationToken(@Param("token") String token);

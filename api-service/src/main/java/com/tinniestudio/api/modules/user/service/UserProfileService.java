@@ -12,7 +12,7 @@ import java.util.UUID;
 
 public interface UserProfileService {
 
-    UserProfileResponse getProfile(UUID userId);
+    UserProfileResponse getProfile(UUID userId, UUID currentSessionId);
 
     UserProfileResponse updateProfile(UUID userId, UpdateProfileRequest request);
 

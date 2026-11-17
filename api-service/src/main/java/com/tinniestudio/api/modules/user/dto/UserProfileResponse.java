@@ -60,10 +60,36 @@ public class UserProfileResponse {
     private Set<String> roles;
     private Instant createdAt;
     private SubscriptionSummary subscription;
-    private List<SessionDto> sessions;
+    private DevicesDto devices;
     private Boolean canWatch;
 
-    public static UserProfileResponse from(User user, UserProfile profile, UserSubscription sub, List<SessionDto> sessions, boolean canWatch) {
+    @Getter
+    @Builder
+    public static class DevicesDto {
+        private int active;
+        private int max;
+        private List<SessionDto> sessions;
+    }
+
+    public static UserProfileResponse from(User user, UserProfile profile, UserSubscription sub,
+            List<SessionDto> sessions, UUID currentSessionId, boolean canWatch) {
+        List<SessionDto> safeSessions = sessions != null ? sessions : List.of();
+
+        // Mark the caller's own session — same convention as AuthProfileResponse.of(), so the
+        // Manage Devices UI can exclude it from "sign out" actions regardless of which endpoint
+        // supplied the profile (/auth/me at login/refresh, or /users/me here).
+        List<SessionDto> markedSessions = safeSessions.stream()
+                .map(s -> SessionDto.builder()
+                        .sessionId(s.getSessionId())
+                        .deviceName(s.getDeviceName())
+                        .ipAddress(s.getIpAddress())
+                        .lastUsedAt(s.getLastUsedAt())
+                        .current(currentSessionId != null && currentSessionId.equals(s.getSessionId()))
+                        .build())
+                .collect(Collectors.toList());
+
+        int maxDevices = (sub != null && sub.getMaxDevices() != null) ? sub.getMaxDevices() : 1;
+
         return UserProfileResponse.builder()
                 .userId(user.getId())
                 .email(user.getEmail())
@@ -83,7 +109,11 @@ public class UserProfileResponse {
                 .roles(user.getRoles().stream().map(r -> r.getName().name()).collect(Collectors.toSet()))
                 .createdAt(user.getCreatedAt())
                 .subscription(sub != null ? SubscriptionSummary.from(sub) : null)
-                .sessions(sessions)
+                .devices(DevicesDto.builder()
+                        .active(markedSessions.size())
+                        .max(maxDevices)
+                        .sessions(markedSessions)
+                        .build())
                 .canWatch(canWatch)
                 .build();
     }

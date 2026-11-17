@@ -132,10 +132,16 @@ class UserProfileIntegrationTest {
         reg.setFirstName("Test");
         reg.setLastName("User");
 
-        mockMvc.perform(postCtx("/auth/register")
+        MvcResult registerResult = mockMvc.perform(postCtx("/auth/register")
                    .contentType(MediaType.APPLICATION_JSON)
                    .content(objectMapper.writeValueAsString(reg)))
-               .andExpect(status().isCreated());
+               .andExpect(status().isCreated())
+               .andReturn();
+
+        // Registration auto-authenticates and creates a session, consuming one device slot.
+        // Log it out immediately so it doesn't compete for a slot against the explicit login
+        // below on a single-device test plan.
+        mockMvc.perform(postCtx("/auth/logout").cookie(registerResult.getResponse().getCookies()));
 
         // Login
         LoginRequest login = new LoginRequest();

@@ -9,8 +9,11 @@ import com.tinniestudio.api.shared.entity.Content;
 import com.tinniestudio.api.shared.entity.DomainEnums.ContentStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.StructuralKind;
 import com.tinniestudio.api.shared.entity.Season;
+import com.tinniestudio.api.shared.queue.RabbitConfig;
 import com.tinniestudio.api.shared.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
@@ -18,14 +21,17 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SeasonService {
 
     private final SeasonRepository seasonRepository;
     private final ContentRepository contentRepository;
+    private final RabbitTemplate rabbitTemplate;
 
     @Transactional(readOnly = true)
     public List<SeasonResponse> listByContent(UUID contentId) {
@@ -103,10 +109,40 @@ public class SeasonService {
         try {
             // saveAndFlush: see ContentService.create for why plain save() doesn't reliably
             // surface the constraint violation inside this try/catch.
-            return SeasonResponse.from(seasonRepository.saveAndFlush(season));
+            Season saved = seasonRepository.saveAndFlush(season);
+            if (content.getStatus() == ContentStatus.PUBLISHED) {
+                publishEpisodePublishedBroadcast(content, saved);
+            }
+            return SeasonResponse.from(saved);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Season number " + seasonNumber + " already exists for this content");
+        }
+    }
+
+    /**
+     * Best-effort: a queue publish failure must never fail the admin's create action itself.
+     * Fires only when the parent is already PUBLISHED — a season/episode added to a title that
+     * isn't published yet is covered by the whole-title CONTENT_PUBLISHED broadcast once that
+     * title itself publishes, not here.
+     *
+     * {@code dedupId} is the newly created season's own id, not the parent content's — the
+     * consumer's idempotency lock is keyed on this, not on {@code referenceId} (which stays the
+     * content id, for the notification's deep-link target). Using the content id for both would
+     * collapse multiple seasons/episodes added to the same already-live show within the lock's
+     * TTL into a single delivered notification, silently dropping the rest as "duplicates."
+     */
+    private void publishEpisodePublishedBroadcast(Content content, Season season) {
+        try {
+            rabbitTemplate.convertAndSend(RabbitConfig.QUEUE_NOTIFICATIONS, Map.of(
+                "type", "EPISODE_PUBLISHED",
+                "contentTitle", content.getTitle(),
+                "referenceType", "CONTENT",
+                "referenceId", content.getId().toString(),
+                "dedupId", season.getId().toString()
+            ));
+        } catch (Exception e) {
+            log.warn("EPISODE_PUBLISHED broadcast publish failed (non-critical): {}", e.getMessage());
         }
     }
 

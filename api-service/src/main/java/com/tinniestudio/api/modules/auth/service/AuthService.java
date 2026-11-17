@@ -2,16 +2,19 @@ package com.tinniestudio.api.modules.auth.service;
 
 import com.tinniestudio.api.modules.auth.dto.*;
 import com.tinniestudio.api.modules.auth.exception.BadCredentialsException;
+import com.tinniestudio.api.modules.auth.exception.DeviceLimitReachedException;
 import com.tinniestudio.api.modules.auth.exception.EmailAlreadyExistsException;
 import com.tinniestudio.api.modules.auth.exception.InvalidEmailStateException;
 import com.tinniestudio.api.modules.auth.exception.InvalidTokenException;
 import com.tinniestudio.api.modules.auth.exception.MissingRefreshTokenException;
 import com.tinniestudio.api.modules.auth.user.dto.AuthProfileResponse;
+import com.tinniestudio.api.modules.auth.user.dto.SessionDto;
 import com.tinniestudio.api.modules.auth.user.service.AuthProfileService;
 import com.tinniestudio.api.modules.auth.user.service.SessionService;
 import com.tinniestudio.api.modules.billing.repository.SubscriptionPlanRepository;
 import com.tinniestudio.api.modules.billing.repository.UserSubscriptionRepository;
 import com.tinniestudio.api.modules.role.repository.RoleRepository;
+import com.tinniestudio.api.shared.cache.CacheService;
 import com.tinniestudio.api.shared.entity.DomainEnums.AccountStatus;
 import com.tinniestudio.api.shared.entity.DomainEnums.AuthProvider;
 import com.tinniestudio.api.shared.entity.DomainEnums.SubscriptionStatus;
@@ -22,6 +25,7 @@ import com.tinniestudio.api.shared.entity.SubscriptionPlan;
 import com.tinniestudio.api.shared.entity.User;
 import com.tinniestudio.api.shared.entity.UserSubscription;
 import com.tinniestudio.api.shared.exception.*;
+import com.tinniestudio.api.shared.queue.RabbitConfig;
 import com.tinniestudio.api.shared.security.jwt.CookieFactory;
 import com.tinniestudio.api.shared.security.jwt.JwtTokenProvider;
 
@@ -31,6 +35,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
@@ -41,9 +46,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -64,6 +72,8 @@ public class AuthService {
     private final UserSubscriptionRepository userSubscriptionRepository;
     private final SubscriptionPlanRepository subscriptionPlanRepository;
     private final AuthProfileService authProfileService;
+    private final CacheService cacheService;
+    private final RabbitTemplate rabbitTemplate;
 
     // ── Register ──────────────────────────────────────────────────────────────
 
@@ -148,12 +158,98 @@ public class AuthService {
         User user = userRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
+        int maxDevices = sessionService.resolveMaxDevicesForUser(user.getId());
+        long activeSessions = sessionService.countActiveSessions(user.getId());
+        if (activeSessions >= maxDevices) {
+            String resolutionToken = jwtTokenProvider.generateDeviceLimitResolutionToken(user.getId());
+            List<SessionDto> devices = sessionService.getActiveSessions(user.getId());
+            throw new DeviceLimitReachedException(
+                    "You've reached your device limit. Choose a device to sign out to continue.",
+                    maxDevices, resolutionToken, devices);
+        }
+
         String rawRefreshToken = generateSecureToken();
         UUID sessionId = sessionService.createSession(user.getId(), rawRefreshToken, httpRequest);
         issueTokenCookies(user, sessionId, response);
 
         log.info("User logged in: {}", user.getEmail());
         return authProfileService.getProfile(user.getId(), sessionId, "Login successful");
+    }
+
+    // ── Resolve device limit ──────────────────────────────────────────────────
+    @Transactional
+    public AuthProfileResponse resolveDeviceLimit(
+            ResolveDeviceLimitRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse response
+    ) {
+        if (request == null) throw new BadRequestException("Request body is required");
+        String resolutionToken = requireText(request.getResolutionToken(), "Resolution token is required");
+        String sessionIdToRevokeStr = requireText(request.getSessionIdToRevoke(), "A device to sign out must be selected");
+
+        if (!jwtTokenProvider.validateDeviceLimitResolutionToken(resolutionToken)) {
+            throw new InvalidTokenException("Resolution token is invalid or expired");
+        }
+
+        Claims claims = jwtTokenProvider.parseDeviceLimitResolutionToken(resolutionToken);
+        UUID userId = UUID.fromString(claims.getSubject());
+
+        UUID sessionIdToRevoke;
+        try {
+            sessionIdToRevoke = UUID.fromString(sessionIdToRevokeStr);
+        } catch (IllegalArgumentException ex) {
+            throw new BadRequestException("sessionIdToRevoke must be a valid session id");
+        }
+
+        // Resolve and validate the target BEFORE touching the single-use lock below, for two
+        // reasons: (1) selfRevokeSession() is idempotent — it silently no-ops on an
+        // already-revoked/nonexistent session rather than erroring, so without this check a
+        // stale or garbage sessionIdToRevoke would still fall through to createSession() and
+        // hand out a brand-new session with no slot actually freed, permanently exceeding the
+        // device cap; (2) a bad sessionIdToRevoke must fail BEFORE consuming the one-time
+        // resolution token, or a legitimate retry with the same token would be rejected as
+        // "already used" and force the user to restart the whole login flow.
+        String evictedDeviceName = sessionService.getActiveSessions(userId).stream()
+                .filter(d -> d.getSessionId().equals(sessionIdToRevoke))
+                .map(SessionDto::getDeviceName)
+                .findFirst()
+                .orElseThrow(() -> new BadRequestException("Selected device is no longer active"));
+
+        String usedKey = "tinnie:lock:device-limit-resolution:" + claims.getId();
+        if (!cacheService.setIfAbsent(usedKey, "used", Duration.ofMinutes(5))) {
+            throw new InvalidTokenException("Resolution token has already been used");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        sessionService.selfRevokeSession(userId, sessionIdToRevoke, null);
+
+        String rawRefreshToken = generateSecureToken();
+        UUID newSessionId = sessionService.createSession(userId, rawRefreshToken, httpRequest);
+        issueTokenCookies(user, newSessionId, response);
+
+        // Published last, after every DB write has succeeded — same ordering rationale as the
+        // ContentService/EpisodeService broadcast helpers: this is an irrevocable side effect, so
+        // it must not fire before a later statement in this transaction could still roll back.
+        publishDeviceLoggedOutNotification(userId, evictedDeviceName);
+
+        log.info("User {} resolved device limit by signing out session {}", user.getEmail(), sessionIdToRevoke);
+        return authProfileService.getProfile(userId, newSessionId, "Login successful");
+    }
+
+    // Best-effort, same non-critical-failure handling as ContentService's publish helpers — a
+    // failed notification must never block the login this method is in the middle of completing.
+    private void publishDeviceLoggedOutNotification(UUID userId, String deviceName) {
+        try {
+            rabbitTemplate.convertAndSend(RabbitConfig.QUEUE_NOTIFICATIONS, Map.of(
+                    "type", "DEVICE_LOGGED_OUT",
+                    "userId", userId.toString(),
+                    "deviceName", deviceName
+            ));
+        } catch (Exception e) {
+            log.warn("DEVICE_LOGGED_OUT notification publish failed (non-critical): {}", e.getMessage());
+        }
     }
 
     // ── Refresh ───────────────────────────────────────────────────────────────

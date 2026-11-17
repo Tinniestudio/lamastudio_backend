@@ -7,12 +7,15 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "notification_templates")
+@Table(
+    name = "notification_templates",
+    uniqueConstraints = @UniqueConstraint(columnNames = {"event_type", "channel"})
+)
 @Getter @Setter @NoArgsConstructor
 public class NotificationTemplate extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private NotificationEventType eventType;
 
     @Column(nullable = false)

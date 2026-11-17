@@ -279,15 +279,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         // docs/superpowers/specs/2026-10-26-legacy-card-setup-grandfathering-design.md.
         boolean cardSetupRequired = profile.map(UserProfile::isCardSetupRequired).orElse(true);
 
-        // A subscription still on the FREE plan never needed a card under the pre-recurring-billing
-        // model — only SILVER/GOLD (trial or paid) requires one. Without this, every legacy free
-        // signup (no stripeCustomerId, payment_setup defaulted false by the V59 migration) gets
-        // walled off with NEEDS_SETUP even though they never agreed to add a card.
-        boolean isFreePlan = sub.getPlan() == null || "FREE".equalsIgnoreCase(sub.getPlan().getName());
-
         String blockReason;
         boolean hasAccess;
-        if (cardSetupRequired && !isFreePlan && !paymentSetup && sub.getStripeCustomerId() == null && !periodExpired) {
+        if (cardSetupRequired && !paymentSetup && sub.getStripeCustomerId() == null && !periodExpired) {
             blockReason = "NEEDS_SETUP";
             hasAccess = false;
         } else if (sub.getStatus() == SubscriptionStatus.PAST_DUE) {
