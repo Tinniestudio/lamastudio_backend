@@ -197,7 +197,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         // PAST_DUE status update by processRenewal, and this method would return successfully
         // anyway — the client then shows "Card re-enabled!" for a card that was never added.
         if (sub.getStripeCustomerId() == null || sub.getStripePaymentMethodId() == null) {
-            throw new BadRequestException("No card on file to re-enable — add a new card instead");
+            throw new BadRequestException("No card on file to re-enable add a new card instead");
         }
 
         boolean expired = sub.getEndDate() != null && sub.getEndDate().isBefore(Instant.now());
