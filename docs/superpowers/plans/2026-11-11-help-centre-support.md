@@ -17,12 +17,14 @@
 ### Task 1: `SUPPORT` admin role
 
 **Files:**
+
 - Modify: `server/api-service/src/main/java/com/tinniestudio/api/modules/auth/admin/entity/AdminRoleName.java`
 - Modify: `server/api-service/src/test/java/com/tinniestudio/api/auth/service/AdminAuthServiceTest.java` (if it tests role assignment exhaustively — check first)
 
 - [ ] **Step 1: Add the enum value**
 
 Current full file:
+
 ```java
 package com.tinniestudio.api.modules.auth.admin.entity;
 
@@ -81,6 +83,7 @@ git commit -m "feat: add SUPPORT admin role"
 ### Task 2: `SupportTicket`/`TicketMessage` entities + migration + repositories
 
 **Files:**
+
 - Create: `server/api-service/src/main/resources/db/migration/V62__add_support_tickets.sql`
 - Create: `server/api-service/src/main/java/com/tinniestudio/api/shared/entity/SupportTicket.java`
 - Create: `server/api-service/src/main/java/com/tinniestudio/api/shared/entity/TicketMessage.java`
@@ -419,6 +422,7 @@ git commit -m "feat: add SupportTicket/TicketMessage entities, migration, and re
 ### Task 3: Ticket number generator
 
 **Files:**
+
 - Create: `server/api-service/src/main/java/com/tinniestudio/api/modules/ticket/util/TicketNumberGenerator.java`
 - Create: `server/api-service/src/test/java/com/tinniestudio/api/modules/ticket/util/TicketNumberGeneratorTest.java`
 
@@ -553,6 +557,7 @@ git commit -m "feat: add collision-checked ticket number generator"
 ### Task 4: Support alert email + `TICKET_REPLIED` notification plumbing
 
 **Files:**
+
 - Modify: `server/api-service/src/main/java/com/tinniestudio/api/shared/config/AppProperties.java`
 - Modify: `server/api-service/src/main/resources/application.yml`
 - Modify: `server/api-service/src/main/java/com/tinniestudio/api/modules/auth/service/EmailService.java`
@@ -685,8 +690,8 @@ Add the field on the outer class, alongside the other `= new X();`-initialized f
 In `application.yml`, add a new top-level-under-`app` block, right after the `resend:` block:
 
 ```yaml
-  support:
-    alert-recipient-email: ${SUPPORT_ALERT_RECIPIENT_EMAIL:}
+support:
+  alert-recipient-email: ${SUPPORT_ALERT_RECIPIENT_EMAIL:}
 ```
 
 - [ ] **Step 4: Add `sendNewTicketAlert` to `EmailService`**
@@ -826,6 +831,7 @@ git commit -m "feat: add new-ticket alert email and TICKET_REPLIED notification 
 ### Task 5: DTOs + `TicketService` + `TicketController`
 
 **Files:**
+
 - Create: `server/api-service/src/main/java/com/tinniestudio/api/modules/ticket/dto/CreateTicketRequest.java`
 - Create: `server/api-service/src/main/java/com/tinniestudio/api/modules/ticket/dto/ReplyTicketRequest.java`
 - Create: `server/api-service/src/main/java/com/tinniestudio/api/modules/ticket/dto/TicketMessageResponse.java`
@@ -1558,6 +1564,7 @@ git commit -m "feat: add user-facing ticket submission, listing, and reply API"
 ### Task 6: `UpdateTicketStatusRequest` + `AdminTicketService` + `AdminTicketController`
 
 **Files:**
+
 - Create: `server/api-service/src/main/java/com/tinniestudio/api/modules/ticket/dto/UpdateTicketStatusRequest.java`
 - Create: `server/api-service/src/main/java/com/tinniestudio/api/modules/ticket/service/AdminTicketService.java`
 - Create: `server/api-service/src/main/java/com/tinniestudio/api/modules/ticket/service/AdminTicketServiceImpl.java`
@@ -2114,6 +2121,7 @@ git commit -m "feat: add admin-facing ticket list/reply/status API, gated to any
 ### Task 7: Ticket attachments (presign → upload → validate-on-submit)
 
 **Files:**
+
 - Create: `server/api-service/src/main/java/com/tinniestudio/api/modules/ticket/dto/TicketAttachmentUploadRequest.java`
 - Create: `server/api-service/src/main/java/com/tinniestudio/api/modules/ticket/dto/TicketAttachmentUploadResponse.java`
 - Create: `server/api-service/src/main/java/com/tinniestudio/api/modules/ticket/service/TicketAttachmentResolver.java`
@@ -2462,10 +2470,13 @@ In `TicketServiceImpl.java`: add a `TicketAttachmentResolver attachmentResolver`
 (add this field alongside the other `private final` fields at the top of the class)
 
 Replace both occurrences of:
+
 ```java
         String attachmentUrl = resolveAttachmentUrl(userId, request.getAttachmentStorageKey());
 ```
+
 with:
+
 ```java
         String attachmentUrl = attachmentResolver.resolveAttachmentUrl(userId, request.getAttachmentStorageKey());
 ```
@@ -2484,20 +2495,24 @@ Add the new interface method's implementation, anywhere among the other `@Overri
 - [ ] **Step 7: Wire `TicketAttachmentResolver` into `AdminTicketServiceImpl`**
 
 Add the field:
+
 ```java
     private final TicketAttachmentResolver attachmentResolver;
 ```
 
 Replace:
+
 ```java
         message.setAttachmentUrl(request.getAttachmentStorageKey());
 ```
+
 with:
+
 ```java
         message.setAttachmentUrl(attachmentResolver.resolveAttachmentUrl(ticket.getUserId(), request.getAttachmentStorageKey()));
 ```
 
-`ticket.getUserId()` (the ticket's owner), not `adminId`: there is no separate admin upload/presign flow anywhere in this plan (admin-web's reply UI — Task 19 — never calls a presign endpoint or sets `attachmentStorageKey`), so the only identity a storage key could legitimately be scoped under here is the ticket owner's own `tickets/{userId}/` prefix — i.e. an admin can reference an attachment the end user already uploaded, but can't smuggle in an arbitrary other-user's object. If an admin-side upload flow is added later, this will need its own presign endpoint and a decision on what prefix *that* uses.
+`ticket.getUserId()` (the ticket's owner), not `adminId`: there is no separate admin upload/presign flow anywhere in this plan (admin-web's reply UI — Task 19 — never calls a presign endpoint or sets `attachmentStorageKey`), so the only identity a storage key could legitimately be scoped under here is the ticket owner's own `tickets/{userId}/` prefix — i.e. an admin can reference an attachment the end user already uploaded, but can't smuggle in an arbitrary other-user's object. If an admin-side upload flow is added later, this will need its own presign endpoint and a decision on what prefix _that_ uses.
 
 - [ ] **Step 8: Update the Task 5/6 test files' constructors for the new dependency**
 
@@ -2559,6 +2574,7 @@ git commit -m "feat: add ticket attachment presign/upload/validate flow, shared 
 ### Task 8: Part A — Help Centre contact info fixes
 
 **Files:**
+
 - Modify: `tinniestudio-client-web/src/features/legals/components/ContactUsClient.tsx`
 - Modify: `tinniestudio-client-web/src/components/@layout/Footer.tsx`
 
@@ -2575,21 +2591,21 @@ Replace the `DEPARTMENTS` array:
 ```tsx
 const DEPARTMENTS = [
   {
-    title: 'Customer Support',
-    email: 'support@tinniestudio.com',
-    desc: 'For account support, billing, and general inquiries.',
+    title: "Customer Support",
+    email: "support@tinniestudio.com",
+    desc: "For account support, billing, and general inquiries.",
     icon: MessageSquare,
   },
   {
-    title: 'Technical Support',
-    email: 'tech@tinniestudio.com',
-    desc: 'Streaming issues, login problems, or device compatibility.',
+    title: "Technical Support",
+    email: "tech@tinniestudio.com",
+    desc: "Streaming issues, login problems, or device compatibility.",
     icon: Monitor,
   },
   {
-    title: 'Business & Partnerships',
-    email: 'business@tinniestudio.com',
-    desc: 'Advertising, media inquiries, and strategic opportunities.',
+    title: "Business & Partnerships",
+    email: "business@tinniestudio.com",
+    desc: "Advertising, media inquiries, and strategic opportunities.",
     icon: Briefcase,
   },
 ];
@@ -2600,21 +2616,21 @@ with (all three departments route to the one confirmed-monitored inbox — `supp
 ```tsx
 const DEPARTMENTS = [
   {
-    title: 'Customer Support',
-    email: 'support@tinniestudio.com',
-    desc: 'For account support, billing, and general inquiries.',
+    title: "Customer Support",
+    email: "support@tinniestudio.com",
+    desc: "For account support, billing, and general inquiries.",
     icon: MessageSquare,
   },
   {
-    title: 'Technical Support',
-    email: 'support@tinniestudio.com',
-    desc: 'Streaming issues, login problems, or device compatibility.',
+    title: "Technical Support",
+    email: "support@tinniestudio.com",
+    desc: "Streaming issues, login problems, or device compatibility.",
     icon: Monitor,
   },
   {
-    title: 'Business & Partnerships',
-    email: 'support@tinniestudio.com',
-    desc: 'Advertising, media inquiries, and strategic opportunities.',
+    title: "Business & Partnerships",
+    email: "support@tinniestudio.com",
+    desc: "Advertising, media inquiries, and strategic opportunities.",
     icon: Briefcase,
   },
 ];
@@ -2624,26 +2640,28 @@ Delete the `SOCIALS` array and its render loop entirely — these are dead `href
 
 ```tsx
 const SOCIALS = [
-  { name: 'Facebook', icon: Facebook, href: '#' },
-  { name: 'Instagram', icon: Instagram, href: '#' },
-  { name: 'YouTube', icon: Youtube, href: '#' },
-  { name: 'X', icon: Twitter, href: '#' },
+  { name: "Facebook", icon: Facebook, href: "#" },
+  { name: "Instagram", icon: Instagram, href: "#" },
+  { name: "YouTube", icon: Youtube, href: "#" },
+  { name: "X", icon: Twitter, href: "#" },
 ];
 ```
 
 and the block rendering them:
 
 ```tsx
-{SOCIALS.map((soc) => (
-  <Button 
-    key={soc.name} 
-    variant="ghost" 
-    size="icon" 
-    className="w-14 h-14 rounded-2xl bg-tls-primary2 border border-white/5 hover:bg-tls-secondary hover:text-black transition-all"
-  >
-    <soc.icon className="w-6 h-6" />
-  </Button>
-))}
+{
+  SOCIALS.map((soc) => (
+    <Button
+      key={soc.name}
+      variant="ghost"
+      size="icon"
+      className="w-14 h-14 rounded-2xl bg-tls-primary2 border border-white/5 hover:bg-tls-secondary hover:text-black transition-all"
+    >
+      <soc.icon className="w-6 h-6" />
+    </Button>
+  ));
+}
 ```
 
 Remove the now-unused `Facebook`/`Instagram`/`Youtube`/`Twitter` icon imports if they're not used anywhere else in the file (check first — if any are still referenced elsewhere, keep only those still in use).
@@ -2661,11 +2679,13 @@ Remove the now-unused `ArrowUpRight` icon import if it's not used elsewhere in t
 Fix the mangled-encoding bug on the same page (found during research — unrelated to the task list above, but a one-line content fix on a file already being edited for cleanup):
 
 Find:
+
 ```tsx
 We#&69d love to hear from you.
 ```
 
 Replace with:
+
 ```tsx
 We'd love to hear from you.
 ```
@@ -2731,6 +2751,7 @@ git commit -m "fix: show only the verified support email, remove dead KB/social 
 ### Task 9: Part B — Tawk.to live chat embed
 
 **Files:**
+
 - Modify: `tinniestudio-client-web/src/app/layout.tsx`
 - Modify: `tinniestudio-client-web/.env.example` (if one exists — check first; if not, skip this file)
 
@@ -2743,7 +2764,7 @@ Read `src/app/layout.tsx` in full. Confirm the `<body>...</body>` structure stil
 Add the import at the top of the file, alongside the other imports:
 
 ```tsx
-import Script from 'next/script';
+import Script from "next/script";
 ```
 
 Add the embed script right before the closing `</body>` tag (after the existing `<ToastContainer .../>` and the closing `</CSRFTokenProvider>`/`</HydrationProvider>` tags, still inside `<body>`):
@@ -2814,6 +2835,7 @@ git commit -m "feat: add Tawk.to live chat embed, site-wide, gated on NEXT_PUBLI
 ### Task 10: Ticket types + constants + BFF routes
 
 **Files:**
+
 - Create: `tinniestudio-client-web/src/types/ticket.type.ts`
 - Modify: `tinniestudio-client-web/src/types/index.ts`
 - Create: `tinniestudio-client-web/src/features/tickets/constants/tickets.ts`
@@ -2829,11 +2851,11 @@ Read `src/types/index.ts` to confirm its barrel-export style, and `src/app/api/n
 - [ ] **Step 2: Add the ticket types**
 
 ```ts
-export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+export type TicketStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
 
 export interface TicketMessage {
   id: string;
-  senderType: 'USER' | 'ADMIN';
+  senderType: "USER" | "ADMIN";
   senderId: string;
   body: string;
   attachmentUrl: string | null;
@@ -2884,35 +2906,35 @@ Add `export * from './ticket.type';` to `src/types/index.ts`'s barrel export blo
 
 ```ts
 export const TICKET_CONSTANTS = {
-  LIST: '/api/tickets',
-  CREATE: '/api/tickets',
+  LIST: "/api/tickets",
+  CREATE: "/api/tickets",
   DETAIL: (id: string) => `/api/tickets/${id}`,
   REPLY: (id: string) => `/api/tickets/${id}/messages`,
-  PRESIGN_ATTACHMENT: '/api/tickets/attachments/presign',
+  PRESIGN_ATTACHMENT: "/api/tickets/attachments/presign",
 } as const;
 
 export const BACKEND_TICKET_CONSTANTS = {
-  LIST: '/tickets',
-  CREATE: '/tickets',
+  LIST: "/tickets",
+  CREATE: "/tickets",
   DETAIL: (id: string) => `/tickets/${id}`,
   REPLY: (id: string) => `/tickets/${id}/messages`,
-  PRESIGN_ATTACHMENT: '/tickets/attachments/presign',
+  PRESIGN_ATTACHMENT: "/tickets/attachments/presign",
 } as const;
 ```
 
 - [ ] **Step 4: Create the list + create BFF route**
 
 ```ts
-import backendFetch from '@/lib/server/backendFetch';
-import { buildProxyResponse, forwardCredentials } from '@/lib/server/bff';
-import { BACKEND_TICKET_CONSTANTS } from '@/features/tickets/constants/tickets';
+import backendFetch from "@/lib/server/backendFetch";
+import { buildProxyResponse, forwardCredentials } from "@/lib/server/bff";
+import { BACKEND_TICKET_CONSTANTS } from "@/features/tickets/constants/tickets";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const qs = searchParams.toString();
 
   const resp = await backendFetch({
-    url: `${BACKEND_TICKET_CONSTANTS.LIST}${qs ? `?${qs}` : ''}`,
+    url: `${BACKEND_TICKET_CONSTANTS.LIST}${qs ? `?${qs}` : ""}`,
     headers: forwardCredentials(req),
   });
 
@@ -2924,7 +2946,7 @@ export async function POST(req: Request) {
 
   const resp = await backendFetch({
     url: BACKEND_TICKET_CONSTANTS.CREATE,
-    method: 'POST',
+    method: "POST",
     data: body,
     headers: forwardCredentials(req),
   });
@@ -2936,10 +2958,10 @@ export async function POST(req: Request) {
 - [ ] **Step 5: Create the detail BFF route**
 
 ```ts
-import backendFetch from '@/lib/server/backendFetch';
-import { buildProxyResponse, forwardCredentials } from '@/lib/server/bff';
-import { BACKEND_TICKET_CONSTANTS } from '@/features/tickets/constants/tickets';
-import z from 'zod';
+import backendFetch from "@/lib/server/backendFetch";
+import { buildProxyResponse, forwardCredentials } from "@/lib/server/bff";
+import { BACKEND_TICKET_CONSTANTS } from "@/features/tickets/constants/tickets";
+import z from "zod";
 
 export async function GET(
   req: Request,
@@ -2949,8 +2971,12 @@ export async function GET(
   const parsed = z.string().uuid().safeParse(id);
   if (!parsed.success) {
     return Response.json(
-      { success: false, message: 'Validation failed', error: { code: 'VALIDATION_ERROR', message: parsed.error.message } },
-      { status: 400 }
+      {
+        success: false,
+        message: "Validation failed",
+        error: { code: "VALIDATION_ERROR", message: parsed.error.message },
+      },
+      { status: 400 },
     );
   }
 
@@ -2966,10 +2992,10 @@ export async function GET(
 - [ ] **Step 6: Create the reply BFF route**
 
 ```ts
-import backendFetch from '@/lib/server/backendFetch';
-import { buildProxyResponse, forwardCredentials } from '@/lib/server/bff';
-import { BACKEND_TICKET_CONSTANTS } from '@/features/tickets/constants/tickets';
-import z from 'zod';
+import backendFetch from "@/lib/server/backendFetch";
+import { buildProxyResponse, forwardCredentials } from "@/lib/server/bff";
+import { BACKEND_TICKET_CONSTANTS } from "@/features/tickets/constants/tickets";
+import z from "zod";
 
 export async function POST(
   req: Request,
@@ -2979,8 +3005,12 @@ export async function POST(
   const parsed = z.string().uuid().safeParse(id);
   if (!parsed.success) {
     return Response.json(
-      { success: false, message: 'Validation failed', error: { code: 'VALIDATION_ERROR', message: parsed.error.message } },
-      { status: 400 }
+      {
+        success: false,
+        message: "Validation failed",
+        error: { code: "VALIDATION_ERROR", message: parsed.error.message },
+      },
+      { status: 400 },
     );
   }
 
@@ -2988,7 +3018,7 @@ export async function POST(
 
   const resp = await backendFetch({
     url: BACKEND_TICKET_CONSTANTS.REPLY(parsed.data),
-    method: 'POST',
+    method: "POST",
     data: body,
     headers: forwardCredentials(req),
   });
@@ -3000,16 +3030,16 @@ export async function POST(
 - [ ] **Step 7: Create the attachment presign BFF route**
 
 ```ts
-import backendFetch from '@/lib/server/backendFetch';
-import { buildProxyResponse, forwardCredentials } from '@/lib/server/bff';
-import { BACKEND_TICKET_CONSTANTS } from '@/features/tickets/constants/tickets';
+import backendFetch from "@/lib/server/backendFetch";
+import { buildProxyResponse, forwardCredentials } from "@/lib/server/bff";
+import { BACKEND_TICKET_CONSTANTS } from "@/features/tickets/constants/tickets";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
 
   const resp = await backendFetch({
     url: BACKEND_TICKET_CONSTANTS.PRESIGN_ATTACHMENT,
-    method: 'POST',
+    method: "POST",
     data: body,
     headers: forwardCredentials(req),
   });
@@ -3044,6 +3074,7 @@ git commit -m "feat: add ticket types, constants, and BFF proxy routes"
 ### Task 11: Ticket React Query hooks
 
 **Files:**
+
 - Create: `tinniestudio-client-web/src/features/tickets/service/ticket-query-keys.ts`
 - Create: `tinniestudio-client-web/src/features/tickets/service/queries.ts`
 - Create: `tinniestudio-client-web/src/features/tickets/service/mutations.ts`
@@ -3057,34 +3088,36 @@ Read `src/features/account/service/mutations.ts` and `src/features/notifications
 
 ```ts
 export const ticketKeys = {
-  list: (page: number) => ['tickets', 'list', page] as const,
-  lists: () => ['tickets', 'list'] as const,
-  detail: (id: string) => ['tickets', 'detail', id] as const,
+  list: (page: number) => ["tickets", "list", page] as const,
+  lists: () => ["tickets", "list"] as const,
+  detail: (id: string) => ["tickets", "detail", id] as const,
 };
 ```
 
 - [ ] **Step 3: Create the queries**
 
 ```ts
-'use client';
+"use client";
 
-import { bffFetch, bffFetchWithMeta, useApiQuery } from '@/hooks/api-hooks';
-import type { ApiResponseMeta, Ticket, TicketDetail } from '@/types';
-import { TICKET_CONSTANTS } from '../constants/tickets';
-import { ticketKeys } from './ticket-query-keys';
+import { bffFetch, bffFetchWithMeta, useApiQuery } from "@/hooks/api-hooks";
+import type { ApiResponseMeta, Ticket, TicketDetail } from "@/types";
+import { TICKET_CONSTANTS } from "../constants/tickets";
+import { ticketKeys } from "./ticket-query-keys";
 
-export function useTickets(page: number, seed?: { data: Ticket[]; meta?: ApiResponseMeta }) {
+export function useTickets(
+  page: number,
+  seed?: { data: Ticket[]; meta?: ApiResponseMeta },
+) {
   return useApiQuery(
     ticketKeys.list(page),
     () => bffFetchWithMeta<Ticket[]>(`${TICKET_CONSTANTS.LIST}?page=${page}`),
-    { keepPreviousData: true, initialData: seed }
+    { keepPreviousData: true, initialData: seed },
   );
 }
 
 export function useTicket(ticketId: string) {
-  return useApiQuery(
-    ticketKeys.detail(ticketId),
-    () => bffFetch<TicketDetail>(TICKET_CONSTANTS.DETAIL(ticketId))
+  return useApiQuery(ticketKeys.detail(ticketId), () =>
+    bffFetch<TicketDetail>(TICKET_CONSTANTS.DETAIL(ticketId)),
   );
 }
 ```
@@ -3092,10 +3125,10 @@ export function useTicket(ticketId: string) {
 - [ ] **Step 4: Create the mutations**
 
 ```ts
-'use client';
+"use client";
 
-import { useQueryClient } from '@tanstack/react-query';
-import { bffFetch, useApiMutation } from '@/hooks/api-hooks';
+import { useQueryClient } from "@tanstack/react-query";
+import { bffFetch, useApiMutation } from "@/hooks/api-hooks";
 import type {
   CreateTicketRequest,
   ReplyTicketRequest,
@@ -3103,24 +3136,24 @@ import type {
   TicketAttachmentUploadRequest,
   TicketAttachmentUploadResponse,
   TicketDetail,
-} from '@/types';
-import { TICKET_CONSTANTS } from '../constants/tickets';
-import { ticketKeys } from './ticket-query-keys';
+} from "@/types";
+import { TICKET_CONSTANTS } from "../constants/tickets";
+import { ticketKeys } from "./ticket-query-keys";
 
 export function useCreateTicket() {
   const queryClient = useQueryClient();
   return useApiMutation<Ticket, Error, CreateTicketRequest>(
     (payload) =>
       bffFetch<Ticket>(TICKET_CONSTANTS.CREATE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
     {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ticketKeys.lists() });
       },
-    }
+    },
   );
 }
 
@@ -3129,26 +3162,34 @@ export function useReplyToTicket(ticketId: string) {
   return useApiMutation<TicketDetail, Error, ReplyTicketRequest>(
     (payload) =>
       bffFetch<TicketDetail>(TICKET_CONSTANTS.REPLY(ticketId), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
     {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticketId) });
+        queryClient.invalidateQueries({
+          queryKey: ticketKeys.detail(ticketId),
+        });
       },
-    }
+    },
   );
 }
 
 export function usePresignTicketAttachment() {
-  return useApiMutation<TicketAttachmentUploadResponse, Error, TicketAttachmentUploadRequest>(
-    (payload) =>
-      bffFetch<TicketAttachmentUploadResponse>(TICKET_CONSTANTS.PRESIGN_ATTACHMENT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+  return useApiMutation<
+    TicketAttachmentUploadResponse,
+    Error,
+    TicketAttachmentUploadRequest
+  >((payload) =>
+    bffFetch<TicketAttachmentUploadResponse>(
+      TICKET_CONSTANTS.PRESIGN_ATTACHMENT,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      })
+      },
+    ),
   );
 }
 ```
@@ -3156,9 +3197,9 @@ export function usePresignTicketAttachment() {
 - [ ] **Step 5: Create the barrel export**
 
 ```ts
-export * from './ticket-query-keys';
-export * from './queries';
-export * from './mutations';
+export * from "./ticket-query-keys";
+export * from "./queries";
+export * from "./mutations";
 ```
 
 - [ ] **Step 6: Type-check and lint**
@@ -3185,6 +3226,7 @@ git commit -m "feat: add ticket React Query hooks (list, detail, create, reply, 
 ### Task 12: `TICKET_REPLIED` notification wiring
 
 **Files:**
+
 - Modify: `tinniestudio-client-web/src/types/notification.type.ts`
 - Modify: `tinniestudio-client-web/src/features/notifications/constant/event-types.ts`
 - Modify: `tinniestudio-client-web/src/features/notifications/components/NotificationBell.tsx`
@@ -3227,6 +3269,7 @@ export type NotificationEventType =
 This file has a `NOTIFICATION_EVENT_TYPE_LABELS: Record<NotificationEventType, string>` that TypeScript requires to cover every union member — add the missing entry or the build fails. Read the file first to see its current exact structure (the `NOTIFICATION_EVENT_TYPES` array and the `Record` both need the new entry), then add:
 
 In `NOTIFICATION_EVENT_TYPE_LABELS`:
+
 ```ts
   TICKET_REPLIED: 'Support ticket reply',
 ```
@@ -3240,10 +3283,12 @@ In `NotificationBell.tsx`, change:
 ```tsx
 function resolveHref(notification: NotificationResponse): string | null {
   switch (notification.referenceType) {
-    case 'CONTENT':
-      return notification.referenceId ? `/watch/${notification.referenceId}` : null;
-    case 'ACCOUNT_SECURITY':
-      return '/account?action=security';
+    case "CONTENT":
+      return notification.referenceId
+        ? `/watch/${notification.referenceId}`
+        : null;
+    case "ACCOUNT_SECURITY":
+      return "/account?action=security";
     default:
       return null;
   }
@@ -3255,12 +3300,16 @@ to:
 ```tsx
 function resolveHref(notification: NotificationResponse): string | null {
   switch (notification.referenceType) {
-    case 'CONTENT':
-      return notification.referenceId ? `/watch/${notification.referenceId}` : null;
-    case 'ACCOUNT_SECURITY':
-      return '/account?action=security';
-    case 'TICKET':
-      return notification.referenceId ? `/account/tickets/${notification.referenceId}` : null;
+    case "CONTENT":
+      return notification.referenceId
+        ? `/watch/${notification.referenceId}`
+        : null;
+    case "ACCOUNT_SECURITY":
+      return "/account?action=security";
+    case "TICKET":
+      return notification.referenceId
+        ? `/account/tickets/${notification.referenceId}`
+        : null;
     default:
       return null;
   }
@@ -3295,6 +3344,7 @@ git commit -m "feat: add TICKET_REPLIED notification type and bell deep-link"
 ### Task 13: Ticket submission form on the Contact page
 
 **Files:**
+
 - Create: `tinniestudio-client-web/src/features/tickets/schema/ticket.schema.ts`
 - Create: `tinniestudio-client-web/src/features/tickets/components/TicketSubmissionForm.tsx`
 - Modify: `tinniestudio-client-web/src/features/legals/components/ContactUsClient.tsx`
@@ -3306,14 +3356,14 @@ Read `src/features/account/components/ProfilePanelAvatar.tsx` once more (the pre
 - [ ] **Step 2: Create the zod schema**
 
 ```ts
-import z from 'zod';
+import z from "zod";
 
 export const ticketFormSchema = z.object({
   subject: z
     .string()
-    .min(1, { message: 'Subject is required' })
-    .max(255, { message: 'Subject must not exceed 255 characters' }),
-  body: z.string().min(1, { message: 'Message is required' }),
+    .min(1, { message: "Subject is required" })
+    .max(255, { message: "Subject must not exceed 255 characters" }),
+  body: z.string().min(1, { message: "Message is required" }),
 });
 
 export type TicketFormValues = z.infer<typeof ticketFormSchema>;
@@ -3322,38 +3372,52 @@ export type TicketFormValues = z.infer<typeof ticketFormSchema>;
 - [ ] **Step 3: Create the submission form component**
 
 ```tsx
-'use client';
+"use client";
 
-import { useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Paperclip, Send } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { useRef, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Paperclip, Send } from "lucide-react";
+import { toast } from "react-toastify";
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { ticketFormSchema, TicketFormValues } from '../schema/ticket.schema';
-import { useCreateTicket, usePresignTicketAttachment } from '../service';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { ticketFormSchema, TicketFormValues } from "../schema/ticket.schema";
+import { useCreateTicket, usePresignTicketAttachment } from "../service";
 
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10 MB, matches the backend ceiling
-const ALLOWED_ATTACHMENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const ALLOWED_ATTACHMENT_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+];
 
-type UploadProgress = 'idle' | 'requesting' | 'uploading' | 'submitting';
+type UploadProgress = "idle" | "requesting" | "uploading" | "submitting";
 
 const uploadLabel: Record<UploadProgress, string> = {
-  idle: 'Submit Ticket',
-  requesting: 'Preparing attachment...',
-  uploading: 'Uploading attachment...',
-  submitting: 'Submitting...',
+  idle: "Contact Support",
+  requesting: "Preparing attachment...",
+  uploading: "Uploading attachment...",
+  submitting: "Submitting...",
 };
 
 export function TicketSubmissionForm() {
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<UploadProgress>('idle');
-  const [confirmation, setConfirmation] = useState<{ ticketNumber: string } | null>(null);
+  const [progress, setProgress] = useState<UploadProgress>("idle");
+  const [confirmation, setConfirmation] = useState<{
+    ticketNumber: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const createTicket = useCreateTicket();
@@ -3361,7 +3425,7 @@ export function TicketSubmissionForm() {
 
   const form = useForm<TicketFormValues>({
     resolver: zodResolver(ticketFormSchema),
-    defaultValues: { subject: '', body: '' },
+    defaultValues: { subject: "", body: "" },
   });
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -3371,11 +3435,11 @@ export function TicketSubmissionForm() {
     setFileError(null);
 
     if (!ALLOWED_ATTACHMENT_TYPES.includes(selected.type)) {
-      setFileError('Please select an image (JPEG/PNG/WebP) or PDF file.');
+      setFileError("Please select an image (JPEG/PNG/WebP) or PDF file.");
       return;
     }
     if (selected.size > MAX_ATTACHMENT_SIZE) {
-      setFileError('File must be smaller than 10 MB.');
+      setFileError("File must be smaller than 10 MB.");
       return;
     }
 
@@ -3387,17 +3451,17 @@ export function TicketSubmissionForm() {
       let attachmentStorageKey: string | undefined;
 
       if (file) {
-        setProgress('requesting');
+        setProgress("requesting");
         const presigned = await presignAttachment.mutateAsync({
           mimeType: file.type,
           fileSizeBytes: file.size,
         });
 
-        setProgress('uploading');
+        setProgress("uploading");
         const uploadRes = await fetch(presigned.uploadUrl, {
-          method: 'PUT',
+          method: "PUT",
           body: file,
-          headers: { 'Content-Type': file.type },
+          headers: { "Content-Type": file.type },
         });
         if (!uploadRes.ok) {
           throw new Error(`Attachment upload failed: ${uploadRes.statusText}`);
@@ -3405,7 +3469,7 @@ export function TicketSubmissionForm() {
         attachmentStorageKey = presigned.storageKey;
       }
 
-      setProgress('submitting');
+      setProgress("submitting");
       const ticket = await createTicket.mutateAsync({
         subject: values.subject,
         body: values.body,
@@ -3415,25 +3479,41 @@ export function TicketSubmissionForm() {
       setConfirmation({ ticketNumber: ticket.ticketNumber });
       form.reset();
       setFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to submit ticket';
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Failed to submit contact ticket. Please try again later.";
       toast.error(message);
     } finally {
-      setProgress('idle');
+      setProgress("idle");
     }
   }
 
   if (confirmation) {
     return (
-      <div className='bg-tls-primary2 border border-white/10 rounded-2xl p-8 text-center'>
-        <p className='text-lg font-semibold text-white'>Ticket submitted!</p>
-        <p className='text-sm text-white/60 mt-2'>
-          Your reference number is <span className='text-tls-secondary font-mono'>{confirmation.ticketNumber}</span>.
-          We&apos;ll reply by email, or you can track it under{' '}
-          <a href='/account/tickets' className='text-tls-secondary hover:underline'>My Tickets</a>.
+      <div className="bg-tls-primary2 border border-white/10 rounded-2xl p-8 text-center">
+        <p className="text-lg font-semibold text-white">Ticket submitted!</p>
+        <p className="text-sm text-white/60 mt-2">
+          Your reference number is{" "}
+          <span className="text-tls-secondary font-mono">
+            {confirmation.ticketNumber}
+          </span>
+          . We&apos;ll reply by email, or you can track it under{" "}
+          <a
+            href="/account/tickets"
+            className="text-tls-secondary hover:underline"
+          >
+            My Tickets
+          </a>
+          .
         </p>
-        <Button className='mt-6' variant='outline' onClick={() => setConfirmation(null)}>
+        <Button
+          className="mt-6"
+          variant="outline"
+          onClick={() => setConfirmation(null)}
+        >
           Submit another ticket
         </Button>
       </div>
@@ -3442,13 +3522,15 @@ export function TicketSubmissionForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-4'>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
           control={form.control}
-          name='subject'
+          name="subject"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className='text-white/60 text-xs uppercase tracking-wider'>Subject</FormLabel>
+              <FormLabel className="text-white/60 text-xs uppercase tracking-wider">
+                Subject
+              </FormLabel>
               <FormControl>
                 <Input {...field} placeholder="What's this about?" />
               </FormControl>
@@ -3458,12 +3540,18 @@ export function TicketSubmissionForm() {
         />
         <FormField
           control={form.control}
-          name='body'
+          name="body"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className='text-white/60 text-xs uppercase tracking-wider'>Message</FormLabel>
+              <FormLabel className="text-white/60 text-xs uppercase tracking-wider">
+                Message
+              </FormLabel>
               <FormControl>
-                <Textarea {...field} rows={6} placeholder='Tell us what happened...' />
+                <Textarea
+                  {...field}
+                  rows={6}
+                  placeholder="Tell us what happened..."
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -3471,27 +3559,35 @@ export function TicketSubmissionForm() {
         />
 
         <div>
-          <label className='text-white/60 text-xs uppercase tracking-wider block mb-2'>
+          <label className="text-white/60 text-xs uppercase tracking-wider block mb-2">
             Attachment (optional)
           </label>
           <input
             ref={fileInputRef}
-            type='file'
-            accept='image/jpeg,image/png,image/webp,application/pdf'
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
             onChange={handleFileSelect}
-            className='text-sm text-white/70'
+            className="text-sm text-white/70"
           />
-          {file && <p className='text-xs text-white/40 mt-1'>{file.name}</p>}
-          {fileError && <p role='alert' className='text-red-400 text-sm mt-1'>{fileError}</p>}
+          {file && <p className="text-xs text-white/40 mt-1">{file.name}</p>}
+          {fileError && (
+            <p role="alert" className="text-red-400 text-sm mt-1">
+              {fileError}
+            </p>
+          )}
         </div>
 
         <Button
-          type='submit'
-          disabled={progress !== 'idle' || form.formState.isSubmitting}
-          aria-busy={progress !== 'idle'}
-          className='w-full md:w-auto'
+          type="submit"
+          disabled={progress !== "idle" || form.formState.isSubmitting}
+          aria-busy={progress !== "idle"}
+          className="w-full md:w-auto"
         >
-          {progress === 'idle' ? <Send className='w-4 h-4 mr-2' /> : <Paperclip className='w-4 h-4 mr-2' />}
+          {progress === "idle" ? (
+            <Send className="w-4 h-4 mr-2" />
+          ) : (
+            <Paperclip className="w-4 h-4 mr-2" />
+          )}
           {uploadLabel[progress]}
         </Button>
       </form>
@@ -3505,15 +3601,17 @@ export function TicketSubmissionForm() {
 In `ContactUsClient.tsx`, add the import:
 
 ```tsx
-import { TicketSubmissionForm } from '@/features/tickets/components/TicketSubmissionForm';
+import { TicketSubmissionForm } from "@/features/tickets/components/TicketSubmissionForm";
 ```
 
 Add a new section rendering `<TicketSubmissionForm />` — place it wherever fits best given the page's actual current layout after Task 8's edits (e.g. as a new card/section near the department cards, with a heading like "Submit a Support Ticket"). Since the exact surrounding JSX structure depends on Task 8's final state, read the file first and insert a section such as:
 
 ```tsx
-<div className='mt-12'>
-  <h2 className='text-2xl font-bold text-white mb-4'>Submit a Support Ticket</h2>
-  <div className='bg-tls-primary2 border border-white/10 rounded-2xl p-6 md:p-8'>
+<div className="mt-12">
+  <h2 className="text-2xl font-bold text-white mb-4">
+    Submit a Support Ticket
+  </h2>
+  <div className="bg-tls-primary2 border border-white/10 rounded-2xl p-6 md:p-8">
     <TicketSubmissionForm />
   </div>
 </div>
@@ -3553,6 +3651,7 @@ git commit -m "feat: add ticket submission form to the Contact Us page"
 ### Task 14: "My Tickets" list page
 
 **Files:**
+
 - Create: `tinniestudio-client-web/src/app/(root)/(protected)/account/tickets/page.tsx`
 - Create: `tinniestudio-client-web/src/app/(root)/(protected)/account/tickets/TicketsListClient.tsx`
 - Create: `tinniestudio-client-web/src/features/tickets/components/TicketStatusBadge.tsx`
@@ -3566,21 +3665,24 @@ Read `src/app/(root)/(protected)/notifications/page.tsx` and `NotificationsPageC
 - [ ] **Step 2: Create the status badge component**
 
 ```tsx
-import { Badge } from '@/components/ui/badge';
-import type { TicketStatus } from '@/types';
+import { Badge } from "@/components/ui/badge";
+import type { TicketStatus } from "@/types";
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
-  OPEN: 'Open',
-  IN_PROGRESS: 'In Progress',
-  RESOLVED: 'Resolved',
-  CLOSED: 'Closed',
+  OPEN: "Open",
+  IN_PROGRESS: "In Progress",
+  RESOLVED: "Resolved",
+  CLOSED: "Closed",
 };
 
-const STATUS_VARIANT: Record<TicketStatus, 'default' | 'secondary' | 'outline' | 'ghost'> = {
-  OPEN: 'default',
-  IN_PROGRESS: 'secondary',
-  RESOLVED: 'outline',
-  CLOSED: 'ghost',
+const STATUS_VARIANT: Record<
+  TicketStatus,
+  "default" | "secondary" | "outline" | "ghost"
+> = {
+  OPEN: "default",
+  IN_PROGRESS: "secondary",
+  RESOLVED: "outline",
+  CLOSED: "ghost",
 };
 
 export function TicketStatusBadge({ status }: { status: TicketStatus }) {
@@ -3593,26 +3695,26 @@ export function TicketStatusBadge({ status }: { status: TicketStatus }) {
 - [ ] **Step 3: Create the SSR page**
 
 ```tsx
-import { Metadata } from 'next';
-import { cookies } from 'next/headers';
-import backendFetch from '@/lib/server/backendFetch';
-import type { ApiResponse, Ticket } from '@/types';
-import { TicketsListClient } from './TicketsListClient';
+import { Metadata } from "next";
+import { cookies } from "next/headers";
+import backendFetch from "@/lib/server/backendFetch";
+import type { ApiResponse, Ticket } from "@/types";
+import { TicketsListClient } from "./TicketsListClient";
 
 export const metadata: Metadata = {
-  title: 'My Tickets',
-  description: 'Track your support ticket history and conversations.',
+  title: "My Tickets",
+  description: "Track your support ticket history and conversations.",
 };
 
 export default async function TicketsPage() {
   const cookieStore = await cookies();
   const cookieHeader = cookieStore
     .getAll()
-    .map(c => `${c.name}=${c.value}`)
-    .join('; ');
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
 
   const resp: ApiResponse<Ticket[]> = await backendFetch<Ticket[]>({
-    url: '/tickets?page=0&size=20',
+    url: "/tickets?page=0&size=20",
     headers: { cookie: cookieHeader },
   });
 
@@ -3628,53 +3730,62 @@ export default async function TicketsPage() {
 - [ ] **Step 4: Create the client list component**
 
 ```tsx
-'use client';
+"use client";
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { useTickets } from '@/features/tickets/service';
-import { TicketStatusBadge } from '@/features/tickets/components/TicketStatusBadge';
-import type { ApiResponseMeta, Ticket } from '@/types';
+import { useState } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { useTickets } from "@/features/tickets/service";
+import { TicketStatusBadge } from "@/features/tickets/components/TicketStatusBadge";
+import type { ApiResponseMeta, Ticket } from "@/types";
 
 interface TicketsListClientProps {
   initialData: Ticket[];
   initialMeta?: ApiResponseMeta;
 }
 
-export function TicketsListClient({ initialData, initialMeta }: TicketsListClientProps) {
+export function TicketsListClient({
+  initialData,
+  initialMeta,
+}: TicketsListClientProps) {
   const [page, setPage] = useState(0);
-  const { data } = useTickets(page, page === 0 ? { data: initialData, meta: initialMeta } : undefined);
+  const { data } = useTickets(
+    page,
+    page === 0 ? { data: initialData, meta: initialMeta } : undefined,
+  );
 
   const tickets = data?.data ?? [];
   const meta = data?.meta;
 
   return (
-    <div className='max-w-3xl mx-auto py-8 px-4'>
-      <div className='flex items-center justify-between mb-6'>
-        <h1 className='text-xl font-semibold text-white'>My Tickets</h1>
-        <Button asChild variant='outline'>
-          <Link href='/contact-us'>Submit a new ticket</Link>
+    <div className="max-w-3xl mx-auto py-8 px-4">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold text-white">My Tickets</h1>
+        <Button asChild variant="outline">
+          <Link href="/contact-us">Submit a new ticket</Link>
         </Button>
       </div>
 
-      <div className='bg-white/5 border border-white/10 rounded-2xl overflow-hidden divide-y divide-white/5'>
+      <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden divide-y divide-white/5">
         {tickets.length === 0 ? (
-          <p className='px-4 py-10 text-center text-sm text-white/40'>
+          <p className="px-4 py-10 text-center text-sm text-white/40">
             You haven&apos;t submitted any tickets yet.
           </p>
         ) : (
-          tickets.map(ticket => (
+          tickets.map((ticket) => (
             <Link
               key={ticket.id}
               href={`/account/tickets/${ticket.id}`}
-              className='block px-4 py-3.5 hover:bg-white/5 transition-colors'
+              className="block px-4 py-3.5 hover:bg-white/5 transition-colors"
             >
-              <div className='flex items-center justify-between gap-3'>
-                <div className='min-w-0'>
-                  <p className='text-sm font-medium text-white truncate'>{ticket.subject}</p>
-                  <p className='text-xs text-white/40 mt-0.5'>
-                    {ticket.ticketNumber} · {new Date(ticket.createdAt).toLocaleDateString()}
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-white truncate">
+                    {ticket.subject}
+                  </p>
+                  <p className="text-xs text-white/40 mt-0.5">
+                    {ticket.ticketNumber} ·{" "}
+                    {new Date(ticket.createdAt).toLocaleDateString()}
                   </p>
                 </div>
                 <TicketStatusBadge status={ticket.status} />
@@ -3685,17 +3796,21 @@ export function TicketsListClient({ initialData, initialMeta }: TicketsListClien
       </div>
 
       {meta && meta.totalPages > 1 && (
-        <div className='flex items-center justify-center gap-3 mt-6'>
-          <Button variant='ghost' disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+        <div className="flex items-center justify-center gap-3 mt-6">
+          <Button
+            variant="ghost"
+            disabled={page === 0}
+            onClick={() => setPage((p) => p - 1)}
+          >
             Previous
           </Button>
-          <span className='text-sm text-white/50'>
+          <span className="text-sm text-white/50">
             Page {page + 1} of {meta.totalPages}
           </span>
           <Button
-            variant='ghost'
+            variant="ghost"
             disabled={page + 1 >= meta.totalPages}
-            onClick={() => setPage(p => p + 1)}
+            onClick={() => setPage((p) => p + 1)}
           >
             Next
           </Button>
@@ -3740,6 +3855,7 @@ git commit -m "feat: add My Tickets list page"
 ### Task 15: Ticket thread/detail page with reply + attachment upload
 
 **Files:**
+
 - Create: `tinniestudio-client-web/src/app/(root)/(protected)/account/tickets/[id]/page.tsx`
 - Create: `tinniestudio-client-web/src/app/(root)/(protected)/account/tickets/[id]/TicketThreadClient.tsx`
 - Create: `tinniestudio-client-web/src/features/tickets/components/TicketMessageItem.tsx`
@@ -3751,35 +3867,48 @@ Read `src/features/reviews/components/ReviewList.tsx` once more (the avatar-left
 - [ ] **Step 2: Create the message item component**
 
 ```tsx
-import { Paperclip } from 'lucide-react';
-import type { TicketMessage } from '@/types';
+import { Paperclip } from "lucide-react";
+import type { TicketMessage } from "@/types";
 
 export function TicketMessageItem({ message }: { message: TicketMessage }) {
-  const isAdmin = message.senderType === 'ADMIN';
+  const isAdmin = message.senderType === "ADMIN";
 
   return (
-    <div className={`flex gap-3 pb-5 border-b border-white/5 last:border-0 ${isAdmin ? '' : 'flex-row-reverse'}`}>
-      <div className={`w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-xs font-semibold ${
-        isAdmin ? 'bg-tls-secondary/20 text-tls-secondary' : 'bg-white/10 text-white/60'
-      }`}>
-        {isAdmin ? 'TS' : 'You'}
+    <div
+      className={`flex gap-3 pb-5 border-b border-white/5 last:border-0 ${isAdmin ? "" : "flex-row-reverse"}`}
+    >
+      <div
+        className={`w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-xs font-semibold ${
+          isAdmin
+            ? "bg-tls-secondary/20 text-tls-secondary"
+            : "bg-white/10 text-white/60"
+        }`}
+      >
+        {isAdmin ? "TS" : "You"}
       </div>
-      <div className={`flex-1 space-y-1 ${isAdmin ? '' : 'text-right'}`}>
-        <div className='flex items-center gap-2' style={isAdmin ? {} : { justifyContent: 'flex-end' }}>
-          <span className='text-sm font-semibold text-tls-neutral'>
-            {isAdmin ? 'TinnieStudio Support' : 'You'}
+      <div className={`flex-1 space-y-1 ${isAdmin ? "" : "text-right"}`}>
+        <div
+          className="flex items-center gap-2"
+          style={isAdmin ? {} : { justifyContent: "flex-end" }}
+        >
+          <span className="text-sm font-semibold text-tls-neutral">
+            {isAdmin ? "TinnieStudio Support" : "You"}
           </span>
-          <span className='text-xs text-white/30'>{new Date(message.createdAt).toLocaleString()}</span>
+          <span className="text-xs text-white/30">
+            {new Date(message.createdAt).toLocaleString()}
+          </span>
         </div>
-        <p className='text-sm text-tls-neutral/80 whitespace-pre-wrap'>{message.body}</p>
+        <p className="text-sm text-tls-neutral/80 whitespace-pre-wrap">
+          {message.body}
+        </p>
         {message.attachmentUrl && (
           <a
             href={message.attachmentUrl}
-            target='_blank'
-            rel='noopener noreferrer'
-            className='inline-flex items-center gap-1 text-xs text-tls-secondary hover:underline'
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-tls-secondary hover:underline"
           >
-            <Paperclip className='w-3 h-3' /> Attachment
+            <Paperclip className="w-3 h-3" /> Attachment
           </a>
         )}
       </div>
@@ -3791,16 +3920,16 @@ export function TicketMessageItem({ message }: { message: TicketMessage }) {
 - [ ] **Step 3: Create the SSR detail page**
 
 ```tsx
-import { Metadata } from 'next';
-import { cookies } from 'next/headers';
-import { notFound } from 'next/navigation';
-import backendFetch from '@/lib/server/backendFetch';
-import type { ApiResponse, TicketDetail } from '@/types';
-import { TicketThreadClient } from './TicketThreadClient';
+import { Metadata } from "next";
+import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
+import backendFetch from "@/lib/server/backendFetch";
+import type { ApiResponse, TicketDetail } from "@/types";
+import { TicketThreadClient } from "./TicketThreadClient";
 
 export const metadata: Metadata = {
-  title: 'Ticket Detail',
-  description: 'Your support ticket conversation.',
+  title: "Ticket Detail",
+  description: "Your support ticket conversation.",
 };
 
 export default async function TicketDetailPage({
@@ -3810,7 +3939,10 @@ export default async function TicketDetailPage({
 }) {
   const { id } = await params;
   const cookieStore = await cookies();
-  const cookieHeader = cookieStore.getAll().map(c => `${c.name}=${c.value}`).join('; ');
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
 
   const resp: ApiResponse<TicketDetail> = await backendFetch<TicketDetail>({
     url: `/tickets/${id}`,
@@ -3826,32 +3958,44 @@ export default async function TicketDetailPage({
 - [ ] **Step 4: Create the thread/reply client component**
 
 ```tsx
-'use client';
+"use client";
 
-import { useRef, useState } from 'react';
-import { toast } from 'react-toastify';
-import { Paperclip, Send } from 'lucide-react';
+import { useRef, useState } from "react";
+import { toast } from "react-toastify";
+import { Paperclip, Send } from "lucide-react";
 
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { useTicket, useReplyToTicket, usePresignTicketAttachment } from '@/features/tickets/service';
-import { TicketStatusBadge } from '@/features/tickets/components/TicketStatusBadge';
-import { TicketMessageItem } from '@/features/tickets/components/TicketMessageItem';
-import type { TicketDetail } from '@/types';
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  useTicket,
+  useReplyToTicket,
+  usePresignTicketAttachment,
+} from "@/features/tickets/service";
+import { TicketStatusBadge } from "@/features/tickets/components/TicketStatusBadge";
+import { TicketMessageItem } from "@/features/tickets/components/TicketMessageItem";
+import type { TicketDetail } from "@/types";
 
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
-const ALLOWED_ATTACHMENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const ALLOWED_ATTACHMENT_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+];
 
 interface TicketThreadClientProps {
   ticketId: string;
   initialTicket: TicketDetail;
 }
 
-export function TicketThreadClient({ ticketId, initialTicket }: TicketThreadClientProps) {
+export function TicketThreadClient({
+  ticketId,
+  initialTicket,
+}: TicketThreadClientProps) {
   const { data: ticket } = useTicket(ticketId);
   const current = ticket ?? initialTicket;
 
-  const [replyBody, setReplyBody] = useState('');
+  const [replyBody, setReplyBody] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -3860,7 +4004,7 @@ export function TicketThreadClient({ ticketId, initialTicket }: TicketThreadClie
   const replyMutation = useReplyToTicket(ticketId);
   const presignAttachment = usePresignTicketAttachment();
 
-  const isClosed = current.status === 'CLOSED';
+  const isClosed = current.status === "CLOSED";
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0];
@@ -3869,11 +4013,11 @@ export function TicketThreadClient({ ticketId, initialTicket }: TicketThreadClie
     setFileError(null);
 
     if (!ALLOWED_ATTACHMENT_TYPES.includes(selected.type)) {
-      setFileError('Please select an image (JPEG/PNG/WebP) or PDF file.');
+      setFileError("Please select an image (JPEG/PNG/WebP) or PDF file.");
       return;
     }
     if (selected.size > MAX_ATTACHMENT_SIZE) {
-      setFileError('File must be smaller than 10 MB.');
+      setFileError("File must be smaller than 10 MB.");
       return;
     }
 
@@ -3893,9 +4037,9 @@ export function TicketThreadClient({ ticketId, initialTicket }: TicketThreadClie
           fileSizeBytes: file.size,
         });
         const uploadRes = await fetch(presigned.uploadUrl, {
-          method: 'PUT',
+          method: "PUT",
           body: file,
-          headers: { 'Content-Type': file.type },
+          headers: { "Content-Type": file.type },
         });
         if (!uploadRes.ok) {
           throw new Error(`Attachment upload failed: ${uploadRes.statusText}`);
@@ -3903,12 +4047,16 @@ export function TicketThreadClient({ ticketId, initialTicket }: TicketThreadClie
         attachmentStorageKey = presigned.storageKey;
       }
 
-      await replyMutation.mutateAsync({ body: replyBody, attachmentStorageKey });
-      setReplyBody('');
+      await replyMutation.mutateAsync({
+        body: replyBody,
+        attachmentStorageKey,
+      });
+      setReplyBody("");
       setFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to send reply';
+      const message =
+        err instanceof Error ? err.message : "Failed to send reply";
       toast.error(message);
     } finally {
       setIsSending(false);
@@ -3916,48 +4064,64 @@ export function TicketThreadClient({ ticketId, initialTicket }: TicketThreadClie
   }
 
   return (
-    <div className='max-w-2xl mx-auto py-8 px-4'>
-      <div className='flex items-center justify-between mb-2'>
-        <h1 className='text-xl font-semibold text-white'>{current.subject}</h1>
+    <div className="max-w-2xl mx-auto py-8 px-4">
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="text-xl font-semibold text-white">{current.subject}</h1>
         <TicketStatusBadge status={current.status} />
       </div>
-      <p className='text-xs text-white/40 mb-6'>{current.ticketNumber}</p>
+      <p className="text-xs text-white/40 mb-6">{current.ticketNumber}</p>
 
-      <div className='space-y-5 mb-6'>
-        {current.messages.map(message => (
+      <div className="space-y-5 mb-6">
+        {current.messages.map((message) => (
           <TicketMessageItem key={message.id} message={message} />
         ))}
       </div>
 
       {isClosed ? (
-        <p className='text-sm text-white/50 bg-white/5 border border-white/10 rounded-xl px-4 py-3'>
-          This ticket is closed. Please{' '}
-          <a href='/contact-us' className='text-tls-secondary hover:underline'>submit a new ticket</a>{' '}
+        <p className="text-sm text-white/50 bg-white/5 border border-white/10 rounded-xl px-4 py-3">
+          This ticket is closed. Please{" "}
+          <a href="/contact-us" className="text-tls-secondary hover:underline">
+            submit a new ticket
+          </a>{" "}
           if you need further help.
         </p>
       ) : (
-        <div className='space-y-3'>
+        <div className="space-y-3">
           <Textarea
             value={replyBody}
-            onChange={e => setReplyBody(e.target.value)}
+            onChange={(e) => setReplyBody(e.target.value)}
             rows={4}
-            placeholder='Write a reply...'
+            placeholder="Write a reply..."
           />
-          <div className='flex items-center justify-between gap-3'>
+          <div className="flex items-center justify-between gap-3">
             <div>
               <input
                 ref={fileInputRef}
-                type='file'
-                accept='image/jpeg,image/png,image/webp,application/pdf'
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
                 onChange={handleFileSelect}
-                className='text-xs text-white/60'
+                className="text-xs text-white/60"
               />
-              {file && <p className='text-xs text-white/40 mt-1'>{file.name}</p>}
-              {fileError && <p role='alert' className='text-red-400 text-xs mt-1'>{fileError}</p>}
+              {file && (
+                <p className="text-xs text-white/40 mt-1">{file.name}</p>
+              )}
+              {fileError && (
+                <p role="alert" className="text-red-400 text-xs mt-1">
+                  {fileError}
+                </p>
+              )}
             </div>
-            <Button onClick={handleReply} disabled={isSending || !replyBody.trim()} aria-busy={isSending}>
-              {isSending ? <Paperclip className='w-4 h-4 mr-2' /> : <Send className='w-4 h-4 mr-2' />}
-              {isSending ? 'Sending...' : 'Send Reply'}
+            <Button
+              onClick={handleReply}
+              disabled={isSending || !replyBody.trim()}
+              aria-busy={isSending}
+            >
+              {isSending ? (
+                <Paperclip className="w-4 h-4 mr-2" />
+              ) : (
+                <Send className="w-4 h-4 mr-2" />
+              )}
+              {isSending ? "Sending..." : "Send Reply"}
             </Button>
           </div>
         </div>
@@ -4003,6 +4167,7 @@ git commit -m "feat: add ticket thread/detail page with reply and attachment upl
 ### Task 16: `SUPPORT` permission + Tickets nav link
 
 **Files:**
+
 - Modify: `tinniestudio-admin-web/src/lib/auth/rbac.ts`
 - Modify: `tinniestudio-admin-web/src/components/layout/Header.tsx`
 
@@ -4064,32 +4229,32 @@ export function Header() {
 Change:
 
 ```tsx
-        <nav className="flex items-center gap-4 text-sm text-muted-foreground">
-          <Link href="/dashboard" className="hover:text-foreground">
-            Dashboard
-          </Link>
-          <Link href="/categories" className="hover:text-foreground">
-            Categories
-          </Link>
-        </nav>
+<nav className="flex items-center gap-4 text-sm text-muted-foreground">
+  <Link href="/dashboard" className="hover:text-foreground">
+    Dashboard
+  </Link>
+  <Link href="/categories" className="hover:text-foreground">
+    Categories
+  </Link>
+</nav>
 ```
 
 to:
 
 ```tsx
-        <nav className="flex items-center gap-4 text-sm text-muted-foreground">
-          <Link href="/dashboard" className="hover:text-foreground">
-            Dashboard
-          </Link>
-          <Link href="/categories" className="hover:text-foreground">
-            Categories
-          </Link>
-          {canAccess(roles, "tickets:manage") && (
-            <Link href="/tickets" className="hover:text-foreground">
-              Tickets
-            </Link>
-          )}
-        </nav>
+<nav className="flex items-center gap-4 text-sm text-muted-foreground">
+  <Link href="/dashboard" className="hover:text-foreground">
+    Dashboard
+  </Link>
+  <Link href="/categories" className="hover:text-foreground">
+    Categories
+  </Link>
+  {canAccess(roles, "tickets:manage") && (
+    <Link href="/tickets" className="hover:text-foreground">
+      Tickets
+    </Link>
+  )}
+</nav>
 ```
 
 - [ ] **Step 4: Type-check and lint**
@@ -4114,6 +4279,7 @@ git commit -m "feat: add SUPPORT role/tickets:manage permission and a gated Tick
 ### Task 17: Ticket types, endpoint constants, BFF routes, and hooks
 
 **Files:**
+
 - Create: `tinniestudio-admin-web/src/types/ticket.type.ts`
 - Create: `tinniestudio-admin-web/src/lib/constant/ticket.endpoint.ts`
 - Create: `tinniestudio-admin-web/src/app/api/admin/tickets/route.ts`
@@ -4228,12 +4394,17 @@ export async function GET(
   const parsed = z.string().uuid().safeParse(id);
   if (!parsed.success) {
     return Response.json(
-      { success: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } },
-      { status: 400 }
+      {
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: parsed.error.message },
+      },
+      { status: 400 },
     );
   }
 
-  const resp = await backendFetch(req, { url: TICKET_ENDPOINT.BACKEND.DETAIL(parsed.data) });
+  const resp = await backendFetch(req, {
+    url: TICKET_ENDPOINT.BACKEND.DETAIL(parsed.data),
+  });
 
   return buildProxyResponse(resp);
 }
@@ -4255,8 +4426,11 @@ export async function POST(
   const parsed = z.string().uuid().safeParse(id);
   if (!parsed.success) {
     return Response.json(
-      { success: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } },
-      { status: 400 }
+      {
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: parsed.error.message },
+      },
+      { status: 400 },
     );
   }
 
@@ -4287,8 +4461,11 @@ export async function PATCH(
   const parsed = z.string().uuid().safeParse(id);
   if (!parsed.success) {
     return Response.json(
-      { success: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } },
-      { status: 400 }
+      {
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: parsed.error.message },
+      },
+      { status: 400 },
     );
   }
 
@@ -4337,12 +4514,14 @@ async function fetchTickets(status?: string): Promise<Ticket[]> {
 }
 
 export function useTickets(status?: string, initialData?: Ticket[]) {
-  return useApiQuery(ticketKeys.list(status), () => fetchTickets(status), { initialData });
+  return useApiQuery(ticketKeys.list(status), () => fetchTickets(status), {
+    initialData,
+  });
 }
 
 export function useTicket(ticketId: string) {
   return useApiQuery(ticketKeys.detail(ticketId), () =>
-    bffFetch<TicketDetail>(TICKET_ENDPOINT.BFF.DETAIL(ticketId))
+    bffFetch<TicketDetail>(TICKET_ENDPOINT.BFF.DETAIL(ticketId)),
   );
 }
 ```
@@ -4370,9 +4549,11 @@ export function useReplyToTicket(ticketId: string) {
       }),
     {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticketId) });
+        queryClient.invalidateQueries({
+          queryKey: ticketKeys.detail(ticketId),
+        });
       },
-    }
+    },
   );
 }
 
@@ -4387,10 +4568,12 @@ export function useUpdateTicketStatus(ticketId: string) {
       }),
     {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticketId) });
+        queryClient.invalidateQueries({
+          queryKey: ticketKeys.detail(ticketId),
+        });
         queryClient.invalidateQueries({ queryKey: ["tickets", "list"] });
       },
-    }
+    },
   );
 }
 ```
@@ -4433,6 +4616,7 @@ git commit -m "feat: add ticket types, endpoint constants, BFF routes, and hooks
 ### Task 18: Tickets list page with status filter and badges
 
 **Files:**
+
 - Create: `tinniestudio-admin-web/src/app/(app)/tickets/page.tsx`
 - Create: `tinniestudio-admin-web/src/app/(app)/tickets/TicketsPageClient.tsx`
 - Create: `tinniestudio-admin-web/src/features/tickets/components/TicketsTable.tsx`
@@ -4456,7 +4640,10 @@ export default async function TicketsPage() {
   const roles = await getCurrentUserRoles();
 
   const cookieStore = await cookies();
-  const cookieHeader = cookieStore.getAll().map((c) => `${c.name}=${c.value}`).join("; ");
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
   const request = new Request("http://internal/admin/tickets", {
     headers: { cookie: cookieHeader },
   });
@@ -4520,7 +4707,10 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
   CLOSED: "Closed",
 };
 
-const STATUS_VARIANT: Record<TicketStatus, "default" | "secondary" | "outline" | "ghost"> = {
+const STATUS_VARIANT: Record<
+  TicketStatus,
+  "default" | "secondary" | "outline" | "ghost"
+> = {
   OPEN: "default",
   IN_PROGRESS: "secondary",
   RESOLVED: "outline",
@@ -4531,13 +4721,16 @@ export function TicketsTable({ initialData }: { initialData: Ticket[] }) {
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "ALL">("ALL");
   const { data } = useTickets(
     statusFilter === "ALL" ? undefined : statusFilter,
-    statusFilter === "ALL" ? initialData : undefined
+    statusFilter === "ALL" ? initialData : undefined,
   );
   const tickets = data ?? [];
 
   return (
     <div className="space-y-4">
-      <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as TicketStatus | "ALL")}>
+      <Select
+        value={statusFilter}
+        onValueChange={(v) => setStatusFilter(v as TicketStatus | "ALL")}
+      >
         <SelectTrigger className="w-48">
           <SelectValue placeholder="Filter by status" />
         </SelectTrigger>
@@ -4563,7 +4756,10 @@ export function TicketsTable({ initialData }: { initialData: Ticket[] }) {
         <tbody>
           {tickets.length === 0 ? (
             <tr>
-              <td colSpan={5} className="py-6 text-center text-muted-foreground">
+              <td
+                colSpan={5}
+                className="py-6 text-center text-muted-foreground"
+              >
                 No tickets found.
               </td>
             </tr>
@@ -4571,16 +4767,25 @@ export function TicketsTable({ initialData }: { initialData: Ticket[] }) {
             tickets.map((ticket) => (
               <tr key={ticket.id} className="border-b last:border-0">
                 <td className="py-2 pr-4">
-                  <Link href={`/tickets/${ticket.id}`} className="text-primary hover:underline">
+                  <Link
+                    href={`/tickets/${ticket.id}`}
+                    className="text-primary hover:underline"
+                  >
                     {ticket.ticketNumber}
                   </Link>
                 </td>
                 <td className="py-2 pr-4">{ticket.subject}</td>
-                <td className="py-2 pr-4">{ticket.submitterEmail ?? ticket.userId}</td>
                 <td className="py-2 pr-4">
-                  <Badge variant={STATUS_VARIANT[ticket.status]}>{STATUS_LABEL[ticket.status]}</Badge>
+                  {ticket.submitterEmail ?? ticket.userId}
                 </td>
-                <td className="py-2 pr-4">{new Date(ticket.createdAt).toLocaleDateString()}</td>
+                <td className="py-2 pr-4">
+                  <Badge variant={STATUS_VARIANT[ticket.status]}>
+                    {STATUS_LABEL[ticket.status]}
+                  </Badge>
+                </td>
+                <td className="py-2 pr-4">
+                  {new Date(ticket.createdAt).toLocaleDateString()}
+                </td>
               </tr>
             ))
           )}
@@ -4623,6 +4828,7 @@ git commit -m "feat: add admin tickets list page with status filter and badges"
 ### Task 19: Ticket detail/reply page with status control
 
 **Files:**
+
 - Create: `tinniestudio-admin-web/src/app/(app)/tickets/[id]/page.tsx`
 - Create: `tinniestudio-admin-web/src/app/(app)/tickets/[id]/TicketDetailClient.tsx`
 
@@ -4652,12 +4858,17 @@ export default async function TicketDetailPage({
   const roles = await getCurrentUserRoles();
 
   const cookieStore = await cookies();
-  const cookieHeader = cookieStore.getAll().map((c) => `${c.name}=${c.value}`).join("; ");
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
   const request = new Request(`http://internal/admin/tickets/${id}`, {
     headers: { cookie: cookieHeader },
   });
 
-  const resp = await backendFetch<TicketDetail>(request, { url: TICKET_ENDPOINT.BACKEND.DETAIL(id) });
+  const resp = await backendFetch<TicketDetail>(request, {
+    url: TICKET_ENDPOINT.BACKEND.DETAIL(id),
+  });
 
   return (
     <AuthGuard
@@ -4692,7 +4903,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useTicket, useReplyToTicket, useUpdateTicketStatus } from "@/features/tickets/hook";
+import {
+  useTicket,
+  useReplyToTicket,
+  useUpdateTicketStatus,
+} from "@/features/tickets/hook";
 import type { TicketDetail, TicketStatus } from "@/types/ticket.type";
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
@@ -4731,10 +4946,14 @@ export function TicketDetailClient({
 
   async function handleStatusChange(status: string) {
     try {
-      await statusMutation.mutateAsync({ status: status as "RESOLVED" | "CLOSED" });
+      await statusMutation.mutateAsync({
+        status: status as "RESOLVED" | "CLOSED",
+      });
       toast.success(`Ticket marked ${STATUS_LABEL[status as TicketStatus]}`);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to update status");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update status",
+      );
     }
   }
 
@@ -4754,7 +4973,9 @@ export function TicketDetailClient({
         {current.messages.map((message) => (
           <div key={message.id} className="rounded-lg border p-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-              <span className="font-medium">{message.senderType === "ADMIN" ? "Support" : "User"}</span>
+              <span className="font-medium">
+                {message.senderType === "ADMIN" ? "Support" : "User"}
+              </span>
               <span>{new Date(message.createdAt).toLocaleString()}</span>
             </div>
             <p className="text-sm whitespace-pre-wrap">{message.body}</p>
@@ -4780,7 +5001,10 @@ export function TicketDetailClient({
             rows={4}
             placeholder="Write a reply..."
           />
-          <Button onClick={handleReply} disabled={replyMutation.isPending || !replyBody.trim()}>
+          <Button
+            onClick={handleReply}
+            disabled={replyMutation.isPending || !replyBody.trim()}
+          >
             {replyMutation.isPending ? "Sending..." : "Send Reply"}
           </Button>
         </div>
@@ -4788,7 +5012,11 @@ export function TicketDetailClient({
 
       <div className="flex items-center gap-3 border-t pt-4">
         <span className="text-sm text-muted-foreground">Change status:</span>
-        <Select value={current.status} onValueChange={handleStatusChange} disabled={statusMutation.isPending}>
+        <Select
+          value={current.status}
+          onValueChange={handleStatusChange}
+          disabled={statusMutation.isPending}
+        >
           <SelectTrigger className="w-40">
             <SelectValue />
           </SelectTrigger>
@@ -4835,6 +5063,7 @@ git commit -m "feat: add admin ticket detail page with reply and status control"
 ## Self-Review Notes
 
 **Spec coverage:**
+
 - Part A (contact info fixes) — Task 8.
 - Part B (Tawk.to live chat) — Task 9.
 - Part C entities/status lifecycle/assignment model — Tasks 2, 5, 6.
