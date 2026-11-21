@@ -11,6 +11,7 @@ import com.tinniestudio.api.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -209,7 +210,17 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         });
 
         if (expired) {
-            processRenewal(sub.getId());
+            // Auto-renew is already turned back on and saved above — a renewal-charge failure here
+            // (Stripe outage, declined card, etc.) shouldn't turn "re-enable my card" into a 500 for
+            // the caller. processRenewal runs in its own REQUIRES_NEW transaction, so a failure only
+            // rolls back its own charge/status update; getSubscriptionStatus will correctly report
+            // PAST_DUE/EXPIRED afterwards and the existing /account/billing-gate flow lets the user retry.
+            try {
+                processRenewal(sub.getId());
+            } catch (Exception ex) {
+                log.error("Renewal attempt failed while re-enabling card for subscription {}: {}",
+                        sub.getId(), ex.getMessage(), ex);
+            }
         }
     }
 
@@ -326,7 +337,10 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     }
 
     @Override
-    @Transactional
+    // REQUIRES_NEW so a failed charge/renewal attempt only rolls back its own work, never the
+    // caller's already-succeeded changes (e.g. confirmPaymentSetup's card save, or enableCard's
+    // auto-renew flip) — see applyPaymentMethod/enableCard's try/catch around the call to this.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void processRenewal(UUID subscriptionId) {
         UserSubscription sub = subscriptionRepository.findByIdForUpdate(subscriptionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Subscription not found"));
@@ -366,7 +380,13 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             amount = amount.subtract(sub.getPendingDiscountAmount()).max(BigDecimal.ZERO);
         }
         long amountCents = amount.multiply(BigDecimal.valueOf(100)).longValue();
-        String idempotencyKey = "renewal-" + subscriptionId + "-" + sub.getNextRenewalAt().getEpochSecond();
+        // nextRenewalAt is null for any row created before V59__add_recurring_billing_fields.sql
+        // added the column (no backfill ran) — the dedup guard above already treats null as "not
+        // in the future" (i.e. proceed), so mirror that here instead of dereferencing it directly.
+        // "initial" is stable across retries of this same never-yet-renewed row and gets replaced
+        // by a real timestamp the moment this method succeeds once (see setNextRenewalAt below).
+        String idempotencyKey = "renewal-" + subscriptionId + "-"
+                + (sub.getNextRenewalAt() != null ? String.valueOf(sub.getNextRenewalAt().getEpochSecond()) : "initial");
 
         StripeService.ChargeResult result = stripeService.chargeOffSession(
                 sub.getStripeCustomerId(), sub.getStripePaymentMethodId(),
@@ -454,7 +474,18 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             userProfileRepository.save(profile);
         });
         if (periodExpired || sub.getStatus() == SubscriptionStatus.PAST_DUE) {
-            processRenewal(sub.getId());
+            // The card itself is already saved above (stripePaymentMethodId + paymentSetup=true) —
+            // don't let a renewal-charge failure here undo that and turn "I added my card" into a
+            // generic 500. processRenewal runs in its own REQUIRES_NEW transaction, so a failure
+            // only rolls back its own charge/status update, never the card save that already
+            // committed; getSubscriptionStatus will correctly report PAST_DUE/EXPIRED afterwards,
+            // and the existing /account/billing-gate flow lets the user retry.
+            try {
+                processRenewal(sub.getId());
+            } catch (Exception ex) {
+                log.error("Renewal attempt failed while applying new payment method for subscription {}: {}",
+                        sub.getId(), ex.getMessage(), ex);
+            }
         }
     }
 
