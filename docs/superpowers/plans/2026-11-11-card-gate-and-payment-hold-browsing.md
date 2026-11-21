@@ -17,6 +17,7 @@
 ### Task 1: Backend — remove the `isFreePlan` carve-out
 
 **Files:**
+
 - Modify: `server/api-service/src/main/java/com/tinniestudio/api/modules/billing/service/SubscriptionServiceImpl.java:274-291`
 - Modify: `server/api-service/src/test/java/com/tinniestudio/api/billing/service/SubscriptionServiceTest.java:369-398`
 
@@ -147,6 +148,7 @@ git commit -m "fix: close isFreePlan loophole letting new signups skip card setu
 ### Task 2: Frontend — onboarding "$0.00 due today" pricing copy
 
 **Files:**
+
 - Modify: `tinniestudio-client-web/src/features/account/components/SubscriptionPlansPanel.tsx:236-255`
 
 - [ ] **Step 1: Replace the price block**
@@ -154,69 +156,64 @@ git commit -m "fix: close isFreePlan loophole letting new signups skip card setu
 Replace lines 236-255 (the `<div className='mb-6'>...</div>` price block inside `CardContent`):
 
 ```tsx
-                  <div className='mb-6'>
-                    {isCouponApplied && (
-                      <p className='text-white/40 line-through text-sm mb-1'>
-                        CA {formatAmount(plan.price)}
-                      </p>
-                    )}
-                    <span className='text-4xl font-bold text-white'>
-                      {formatAmount(displayPrice)}
-                    </span>
-                    <span className='text-white/40 text-sm ml-2'>
-                      / {plan.billingCycle.toLowerCase()}
-                    </span>
-                    {isCouponApplied && (
-                      <Badge className='ml-2 bg-green-500/10 text-green-400 border-green-500/20 text-xs'>
-                        {couponResult!.discountType === 'PERCENTAGE'
-                          ? `${couponResult!.discountValue}% off`
-                          : `${plan.currency} ${couponResult!.discountValue} off`}
-                      </Badge>
-                    )}
-                  </div>
+<div className="mb-6">
+  {isCouponApplied && (
+    <p className="text-white/40 line-through text-sm mb-1">
+      CA {formatAmount(plan.price)}
+    </p>
+  )}
+  <span className="text-4xl font-bold text-white">
+    {formatAmount(displayPrice)}
+  </span>
+  <span className="text-white/40 text-sm ml-2">
+    / {plan.billingCycle.toLowerCase()}
+  </span>
+  {isCouponApplied && (
+    <Badge className="ml-2 bg-green-500/10 text-green-400 border-green-500/20 text-xs">
+      {couponResult!.discountType === "PERCENTAGE"
+        ? `${couponResult!.discountValue}% off`
+        : `${plan.currency} ${couponResult!.discountValue} off`}
+    </Badge>
+  )}
+</div>
 ```
 
 with:
 
 ```tsx
-                  <div className='mb-6'>
-                    {isFirstEverSetup ? (
-                      <>
-                        <span className='text-4xl font-bold text-white'>
-                          $0.00
-                        </span>
-                        <span className='text-white/40 text-sm ml-2'>
-                          due today
-                        </span>
-                        <p className='text-white/40 text-xs mt-1'>
-                          then {formatAmount(displayPrice)} /{' '}
-                          {plan.billingCycle.toLowerCase()} after your 30-day
-                          trial
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        {isCouponApplied && (
-                          <p className='text-white/40 line-through text-sm mb-1'>
-                            CA {formatAmount(plan.price)}
-                          </p>
-                        )}
-                        <span className='text-4xl font-bold text-white'>
-                          {formatAmount(displayPrice)}
-                        </span>
-                        <span className='text-white/40 text-sm ml-2'>
-                          / {plan.billingCycle.toLowerCase()}
-                        </span>
-                      </>
-                    )}
-                    {isCouponApplied && (
-                      <Badge className='ml-2 bg-green-500/10 text-green-400 border-green-500/20 text-xs'>
-                        {couponResult!.discountType === 'PERCENTAGE'
-                          ? `${couponResult!.discountValue}% off`
-                          : `${plan.currency} ${couponResult!.discountValue} off`}
-                      </Badge>
-                    )}
-                  </div>
+<div className="mb-6">
+  {isFirstEverSetup ? (
+    <>
+      <span className="text-4xl font-bold text-white">$0.00</span>
+      <span className="text-white/40 text-sm ml-2">due today</span>
+      <p className="text-white/40 text-xs mt-1">
+        then {formatAmount(displayPrice)} / {plan.billingCycle.toLowerCase()}{" "}
+        after your 30-day trial
+      </p>
+    </>
+  ) : (
+    <>
+      {isCouponApplied && (
+        <p className="text-white/40 line-through text-sm mb-1">
+          CA {formatAmount(plan.price)}
+        </p>
+      )}
+      <span className="text-4xl font-bold text-white">
+        {formatAmount(displayPrice)}
+      </span>
+      <span className="text-white/40 text-sm ml-2">
+        / {plan.billingCycle.toLowerCase()}
+      </span>
+    </>
+  )}
+  {isCouponApplied && (
+    <Badge className="ml-2 bg-green-500/10 text-green-400 border-green-500/20 text-xs">
+      {couponResult!.discountType === "PERCENTAGE"
+        ? `${couponResult!.discountValue}% off`
+        : `${plan.currency} ${couponResult!.discountValue} off`}
+    </Badge>
+  )}
+</div>
 ```
 
 (`isFirstEverSetup` and `displayPrice` are both already in scope — defined at lines 85 and 185-187 respectively. No other changes in this file.)
@@ -233,7 +230,7 @@ Expected: both PASS with no new errors.
 
 - [ ] **Step 3: Manual verification**
 
-Start the dev server (`npm run dev`), register a brand-new test account, reach the onboarding plan screen (`/account?action=billing` while `blockReason=NEEDS_SETUP`), and confirm both SILVER and GOLD cards show "$0.00 due today" plus "then {price} / {cycle} after your 30-day trial" — and that an *existing* subscriber's "switch plan" dialog (not first-ever-setup) still shows the plain standing price, unchanged.
+Start the dev server (`npm run dev`), register a brand-new test account, reach the onboarding plan screen (`/account?action=billing` while `blockReason=NEEDS_SETUP`), and confirm both SILVER and GOLD cards show "$0.00 due today" plus "then {price} / {cycle} after your 30-day trial" — and that an _existing_ subscriber's "switch plan" dialog (not first-ever-setup) still shows the plain standing price, unchanged.
 
 - [ ] **Step 4: Commit**
 
@@ -247,52 +244,56 @@ git commit -m "feat: show \$0.00-due-today framing on first-time trial plan card
 ### Task 3: Frontend — fix the Add Card entry-point routing bug
 
 **Files:**
+
 - Modify: `tinniestudio-client-web/src/features/account/components/AccountClient.tsx:30-33,112`
 - Modify: `tinniestudio-client-web/src/features/account/components/CardSetupNudge.tsx:44`
 
-Root cause (confirmed by reading the code, not just the spec): `ProfilePanelSubscription.tsx`'s "Add a Card" card (lines 415-456) already renders correctly and unconditionally whenever `!subscription.paymentSetup` — it needs no new routing target. The only bug is that `AccountClient.tsx` forces the Plans dialog (`openPlansDialog`) open *on top of* that already-correct card for any truthy `action` value, and the Plans dialog's `handleCheckout` schedules a plan switch for anyone who isn't `NEEDS_SETUP`. The fix is to stop forcing the dialog open for the "just add a card" case — not to build a new destination.
+Root cause (confirmed by reading the code, not just the spec): `ProfilePanelSubscription.tsx`'s "Add a Card" card (lines 415-456) already renders correctly and unconditionally whenever `!subscription.paymentSetup` — it needs no new routing target. The only bug is that `AccountClient.tsx` forces the Plans dialog (`openPlansDialog`) open _on top of_ that already-correct card for any truthy `action` value, and the Plans dialog's `handleCheckout` schedules a plan switch for anyone who isn't `NEEDS_SETUP`. The fix is to stop forcing the dialog open for the "just add a card" case — not to build a new destination.
 
 - [ ] **Step 1: Fix `AccountClient.tsx`'s action handling**
 
 Replace lines 30-33:
 
 ```tsx
-  const parasms = useSearchParams();
-  const action = parasms.get('action') as TAB_TYPES | null || null;
-  const [localUser, setLocalUser] = useState<BackendUser>(user);
-  const [activeTab, setActiveTab] = useState<TAB_TYPES>(action || 'profile');
+const parasms = useSearchParams();
+const action = (parasms.get("action") as TAB_TYPES | null) || null;
+const [localUser, setLocalUser] = useState<BackendUser>(user);
+const [activeTab, setActiveTab] = useState<TAB_TYPES>(action || "profile");
 ```
 
 with:
 
 ```tsx
-  const parasms = useSearchParams();
-  const action = parasms.get('action');
-  const initialTab: TAB_TYPES =
-    action === 'billing' || action === 'add-card'
-      ? 'billing'
-      : (action as TAB_TYPES) || 'profile';
-  const [localUser, setLocalUser] = useState<BackendUser>(user);
-  const [activeTab, setActiveTab] = useState<TAB_TYPES>(initialTab);
+const parasms = useSearchParams();
+const action = parasms.get("action");
+const initialTab: TAB_TYPES =
+  action === "billing" || action === "add-card"
+    ? "billing"
+    : (action as TAB_TYPES) || "profile";
+const [localUser, setLocalUser] = useState<BackendUser>(user);
+const [activeTab, setActiveTab] = useState<TAB_TYPES>(initialTab);
 ```
 
 Then replace line 112:
 
 ```tsx
-            <TabsContent value='billing' className='mt-0 outline-none'>
-              <ProfilePanelSubscription subscription={subscription} openPlansDialog={!!action} />
-            </TabsContent>
+<TabsContent value="billing" className="mt-0 outline-none">
+  <ProfilePanelSubscription
+    subscription={subscription}
+    openPlansDialog={!!action}
+  />
+</TabsContent>
 ```
 
 with:
 
 ```tsx
-            <TabsContent value='billing' className='mt-0 outline-none'>
-              <ProfilePanelSubscription
-                subscription={subscription}
-                openPlansDialog={action === 'billing'}
-              />
-            </TabsContent>
+<TabsContent value="billing" className="mt-0 outline-none">
+  <ProfilePanelSubscription
+    subscription={subscription}
+    openPlansDialog={action === "billing"}
+  />
+</TabsContent>
 ```
 
 (`action === 'add-card'` now lands on the Billing tab — via `initialTab` — without forcing the Plans dialog open, so `ProfilePanelSubscription`'s existing, already-correct "Add a Card" card is immediately visible with nothing obscuring it. `action === 'billing'` keeps its current behavior unchanged, including the `NEEDS_SETUP` first-time-setup flow. No changes needed in `ProfilePanelSubscription.tsx` itself.)
@@ -302,13 +303,13 @@ with:
 In `CardSetupNudge.tsx`, replace line 44:
 
 ```tsx
-            <Link href='/account?action=billing'>Add card</Link>
+<Link href="/account?action=billing">Add card</Link>
 ```
 
 with:
 
 ```tsx
-            <Link href='/account?action=add-card'>Add card</Link>
+<Link href="/account?action=add-card">Add card</Link>
 ```
 
 - [ ] **Step 3: Type-check and lint**
@@ -335,6 +336,7 @@ git commit -m "fix: stop Add Card nudge from opening the plan-switch dialog"
 ### Task 4: Frontend — CardSetupForm "Try Again" on load failure
 
 **Files:**
+
 - Modify: `tinniestudio-client-web/src/features/account/components/CardSetupForm.tsx`
 - Modify: `tinniestudio-client-web/src/features/account/components/ProfilePanelSubscription.tsx:429-433`
 
@@ -343,23 +345,22 @@ git commit -m "fix: stop Add Card nudge from opening the plan-switch dialog"
 Replace the whole file content with:
 
 ```tsx
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
+import { useState } from "react";
+import { loadStripe } from "@stripe/stripe-js";
 import {
   Elements,
   PaymentElement,
   useStripe,
   useElements,
-} from '@stripe/react-stripe-js';
-import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
-import { getStripePublishableKey } from '@/config/public-env.config';
+} from "@stripe/react-stripe-js";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
+import { getStripePublishableKey } from "@/config/public-env.config";
 
 const stripeKey = getStripePublishableKey();
 const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
-
 
 interface CardSetupFormProps {
   clientSecret: string;
@@ -374,13 +375,13 @@ interface CardSetupFormProps {
 export function CardSetupForm({
   clientSecret,
   onSetupIntentConfirmed,
-  submitLabel = 'Save card',
+  submitLabel = "Save card",
   onRetry,
 }: CardSetupFormProps) {
   if (!stripePromise) {
-    console.error('Stripe is not configured.');
+    console.error("Stripe is not configured.");
     return (
-      <p role='alert' className='text-red-400 text-sm'>
+      <p role="alert" className="text-red-400 text-sm">
         Something went wrong. Please contact support.
       </p>
     );
@@ -393,12 +394,12 @@ export function CardSetupForm({
       options={{
         clientSecret,
         appearance: {
-          theme: 'night',
+          theme: "night",
           variables: {
-            colorPrimary: '#fdcb2e',
-            colorBackground: '#040926',
-            colorText: '#ffffff',
-            colorDanger: '#f87171',
+            colorPrimary: "#fdcb2e",
+            colorBackground: "#040926",
+            colorText: "#ffffff",
+            colorDanger: "#f87171",
           },
         },
       }}
@@ -416,7 +417,10 @@ function CardSetupFormInner({
   onSetupIntentConfirmed,
   submitLabel,
   onRetry,
-}: Pick<CardSetupFormProps, 'onSetupIntentConfirmed' | 'submitLabel' | 'onRetry'>) {
+}: Pick<
+  CardSetupFormProps,
+  "onSetupIntentConfirmed" | "submitLabel" | "onRetry"
+>) {
   const stripe = useStripe();
   const elements = useElements();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -439,53 +443,53 @@ function CardSetupFormInner({
     try {
       const { error, setupIntent } = await stripe.confirmSetup({
         elements,
-        redirect: 'if_required',
+        redirect: "if_required",
       });
 
       if (error) {
         setErrorMessage(
-          error.message ?? 'Card setup failed. Please try again.'
+          error.message ?? "Card setup failed. Please try again.",
         );
         return;
       }
 
-      if (setupIntent?.status === 'succeeded') {
+      if (setupIntent?.status === "succeeded") {
         onSetupIntentConfirmed(setupIntent.id);
         return;
       }
 
-      setErrorMessage('Card setup did not complete. Please try again.');
+      setErrorMessage("Card setup did not complete. Please try again.");
     } catch {
       // confirmSetup can reject outright (e.g. a network drop mid-call), not just resolve
       // with {error} — without this, isSubmitting would stay true forever with no way to retry.
-      setErrorMessage('Card setup failed. Please try again.');
+      setErrorMessage("Card setup failed. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className='space-y-4'>
+    <form onSubmit={handleSubmit} className="space-y-4">
       <PaymentElement onLoadError={() => setHasLoadError(true)} />
       {hasLoadError && (
-        <p role='alert' className='text-red-400 text-sm'>
+        <p role="alert" className="text-red-400 text-sm">
           The payment form failed to load. Check your connection and try again.
         </p>
       )}
       {errorMessage && (
-        <p role='alert' className='text-red-400 text-sm'>
+        <p role="alert" className="text-red-400 text-sm">
           {errorMessage}
         </p>
       )}
       <Button
-        type='submit'
-        disabled={hasLoadError ? false : (!stripe || !elements || isSubmitting)}
-        className='w-full h-12 bg-tls-secondary hover:bg-tls-secondary/90 text-tls-primary rounded-xl font-bold'
+        type="submit"
+        disabled={hasLoadError ? false : !stripe || !elements || isSubmitting}
+        className="w-full h-12 bg-tls-secondary hover:bg-tls-secondary/90 text-tls-primary rounded-xl font-bold"
       >
         {isSubmitting ? (
-          <Loader2 className='w-4 h-4 animate-spin mr-2' />
+          <Loader2 className="w-4 h-4 animate-spin mr-2" />
         ) : null}
-        {hasLoadError ? 'Try Again' : submitLabel}
+        {hasLoadError ? "Try Again" : submitLabel}
       </Button>
     </form>
   );
@@ -499,22 +503,22 @@ function CardSetupFormInner({
 Replace lines 429-433:
 
 ```tsx
-              <CardSetupForm
-                clientSecret={addCardClientSecret}
-                onSetupIntentConfirmed={handleAddCardSetupIntentConfirmed}
-                submitLabel='Save card'
-              />
+<CardSetupForm
+  clientSecret={addCardClientSecret}
+  onSetupIntentConfirmed={handleAddCardSetupIntentConfirmed}
+  submitLabel="Save card"
+/>
 ```
 
 with:
 
 ```tsx
-              <CardSetupForm
-                clientSecret={addCardClientSecret}
-                onSetupIntentConfirmed={handleAddCardSetupIntentConfirmed}
-                submitLabel='Save card'
-                onRetry={handleStartAddCard}
-              />
+<CardSetupForm
+  clientSecret={addCardClientSecret}
+  onSetupIntentConfirmed={handleAddCardSetupIntentConfirmed}
+  submitLabel="Save card"
+  onRetry={handleStartAddCard}
+/>
 ```
 
 (`handleStartAddCard`, already defined at lines 191-199, already does exactly "fetch a fresh SetupIntent client secret and set it as state" — reusing it as `onRetry` needs no new function. `SubscriptionPlansPanel.tsx` and `BillingGate.tsx` also render `<CardSetupForm>` but `onRetry` is optional — leaving it unwired there means a load failure on those two screens shows "Try Again" with no action until a future pass; that's an acceptable, explicitly smaller follow-up, not a regression, since today none of the three screens handle this at all.)
@@ -545,16 +549,17 @@ git commit -m "feat: add Try Again recovery for Stripe Payment Element load fail
 ### Task 5: Frontend — `PaymentHoldModal` component
 
 **Files:**
+
 - Create: `tinniestudio-client-web/src/components/content/PaymentHoldModal.tsx`
 
 - [ ] **Step 1: Write the component**
 
 ```tsx
-'use client';
+"use client";
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { CreditCard, RotateCcw } from 'lucide-react';
+import { useState } from "react";
+import Link from "next/link";
+import { CreditCard, RotateCcw } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -563,16 +568,19 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
-import { useRetryPayment } from '@/features/account/service/mutations';
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { useRetryPayment } from "@/features/account/service/mutations";
 
 interface PaymentHoldModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function PaymentHoldModal({ open, onOpenChange }: PaymentHoldModalProps) {
+export function PaymentHoldModal({
+  open,
+  onOpenChange,
+}: PaymentHoldModalProps) {
   const retryPayment = useRetryPayment();
   const [retryError, setRetryError] = useState<string | null>(null);
 
@@ -585,7 +593,7 @@ export function PaymentHoldModal({ open, onOpenChange }: PaymentHoldModalProps) 
       setRetryError(
         err instanceof Error
           ? err.message
-          : 'Payment retry failed. Try again or update your payment info.'
+          : "Payment retry failed. Try again or update your payment info.",
       );
     }
   };
@@ -593,45 +601,48 @@ export function PaymentHoldModal({ open, onOpenChange }: PaymentHoldModalProps) 
   return (
     <AlertDialog
       open={open}
-      onOpenChange={next => {
+      onOpenChange={(next) => {
         if (next) setRetryError(null);
         onOpenChange(next);
       }}
     >
-      <AlertDialogContent className='bg-tls-primary2 border-white/10'>
+      <AlertDialogContent className="bg-tls-primary2 border-white/10">
         <AlertDialogHeader>
-          <AlertDialogTitle className='text-white'>
+          <AlertDialogTitle className="text-white">
             Your account is on hold. Retry your payment?
           </AlertDialogTitle>
-          <AlertDialogDescription className='text-white/60'>
+          <AlertDialogDescription className="text-white/60">
             We couldn&apos;t process your last payment. Retry your payment or
-            update your payment information to continue enjoying the full
-            movie library. You can still browse titles and watch available
-            trailers.
+            update your payment information to continue enjoying the full movie
+            library. You can still browse titles and watch available trailers.
           </AlertDialogDescription>
         </AlertDialogHeader>
         {retryError && (
-          <p role='alert' className='text-red-400 text-sm'>
+          <p role="alert" className="text-red-400 text-sm">
             {retryError}
           </p>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel className='border-white/10 text-white/60 hover:bg-white/5 rounded-sm'>
+          <AlertDialogCancel className="border-white/10 text-white/60 hover:bg-white/5 rounded-sm">
             Close
           </AlertDialogCancel>
-          <Button asChild variant='outline' className='border-white/10 text-white rounded-sm'>
-            <Link href='/account?action=add-card'>
-              <CreditCard className='w-4 h-4 mr-2' />
+          <Button
+            asChild
+            variant="outline"
+            className="border-white/10 text-white rounded-sm"
+          >
+            <Link href="/account?action=add-card">
+              <CreditCard className="w-4 h-4 mr-2" />
               Update Payment Info
             </Link>
           </Button>
           <Button
             onClick={handleRetryPayment}
             disabled={retryPayment.isPending}
-            className='bg-tls-secondary hover:bg-tls-secondary/90 text-tls-primary rounded-sm'
+            className="bg-tls-secondary hover:bg-tls-secondary/90 text-tls-primary rounded-sm"
           >
-            <RotateCcw className='w-4 h-4 mr-2' />
-            {retryPayment.isPending ? 'Retrying…' : 'Retry Payment'}
+            <RotateCcw className="w-4 h-4 mr-2" />
+            {retryPayment.isPending ? "Retrying…" : "Retry Card"}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -640,7 +651,7 @@ export function PaymentHoldModal({ open, onOpenChange }: PaymentHoldModalProps) 
 }
 ```
 
-Note on why "Retry Payment" is a plain `Button`, not `AlertDialogAction`: confirmed by reading `node_modules/@radix-ui/react-alert-dialog/src/alert-dialog.tsx` that `AlertDialogAction` is literally `DialogPrimitive.Close` under the hood — it always closes the dialog on click. Since whether to close depends on an async mutation result that isn't known until after the click, a plain `Button` with manual `onOpenChange(false)` only on success is required; `AlertDialogCancel` is still used for "Close" since that action is correctly unconditional (dismiss always closes, no mutation involved).
+Note on why "Retry Card" is a plain `Button`, not `AlertDialogAction`: confirmed by reading `node_modules/@radix-ui/react-alert-dialog/src/alert-dialog.tsx` that `AlertDialogAction` is literally `DialogPrimitive.Close` under the hood — it always closes the dialog on click. Since whether to close depends on an async mutation result that isn't known until after the click, a plain `Button` with manual `onOpenChange(false)` only on success is required; `AlertDialogCancel` is still used for "Close" since that action is correctly unconditional (dismiss always closes, no mutation involved).
 
 - [ ] **Step 2: Type-check and lint**
 
@@ -662,6 +673,7 @@ git commit -m "feat: add PaymentHoldModal component"
 ### Task 6: Frontend — wire the modal into the content-detail hero CTA (`HLSPlayer.tsx`)
 
 **Files:**
+
 - Modify: `tinniestudio-client-web/src/components/content/HLSPlayer.tsx`
 
 This covers the hero "Play"/"Watch Now" CTA in trailer mode, which both `ContentDetail.tsx` (movies/kids/lives) and `SeasonContentDetail.tsx` (shows/sermons) already render through — fixing it here covers both detail-page variants in one place. This task also implements the `?paymentHold=1` fallback flag handling (Task 8's redirect target), since this is the component that actually renders the modal.
@@ -671,21 +683,21 @@ This covers the hero "Play"/"Watch Now" CTA in trailer mode, which both `Content
 Add to the import block (after the existing `import { useRouter } from 'next/navigation';` at line 25):
 
 ```tsx
-import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 ```
 
 Add to the imports below `import { resolveWatchCTA, formatTime } from '@/utils';` (line 37):
 
 ```tsx
-import { PaymentHoldModal } from './PaymentHoldModal';
+import { PaymentHoldModal } from "./PaymentHoldModal";
 ```
 
 In the component body, after `const router = useRouter();` (line 117), add:
 
 ```tsx
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const [showPaymentHoldModal, setShowPaymentHoldModal] = useState(false);
+const pathname = usePathname();
+const searchParams = useSearchParams();
+const [showPaymentHoldModal, setShowPaymentHoldModal] = useState(false);
 ```
 
 - [ ] **Step 2: Handle the `?paymentHold=1` fallback flag**
@@ -693,24 +705,23 @@ In the component body, after `const router = useRouter();` (line 117), add:
 Add this effect directly after the `cta` computation (`const cta = resolveWatchCTA(subscription, contentSlug, activeEpisodeId);`, line 122):
 
 ```tsx
+useEffect(() => {
+  if (mode !== "trailer") return;
+  if (searchParams.get("paymentHold") !== "1") return;
 
-  useEffect(() => {
-    if (mode !== 'trailer') return;
-    if (searchParams.get('paymentHold') !== '1') return;
-
-    setShowPaymentHoldModal(true);
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete('paymentHold');
-    router.replace(
-      params.toString() ? `${pathname}?${params.toString()}` : pathname,
-      { scroll: false }
-    );
-    // Deliberately runs once on mount per `mode`/`pathname` change, not on every searchParams
-    // change — it strips its own flag immediately, so re-running on the resulting searchParams
-    // change would be a no-op anyway, but listing searchParams would also make eslint flag a
-    // missing dependency incorrectly re-triggering this after the replace() above settles.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, pathname]);
+  setShowPaymentHoldModal(true);
+  const params = new URLSearchParams(searchParams.toString());
+  params.delete("paymentHold");
+  router.replace(
+    params.toString() ? `${pathname}?${params.toString()}` : pathname,
+    { scroll: false },
+  );
+  // Deliberately runs once on mount per `mode`/`pathname` change, not on every searchParams
+  // change — it strips its own flag immediately, so re-running on the resulting searchParams
+  // change would be a no-op anyway, but listing searchParams would also make eslint flag a
+  // missing dependency incorrectly re-triggering this after the replace() above settles.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [mode, pathname]);
 ```
 
 - [ ] **Step 3: Replace the CTA render block to intercept PAST_DUE/EXPIRED clicks**
@@ -718,50 +729,56 @@ Add this effect directly after the `cta` computation (`const cta = resolveWatchC
 Replace lines 567-580 (the `{/* Subscription CTA */}` block):
 
 ```tsx
-            {/* Subscription CTA */}
-            <Link href={cta.href}>
-              <button
-                className={cn(
-                  'flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold font-inter transition-all duration-300 active:scale-95 cursor-pointer',
-                  cta.isWatch
-                    ? 'bg-tls-accent hover:bg-tls-accent/90 text-white shadow-lg shadow-tls-accent/20'
-                    : 'bg-tls-secondary hover:bg-tls-secondary/90 text-tls-primary shadow-lg shadow-tls-secondary/20',
-                )}
-              >
-                <Play className='w-4 h-4 fill-current' />
-                {cta.label}
-              </button>
-            </Link>
+{
+  /* Subscription CTA */
+}
+<Link href={cta.href}>
+  <button
+    className={cn(
+      "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold font-inter transition-all duration-300 active:scale-95 cursor-pointer",
+      cta.isWatch
+        ? "bg-tls-accent hover:bg-tls-accent/90 text-white shadow-lg shadow-tls-accent/20"
+        : "bg-tls-secondary hover:bg-tls-secondary/90 text-tls-primary shadow-lg shadow-tls-secondary/20",
+    )}
+  >
+    <Play className="w-4 h-4 fill-current" />
+    {cta.label}
+  </button>
+</Link>;
 ```
 
 with:
 
 ```tsx
-            {/* Subscription CTA */}
-            {subscription?.blockReason === 'PAST_DUE' ||
-            subscription?.blockReason === 'EXPIRED' ? (
-              <button
-                onClick={() => setShowPaymentHoldModal(true)}
-                className='flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold font-inter transition-all duration-300 active:scale-95 cursor-pointer bg-tls-secondary hover:bg-tls-secondary/90 text-tls-primary shadow-lg shadow-tls-secondary/20'
-              >
-                <Play className='w-4 h-4 fill-current' />
-                {cta.label}
-              </button>
-            ) : (
-              <Link href={cta.href}>
-                <button
-                  className={cn(
-                    'flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold font-inter transition-all duration-300 active:scale-95 cursor-pointer',
-                    cta.isWatch
-                      ? 'bg-tls-accent hover:bg-tls-accent/90 text-white shadow-lg shadow-tls-accent/20'
-                      : 'bg-tls-secondary hover:bg-tls-secondary/90 text-tls-primary shadow-lg shadow-tls-secondary/20',
-                  )}
-                >
-                  <Play className='w-4 h-4 fill-current' />
-                  {cta.label}
-                </button>
-              </Link>
-            )}
+{
+  /* Subscription CTA */
+}
+{
+  subscription?.blockReason === "PAST_DUE" ||
+  subscription?.blockReason === "EXPIRED" ? (
+    <button
+      onClick={() => setShowPaymentHoldModal(true)}
+      className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold font-inter transition-all duration-300 active:scale-95 cursor-pointer bg-tls-secondary hover:bg-tls-secondary/90 text-tls-primary shadow-lg shadow-tls-secondary/20"
+    >
+      <Play className="w-4 h-4 fill-current" />
+      {cta.label}
+    </button>
+  ) : (
+    <Link href={cta.href}>
+      <button
+        className={cn(
+          "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold font-inter transition-all duration-300 active:scale-95 cursor-pointer",
+          cta.isWatch
+            ? "bg-tls-accent hover:bg-tls-accent/90 text-white shadow-lg shadow-tls-accent/20"
+            : "bg-tls-secondary hover:bg-tls-secondary/90 text-tls-primary shadow-lg shadow-tls-secondary/20",
+        )}
+      >
+        <Play className="w-4 h-4 fill-current" />
+        {cta.label}
+      </button>
+    </Link>
+  );
+}
 ```
 
 - [ ] **Step 4: Render the modal**
@@ -769,10 +786,10 @@ with:
 Immediately after the closing `</AnimatePresence>` of the trailer-mode render block (right before its enclosing `</div>` at line 592-593 — the trailer-mode `return` block), add:
 
 ```tsx
-        <PaymentHoldModal
-          open={showPaymentHoldModal}
-          onOpenChange={setShowPaymentHoldModal}
-        />
+<PaymentHoldModal
+  open={showPaymentHoldModal}
+  onOpenChange={setShowPaymentHoldModal}
+/>
 ```
 
 placed as a sibling just before the final `</div>` that closes the trailer-mode wrapper (so it's present in the DOM for trailer mode regardless of `showControls`/`AnimatePresence` state — it must not be nested inside the `AnimatePresence`/`motion.div` that only renders when controls are visible, since the modal should still be reachable from the `?paymentHold=1` auto-open path even if the controls overlay itself is currently hidden).
@@ -787,7 +804,7 @@ Expected: both PASS.
 
 - [ ] **Step 6: Manual verification**
 
-Using a test account with `status=PAST_DUE` (or `EXPIRED`), navigate to a movie's detail page. Confirm: the page loads normally (no redirect), the trailer plays, and the hero CTA button (still labeled "Update Payment"/"Renew Your Plan" per the existing `cta.label`) opens `PaymentHoldModal` in place instead of navigating anywhere. Confirm "Retry Payment" and "Update Payment Info" both work, and "Close" dismisses without granting access. Separately, visit the same detail page URL with `?paymentHold=1` appended manually and confirm the modal opens automatically and the query param disappears from the URL afterward.
+Using a test account with `status=PAST_DUE` (or `EXPIRED`), navigate to a movie's detail page. Confirm: the page loads normally (no redirect), the trailer plays, and the hero CTA button (still labeled "Update Payment"/"Renew Your Plan" per the existing `cta.label`) opens `PaymentHoldModal` in place instead of navigating anywhere. Confirm "Retry Card" and "Update Payment Info" both work, and "Close" dismisses without granting access. Separately, visit the same detail page URL with `?paymentHold=1` appended manually and confirm the modal opens automatically and the query param disappears from the URL afterward.
 
 - [ ] **Step 7: Commit**
 
@@ -801,6 +818,7 @@ git commit -m "feat: open PaymentHoldModal in place for PAST_DUE/EXPIRED hero CT
 ### Task 7: Frontend — wire the modal into catalogue grid cards (`movie-card.tsx`)
 
 **Files:**
+
 - Modify: `tinniestudio-client-web/src/components/ui/movie-card.tsx`
 
 - [ ] **Step 1: Add imports and state**
@@ -808,16 +826,16 @@ git commit -m "feat: open PaymentHoldModal in place for PAST_DUE/EXPIRED hero CT
 Add below `import { resolveWatchCTA } from '@/utils/content';` (line 14):
 
 ```tsx
-import { PaymentHoldModal } from '@/components/content/PaymentHoldModal';
+import { PaymentHoldModal } from "@/components/content/PaymentHoldModal";
 ```
 
 In the component body, after `const cta = resolveWatchCTA(subscription, content.slug);` (line 29), add:
 
 ```tsx
-  const [showPaymentHoldModal, setShowPaymentHoldModal] = useState(false);
-  const isPaymentHoldBlocked =
-    subscription?.blockReason === 'PAST_DUE' ||
-    subscription?.blockReason === 'EXPIRED';
+const [showPaymentHoldModal, setShowPaymentHoldModal] = useState(false);
+const isPaymentHoldBlocked =
+  subscription?.blockReason === "PAST_DUE" ||
+  subscription?.blockReason === "EXPIRED";
 ```
 
 - [ ] **Step 2: Replace the Play button**
@@ -825,39 +843,41 @@ In the component body, after `const cta = resolveWatchCTA(subscription, content.
 Replace lines 82-90:
 
 ```tsx
-                <Button
-                  size='icon'
-                  className='rounded-full bg-tls-secondary text-black hover:scale-110 transition-transform'
-                  asChild
-                >
-                  <Link href={cta.href}>
-                    <Play className='w-5 h-5 fill-current' />
-                  </Link>
-                </Button>
+<Button
+  size="icon"
+  className="rounded-full bg-tls-secondary text-black hover:scale-110 transition-transform"
+  asChild
+>
+  <Link href={cta.href}>
+    <Play className="w-5 h-5 fill-current" />
+  </Link>
+</Button>
 ```
 
 with:
 
 ```tsx
-                {isPaymentHoldBlocked ? (
-                  <Button
-                    size='icon'
-                    onClick={() => setShowPaymentHoldModal(true)}
-                    className='rounded-full bg-tls-secondary text-black hover:scale-110 transition-transform'
-                  >
-                    <Play className='w-5 h-5 fill-current' />
-                  </Button>
-                ) : (
-                  <Button
-                    size='icon'
-                    className='rounded-full bg-tls-secondary text-black hover:scale-110 transition-transform'
-                    asChild
-                  >
-                    <Link href={cta.href}>
-                      <Play className='w-5 h-5 fill-current' />
-                    </Link>
-                  </Button>
-                )}
+{
+  isPaymentHoldBlocked ? (
+    <Button
+      size="icon"
+      onClick={() => setShowPaymentHoldModal(true)}
+      className="rounded-full bg-tls-secondary text-black hover:scale-110 transition-transform"
+    >
+      <Play className="w-5 h-5 fill-current" />
+    </Button>
+  ) : (
+    <Button
+      size="icon"
+      className="rounded-full bg-tls-secondary text-black hover:scale-110 transition-transform"
+      asChild
+    >
+      <Link href={cta.href}>
+        <Play className="w-5 h-5 fill-current" />
+      </Link>
+    </Button>
+  );
+}
 ```
 
 - [ ] **Step 3: Render the modal**
@@ -865,10 +885,10 @@ with:
 Add just before the component's closing `</motion.div>` (line 163):
 
 ```tsx
-      <PaymentHoldModal
-        open={showPaymentHoldModal}
-        onOpenChange={setShowPaymentHoldModal}
-      />
+<PaymentHoldModal
+  open={showPaymentHoldModal}
+  onOpenChange={setShowPaymentHoldModal}
+/>
 ```
 
 - [ ] **Step 4: Type-check and lint**
@@ -895,6 +915,7 @@ git commit -m "feat: open PaymentHoldModal in place for PAST_DUE/EXPIRED grid ca
 ### Task 8: Frontend — server-side fallback redirect for direct `/watch` links
 
 **Files:**
+
 - Modify: `tinniestudio-client-web/src/app/(player)/watch/[slug]/page.tsx:73-79`
 
 - [ ] **Step 1: Change the redirect target for PAST_DUE/EXPIRED**
@@ -902,33 +923,33 @@ git commit -m "feat: open PaymentHoldModal in place for PAST_DUE/EXPIRED grid ca
 Replace lines 73-79:
 
 ```tsx
-  if (!accessResp.success || !accessResp.data?.hasAccess) {
-    const reason = accessResp.data?.reason;
-    if (reason === 'CONTENT_NOT_PUBLISHED') {
-      redirect('/start');
-    }
-    redirect('/account/billing-gate');
+if (!accessResp.success || !accessResp.data?.hasAccess) {
+  const reason = accessResp.data?.reason;
+  if (reason === "CONTENT_NOT_PUBLISHED") {
+    redirect("/start");
   }
+  redirect("/account/billing-gate");
+}
 ```
 
 with:
 
 ```tsx
-  if (!accessResp.success || !accessResp.data?.hasAccess) {
-    const reason = accessResp.data?.reason;
-    if (reason === 'CONTENT_NOT_PUBLISHED') {
-      redirect('/start');
-    }
-    if (reason === 'PAST_DUE' || reason === 'EXPIRED') {
-      // Direct/bookmarked link that skipped the client-side gate (HLSPlayer's trailer-mode CTA
-      // normally intercepts this before ever navigating here) — bounce back to the detail page
-      // with a flag it reads on load to open the same PaymentHoldModal, instead of sending an
-      // existing subscriber who can still browse away to billing-gate/a marketing page.
-      const separator = returnTo.includes('?') ? '&' : '?';
-      redirect(`${returnTo}${separator}paymentHold=1`);
-    }
-    redirect('/account/billing-gate');
+if (!accessResp.success || !accessResp.data?.hasAccess) {
+  const reason = accessResp.data?.reason;
+  if (reason === "CONTENT_NOT_PUBLISHED") {
+    redirect("/start");
   }
+  if (reason === "PAST_DUE" || reason === "EXPIRED") {
+    // Direct/bookmarked link that skipped the client-side gate (HLSPlayer's trailer-mode CTA
+    // normally intercepts this before ever navigating here) — bounce back to the detail page
+    // with a flag it reads on load to open the same PaymentHoldModal, instead of sending an
+    // existing subscriber who can still browse away to billing-gate/a marketing page.
+    const separator = returnTo.includes("?") ? "&" : "?";
+    redirect(`${returnTo}${separator}paymentHold=1`);
+  }
+  redirect("/account/billing-gate");
+}
 ```
 
 (`returnTo` is already computed above at line 71 as `/${routeSegment}/${slug}` via `getSafeReturnTo`. `NEEDS_SETUP` falls through to the unchanged final `redirect('/account/billing-gate')`, exactly as today.)

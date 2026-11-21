@@ -70,6 +70,7 @@ if (cardSetupRequired && !paymentSetup && sub.getStripeCustomerId() == null && !
 ```
 
 Effect:
+
 - Legacy accounts (`cardSetupRequired=false`, set by the Oct 26 `V60` migration):
   unaffected — still exempt, by that flag alone, exactly as Oct 26 intended.
 - New signups (`cardSetupRequired=true`, the column default): now correctly blocked
@@ -174,7 +175,7 @@ the "turn off auto-renew?" confirmation. Content per CLAUDE.md's suggested copy:
 - Heading: "Your account is on hold. Retry your payment?"
 - Message: explains the payment failure and that catalogue browsing/trailers remain
   available.
-- **Retry Payment** (primary action) → reuses the existing `useRetryPayment` mutation
+- **Retry Card** (primary action) → reuses the existing `useRetryPayment` mutation
   (`POST /subscriptions/payment/retry`, already wired in `BillingGate.tsx`); shows a
   success or failure result in the modal without closing it on failure.
 - **Update Payment Info** (secondary action) → navigates to `/account?action=add-card`
@@ -209,14 +210,14 @@ Existing user, payment fails ──> renewal job sets status=PAST_DUE
                            ▼
         client-side check (useSubscription) ──> PaymentHoldModal (in place, no navigation)
                            │                                │
-                 (direct /watch link, no client check)      ├─ Retry Payment → POST /subscriptions/payment/retry
+                 (direct /watch link, no client check)      ├─ Retry Card → POST /subscriptions/payment/retry
                            ▼                                └─ Update Payment Info → /account?action=add-card
         /watch server check (fallback) ──> redirect to detail page with ?paymentHold=1
 ```
 
 ## Error handling & edge cases
 
-- **Retry Payment fails inside the modal**: show the failure reason in place (reusing
+- **Retry Card fails inside the modal**: show the failure reason in place (reusing
   `useRetryPayment`'s existing error surface); modal stays open, user can try
   "Update Payment Info" instead or dismiss.
 - **Modal triggered via the `?paymentHold=1` fallback flag**: once shown, the flag is
@@ -235,6 +236,7 @@ Existing user, payment fails ──> renewal job sets status=PAST_DUE
 
 **Backend** (`SubscriptionServiceTest.java`, extending the existing free-plan
 carve-out test style):
+
 - New signup (`cardSetupRequired=true`), FREE plan, no card → `hasAccess=false`,
   `blockReason=NEEDS_SETUP` (currently fails before this fix — the regression test).
 - Legacy account (`cardSetupRequired=false`), FREE plan, no card → `hasAccess=true`,
@@ -243,6 +245,7 @@ carve-out test style):
 
 **Frontend** (no test framework in either repo — type-check + lint + manual
 walkthrough, per existing project convention):
+
 - New signup walkthrough: confirm blocked from any route until card added; confirm
   onboarding shows both plan cards with "$0.00 due today" + correct post-trial price
   per plan.
@@ -253,7 +256,7 @@ walkthrough, per existing project convention):
   Stripe script in devtools) → confirm "Try Again" appears and recovers on retry.
 - Payment-hold walkthrough, for each of `PAST_DUE`/`EXPIRED`: confirm
   catalogue browsing and trailer playback are unaffected; confirm clicking "Play" on a
-  full movie opens the modal in place (no navigation); confirm Retry Payment and
+  full movie opens the modal in place (no navigation); confirm Retry Card and
   Update Payment Info both work; confirm dismiss does not grant access; confirm a
   direct `/watch/[slug]` link falls back to the same modal via the detail page
   redirect.
