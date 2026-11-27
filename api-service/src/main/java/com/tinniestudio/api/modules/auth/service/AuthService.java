@@ -23,6 +23,7 @@ import com.tinniestudio.api.shared.config.AppProperties;
 import com.tinniestudio.api.shared.entity.RoleName;
 import com.tinniestudio.api.shared.entity.SubscriptionPlan;
 import com.tinniestudio.api.shared.entity.User;
+import com.tinniestudio.api.shared.entity.Role;
 import com.tinniestudio.api.shared.entity.UserSubscription;
 import com.tinniestudio.api.shared.exception.*;
 import com.tinniestudio.api.shared.queue.RabbitConfig;
@@ -79,7 +80,8 @@ public class AuthService {
 
     @Transactional
     public AuthProfileResponse register(RegisterRequest request, HttpServletResponse response) {
-        if (request == null) throw new BadRequestException("Request body is required");
+        if (request == null)
+            throw new BadRequestException("Request body is required");
 
         String email = normalizeEmail(request.getEmail());
         if (userRepository.existsByEmailAndDeletedAtIsNull(email)) {
@@ -118,21 +120,24 @@ public class AuthService {
             log.warn("Failed to send verification email to {}: {}", user.getEmail(), ex.getMessage());
         }
 
-        // Register doesn't create a session — user must log in separately after registration
+        // Register doesn't create a session — user must log in separately after
+        // registration
         // (access token issued immediately so user can proceed before verifying email)
         String rawRefreshToken = UUID.randomUUID().toString();
         UUID sessionId = sessionService.createSession(user.getId(), rawRefreshToken, null);
         issueTokenCookies(user, sessionId, response);
 
         log.info("New user registered: {}", user.getEmail());
-        // return toAuthResponse(user, "Registration successful. Please check your email to verify your account.");
-        return authProfileService.getProfile(user.getId(), sessionId, "Registration successful. Please check your email to verify your account.");
+        // return toAuthResponse(user, "Registration successful. Please check your email
+        // to verify your account.");
+        return authProfileService.getProfile(user.getId(), sessionId,
+                "Registration successful. Please check your email to verify your account.");
     }
 
     // ── Login ─────────────────────────────────────────────────────────────────
     @Transactional
     public AuthProfileResponse login(LoginRequest request, HttpServletRequest httpRequest,
-                               HttpServletResponse response) {
+            HttpServletResponse response) {
         String email = request != null ? request.getEmail() : null;
         String password = request != null ? request.getPassword() : null;
 
@@ -160,7 +165,8 @@ public class AuthService {
 
         int maxDevices = sessionService.resolveMaxDevicesForUser(user.getId());
         long activeSessions = sessionService.countActiveSessions(user.getId());
-        if (activeSessions >= maxDevices) {
+        boolean hasPartnerRole = user.getRoles().stream().anyMatch(r -> r.getName() == RoleName.ROLE_PARTNER);
+        if (activeSessions >= maxDevices && !hasPartnerRole) {
             String resolutionToken = jwtTokenProvider.generateDeviceLimitResolutionToken(user.getId());
             List<SessionDto> devices = sessionService.getActiveSessions(user.getId());
             throw new DeviceLimitReachedException(
@@ -181,11 +187,12 @@ public class AuthService {
     public AuthProfileResponse resolveDeviceLimit(
             ResolveDeviceLimitRequest request,
             HttpServletRequest httpRequest,
-            HttpServletResponse response
-    ) {
-        if (request == null) throw new BadRequestException("Request body is required");
+            HttpServletResponse response) {
+        if (request == null)
+            throw new BadRequestException("Request body is required");
         String resolutionToken = requireText(request.getResolutionToken(), "Resolution token is required");
-        String sessionIdToRevokeStr = requireText(request.getSessionIdToRevoke(), "A device to sign out must be selected");
+        String sessionIdToRevokeStr = requireText(request.getSessionIdToRevoke(),
+                "A device to sign out must be selected");
 
         if (!jwtTokenProvider.validateDeviceLimitResolutionToken(resolutionToken)) {
             throw new InvalidTokenException("Resolution token is invalid or expired");
@@ -201,13 +208,19 @@ public class AuthService {
             throw new BadRequestException("sessionIdToRevoke must be a valid session id");
         }
 
-        // Resolve and validate the target BEFORE touching the single-use lock below, for two
+        // Resolve and validate the target BEFORE touching the single-use lock below,
+        // for two
         // reasons: (1) selfRevokeSession() is idempotent — it silently no-ops on an
-        // already-revoked/nonexistent session rather than erroring, so without this check a
-        // stale or garbage sessionIdToRevoke would still fall through to createSession() and
-        // hand out a brand-new session with no slot actually freed, permanently exceeding the
-        // device cap; (2) a bad sessionIdToRevoke must fail BEFORE consuming the one-time
-        // resolution token, or a legitimate retry with the same token would be rejected as
+        // already-revoked/nonexistent session rather than erroring, so without this
+        // check a
+        // stale or garbage sessionIdToRevoke would still fall through to
+        // createSession() and
+        // hand out a brand-new session with no slot actually freed, permanently
+        // exceeding the
+        // device cap; (2) a bad sessionIdToRevoke must fail BEFORE consuming the
+        // one-time
+        // resolution token, or a legitimate retry with the same token would be rejected
+        // as
         // "already used" and force the user to restart the whole login flow.
         String evictedDeviceName = sessionService.getActiveSessions(userId).stream()
                 .filter(d -> d.getSessionId().equals(sessionIdToRevoke))
@@ -229,24 +242,28 @@ public class AuthService {
         UUID newSessionId = sessionService.createSession(userId, rawRefreshToken, httpRequest);
         issueTokenCookies(user, newSessionId, response);
 
-        // Published last, after every DB write has succeeded — same ordering rationale as the
-        // ContentService/EpisodeService broadcast helpers: this is an irrevocable side effect, so
-        // it must not fire before a later statement in this transaction could still roll back.
+        // Published last, after every DB write has succeeded — same ordering rationale
+        // as the
+        // ContentService/EpisodeService broadcast helpers: this is an irrevocable side
+        // effect, so
+        // it must not fire before a later statement in this transaction could still
+        // roll back.
         publishDeviceLoggedOutNotification(userId, evictedDeviceName);
 
         log.info("User {} resolved device limit by signing out session {}", user.getEmail(), sessionIdToRevoke);
         return authProfileService.getProfile(userId, newSessionId, "Login successful");
     }
 
-    // Best-effort, same non-critical-failure handling as ContentService's publish helpers — a
-    // failed notification must never block the login this method is in the middle of completing.
+    // Best-effort, same non-critical-failure handling as ContentService's publish
+    // helpers — a
+    // failed notification must never block the login this method is in the middle
+    // of completing.
     private void publishDeviceLoggedOutNotification(UUID userId, String deviceName) {
         try {
             rabbitTemplate.convertAndSend(RabbitConfig.QUEUE_NOTIFICATIONS, Map.of(
                     "type", "DEVICE_LOGGED_OUT",
                     "userId", userId.toString(),
-                    "deviceName", deviceName
-            ));
+                    "deviceName", deviceName));
         } catch (Exception e) {
             log.warn("DEVICE_LOGGED_OUT notification publish failed (non-critical): {}", e.getMessage());
         }
@@ -304,7 +321,8 @@ public class AuthService {
                 // client (cookies get cleared below regardless).
                 String tokenStr = extractRefreshToken(request);
                 Claims claims = tokenStr != null && jwtTokenProvider.validateRefreshToken(tokenStr)
-                        ? jwtTokenProvider.parseRefreshToken(tokenStr) : null;
+                        ? jwtTokenProvider.parseRefreshToken(tokenStr)
+                        : null;
                 userId = claims != null ? UUID.fromString(claims.getSubject()) : null;
                 sessionId = UUID.fromString(sessionIdAttr);
             } catch (Exception ex) {
@@ -385,7 +403,8 @@ public class AuthService {
         User user = userRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("No user found with this email address"));
 
-        if (user.isEmailVerified()) throw new InvalidEmailStateException("Email is already verified");
+        if (user.isEmailVerified())
+            throw new InvalidEmailStateException("Email is already verified");
         if (user.getProvider() != AuthProvider.LOCAL) {
             throw new InvalidEmailStateException("Cannot resend verification for OAuth-only accounts.");
         }
@@ -412,10 +431,12 @@ public class AuthService {
 
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
-        if (request == null) throw new BadRequestException("Request body is required");
+        if (request == null)
+            throw new BadRequestException("Request body is required");
         String email = normalizeEmail(request.getEmail());
         userRepository.findByEmail(email).ifPresent(user -> {
-            if (user.getProvider() != AuthProvider.LOCAL) return;
+            if (user.getProvider() != AuthProvider.LOCAL)
+                return;
 
             String resetToken = UUID.randomUUID().toString();
             user.setPasswordResetToken(resetToken);
@@ -433,7 +454,8 @@ public class AuthService {
 
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
-        if (request == null) throw new BadRequestException("Request body is required");
+        if (request == null)
+            throw new BadRequestException("Request body is required");
         requireText(request.getToken(), "Password reset token is required");
         requireText(request.getNewPassword(), "New password is required");
 
@@ -478,7 +500,8 @@ public class AuthService {
     }
 
     private String extractRefreshToken(HttpServletRequest request) {
-        if (request.getCookies() == null) return null;
+        if (request.getCookies() == null)
+            return null;
         return Arrays.stream(request.getCookies())
                 .filter(c -> CookieFactory.REFRESH_TOKEN_COOKIE.equals(c.getName()))
                 .map(Cookie::getValue)
@@ -504,12 +527,17 @@ public class AuthService {
     }
 
     private String resolveDisplayName(User user) {
-        if (user == null) return "User";
-        if (StringUtils.hasText(user.getDisplayName())) return user.getDisplayName().strip();
+        if (user == null)
+            return "User";
+        if (StringUtils.hasText(user.getDisplayName()))
+            return user.getDisplayName().strip();
         String fn = user.getFirstName(), ln = user.getLastName();
-        if (StringUtils.hasText(fn) && StringUtils.hasText(ln)) return (fn.strip() + " " + ln.strip()).trim();
-        if (StringUtils.hasText(fn)) return fn.strip();
-        if (StringUtils.hasText(ln)) return ln.strip();
+        if (StringUtils.hasText(fn) && StringUtils.hasText(ln))
+            return (fn.strip() + " " + ln.strip()).trim();
+        if (StringUtils.hasText(fn))
+            return fn.strip();
+        if (StringUtils.hasText(ln))
+            return ln.strip();
         return "User";
     }
 
@@ -518,7 +546,8 @@ public class AuthService {
     }
 
     private String requireText(String value, String message) {
-        if (!StringUtils.hasText(value)) throw new BadRequestException(message);
+        if (!StringUtils.hasText(value))
+            throw new BadRequestException(message);
         return value;
     }
 }
